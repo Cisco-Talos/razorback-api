@@ -1,0 +1,50 @@
+uuids: (
+    {
+        name="CORRELATION";
+        uuid="2fd75fa5-778b-443e-b910-1e19044e81e1";
+        description="Correlation Nugget";
+    },
+
+    {
+        name="INTEL";
+        uuid="356112d8-f4f1-41dc-b3f7-cace5674c2ec";
+        description="Intel Nugget";
+    },
+
+    {
+        name="DEFENSE";
+        uuid="5e9c1296-ad6a-423f-9eca-9f817c72c444";
+        description="Defense Update Nugget";
+    },
+
+    {
+        name="OUTPUT";
+        uuid="a3d0d1f9-c049-474e-bf01-2128ea00a751";
+        description="Output Nugget";
+    },
+
+    {
+        name="COLLECITON";
+        uuid="c38b113a-27fd-417c-b9fa-f3aa0af5cb53";
+        description="Data Collector Nugget";
+    },
+
+    {
+        name="INSPECTION";
+        uuid="d95aee72-9186-4236-bf23-8ff77dac630b";
+        description="Inspection Nugget";
+    },
+
+    {
+        name="DISPATCHER";
+        uuid="1117de3c-6fe8-4291-84ae-36cdf2f91017";
+        description="Message Dispatcher Nugget";
+    },
+
+    {
+        name="MASTER";
+        uuid="ca51afd1-41b8-4c6b-b221-9faef0d202a7";
+        description="Master Nugget";
+    }
+);
+
