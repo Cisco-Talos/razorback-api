@@ -55,7 +55,7 @@ LIBS="$LIBCONFIG_LIBS $LIBS"
 #          [AC_MSG_ERROR("curl header file not found")]
 #     )
 
-PKG_CHECK_MODULES([JSON], [json >= 0.9])
+PKG_CHECK_MODULES([JSON], [json-c >= 0.9])
 
 CFLAGS="$JSON_CFLAGS $CFLAGS"
 LIBS="$JSON_LIBS $LIBS"
