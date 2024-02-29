@@ -1,0 +1,3 @@
+LOG_DEST="syslog";
+LOG_LEVEL="debug";
+SYSLOG_FACILITY="daemon";
