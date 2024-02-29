@@ -1,0 +1,206 @@
+#include "config.h"
+#include <razorback/debug.h>
+#include <razorback/response_queue.h>
+#include <razorback/queue.h>
+#include <razorback/queue_list.h>
+#include <razorback/block_id.h>
+#include <razorback/log.h>
+#include <errno.h>
+
+/** Globals
+*/
+static struct QueueList sg_qlResponseQueue;
+static bool sg_bResponseInitialized = false;
+
+static void
+ResponseQueue_GetQueueName (uuid_t p_pCollectorId, uint8_t * p_sQueueName)
+{
+    Queue_GetQueueName ((const uint8_t *) "/topic/RESPONSE", p_pCollectorId,
+                        p_sQueueName);
+}
+
+SO_PUBLIC struct Queue *
+ResponseQueue_Initialize (uuid_t p_pCollectorId, int p_iFlags)
+{
+    // the name
+    uint8_t l_sQueueName[128];
+    // the queue from the list
+    struct Queue *l_pQueue;
+
+    // setup the global variables
+    if (!sg_bResponseInitialized)
+    {
+        QueueList_Initialize (&sg_qlResponseQueue);
+        sg_bResponseInitialized = true;
+    };
+
+    // transform to correct name
+    ResponseQueue_GetQueueName (p_pCollectorId, l_sQueueName);
+
+    // does this queue already exist?
+    // if so, done
+    l_pQueue = QueueList_Find (&sg_qlResponseQueue, p_pCollectorId);
+    if (l_pQueue != NULL)
+        return l_pQueue;
+
+    // initialize the queue
+    if ((l_pQueue = Queue_Create (l_sQueueName, p_iFlags)) == NULL)
+    {
+        rzb_log (LOG_ERR,
+                 "%s: failed due to failure of Queue_Initialize", __func__);
+        return NULL;
+    }
+
+    // find the queue
+    if (!QueueList_Add (&sg_qlResponseQueue, l_pQueue, p_pCollectorId))
+    {
+        rzb_log (LOG_ERR,
+                 "%s: failed due to failure of QueueList_Add", __func__);
+        return NULL;
+    }
+
+
+    // done
+    return l_pQueue;
+}
+
+SO_PUBLIC void
+ResponseQueue_Terminate (uuid_t p_pCollectorId)
+{
+    // the queue from the list
+    struct Queue *l_pQueue;
+
+    // if never initialized, do nothing
+    if (!sg_bResponseInitialized)
+        return;
+
+    // find the queue and terminate it
+    l_pQueue = QueueList_Find (&sg_qlResponseQueue, p_pCollectorId);
+    if (l_pQueue != NULL)
+        Queue_Terminate (l_pQueue);
+}
+
+SO_PUBLIC struct MessageCacheResp *
+ResponseQueue_Get (struct Queue * p_pQueue)
+{
+    ASSERT (p_pQueue != NULL);
+    struct MessageCacheResp *message;
+    struct BinaryBuffer *l_pBuffer;
+
+    // read from the queue
+    if ((l_pBuffer = Queue_Get (p_pQueue)) == NULL)
+    {
+        if (errno != EINTR)
+            rzb_log (LOG_ERR, "%s: failed due to failure of Queue_Get", __func__);
+
+        return NULL;
+    }
+    if ((message = calloc(1,sizeof(struct MessageCacheResp))) == NULL)
+        return NULL;
+
+    // parse the buffer
+    if (!BinaryBuffer_Get_MessageHeader (l_pBuffer, &message->mhHeader))
+    {
+        BinaryBuffer_Destroy (l_pBuffer);
+        rzb_log (LOG_ERR,
+                 "%s: failed due to failure of BinaryBuffer_Get_MessageHeader", __func__);
+        MessageCacheResp_Destroy(message);
+        return NULL;
+    }
+
+    if (!BinaryBuffer_Get_BlockId (l_pBuffer, &message->pId))
+    {
+        BinaryBuffer_Destroy (l_pBuffer);
+        rzb_log (LOG_ERR,
+                 "%s: failed due to failure of BinaryBuffer_Get_BlockId", __func__);
+        MessageCacheResp_Destroy(message);
+        return NULL;
+    }
+
+    if (!BinaryBuffer_Get_uint32_t (l_pBuffer, &message->iSfFlags))
+    {
+        BlockId_Destroy (message->pId);
+        BinaryBuffer_Destroy (l_pBuffer);
+        rzb_log (LOG_ERR,
+                 "%s: failed due to failure of BinaryBuffer_Get_uint32_t", __func__);
+        MessageCacheResp_Destroy(message);
+        return NULL;
+    }
+    if (!BinaryBuffer_Get_uint32_t (l_pBuffer, &message->iEntFlags))
+    {
+        BlockId_Destroy (message->pId);
+        BinaryBuffer_Destroy (l_pBuffer);
+        rzb_log (LOG_ERR,
+    
+                "%s: failed due to failure of BinaryBuffer_Get_uint32_t", __func__);
+        MessageCacheResp_Destroy(message);
+        return NULL;
+    }
+
+    BinaryBuffer_Destroy (l_pBuffer);
+
+    return message;
+}
+
+SO_PUBLIC bool
+ResponseQueue_Put (struct MessageCacheResp * p_pMessage, uuid_t p_pCollectorId)
+{
+    ASSERT (p_pMessage != NULL);
+
+    // temporary variables
+    struct BinaryBuffer *l_pBuffer;
+    struct Queue *l_pQueue;
+    l_pQueue = QueueList_Find (&sg_qlResponseQueue, p_pCollectorId);
+    if (l_pQueue == NULL)
+        l_pQueue = ResponseQueue_Initialize(p_pCollectorId, QUEUE_FLAG_SEND);
+
+    // create the buffer
+    if ((l_pBuffer =
+         BinaryBuffer_Create (p_pMessage->mhHeader.iLength)) == NULL)
+    {
+        rzb_log (LOG_ERR,
+                 "%s: failed due to failure of BinaryBuffer_Create", __func__);
+        return false;
+    }
+
+    if (!BinaryBuffer_Put_MessageHeader (l_pBuffer, &p_pMessage->mhHeader))
+    {
+        BinaryBuffer_Destroy (l_pBuffer);
+        rzb_log (LOG_ERR,
+                 "%s: failed due to failure of BinaryBuffer_Put_MessageHeader", __func__);
+        return false;
+    }
+    if (!BinaryBuffer_Put_BlockId (l_pBuffer, p_pMessage->pId))
+    {
+        BinaryBuffer_Destroy (l_pBuffer);
+        rzb_log (LOG_ERR,
+                 "%s: failed due to failure of BinaryBuffer_Put_BlockId", __func__);
+        return false;
+    }
+    if (!BinaryBuffer_Put_uint32_t (l_pBuffer, p_pMessage->iSfFlags))
+    {
+        BinaryBuffer_Destroy (l_pBuffer);
+        rzb_log (LOG_ERR,
+                 "%s: failed due to failure of BinaryBuffer_Put_uint32_t", __func__);
+        return false;
+    }
+    if (!BinaryBuffer_Put_uint32_t (l_pBuffer, p_pMessage->iEntFlags))
+    {
+        BinaryBuffer_Destroy (l_pBuffer);
+        rzb_log (LOG_ERR,
+                 "%s: failed due to failure of BinaryBuffer_Put_uint32_t", __func__);
+        return false;
+    }
+    // put in the queue
+    if (!Queue_Put (l_pQueue, l_pBuffer))
+    {
+        BinaryBuffer_Destroy (l_pBuffer);
+        rzb_log (LOG_ERR,
+                 "%s: failed due to failure of Queue_Put", __func__);
+        return false;
+    }
+    BinaryBuffer_Destroy (l_pBuffer);
+
+    // done
+    return true;
+}
