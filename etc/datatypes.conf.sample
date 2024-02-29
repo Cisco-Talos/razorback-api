@@ -1,0 +1,85 @@
+uuids: (
+    {
+        name="ANY_DATA";
+        uuid="00000000-0000-0000-0000-000000000000";
+        description="Any Data";
+    },
+
+    {
+        name="FLASH_FILE";
+        uuid="7ab45fff-7c73-412c-8b86-c07619c8fc7d";
+        description="Adobe Flash";
+    },
+
+
+    {
+        name="JAVASCRIPT";
+        uuid="2b797454-d367-4841-8c9c-a713d012b546";
+        description="JavaScript";
+    },
+
+    {
+        name="OLE_FILE";
+        uuid="16d72948-3d2b-52ed-9ae4-43ef19ce3e69";
+        description="OLE Document";
+    },
+
+    {
+        name="PAR2_FILE";
+        uuid="4cc82ee2-afb2-11df-bf91-4f6797c414f4";
+        description="PAR2 Archive File";
+    },
+
+    {
+        name="PAR_FILE";
+        uuid="3ee61f14-afb2-11df-b122-339e7fae4010";
+        description="PAR Archive File";
+    },
+
+    {
+        name="PDF_FILE";
+        uuid="005d5464-7a44-4907-af57-4db08a61e13c";
+        description="PDF Document";
+    },
+
+    {
+        name="PE_FILE";
+        uuid="ba9beb5f-0653-4b04-9552-3bfb634ca7fc";
+        description="PE Executable";
+    },
+
+    {
+        name="RAR_FILE";
+        uuid="36966d78-afb2-11df-bfc6-1b9c2f1ce37a";
+        description="RAR Archive File";
+    },
+
+    {
+        name="SHELL_CODE";
+        uuid="4e72c8ec-ff88-4371-a0f0-dfe2b4c733dc";
+        description="Suspected Shellcode";
+    },
+
+    {
+        name="SMTP_CAPTURE";
+        uuid="d147f215-128e-4746-a1e2-b6c978bb1869";
+        description="SMTP Mail Capture";
+    },
+
+    {
+        name="TAR_FILE";
+        uuid="2d76a190-afb2-11df-91ba-1b85bf3d7e00";
+        description="TAR Archive File";
+    },
+
+    {
+        name="ZIP_FILE";
+        uuid="52f738c2-db1c-42ca-b5ef-50a4ba3f7527";
+        description="ZIP Archive File";
+    }
+);
+
+
+
+
+

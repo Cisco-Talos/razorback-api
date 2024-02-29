@@ -1,0 +1,36 @@
+uuids: (
+    {
+        name="IPv4_ADDR";
+        uuid="101e30d7-e6ee-4171-999a-c4d99325a93e";
+        length=4;
+        description="IPv4 Address";
+    },
+
+    {
+        name="IPv6_ADDR";
+        uuid="3590b149-859a-4625-9d01-749346ddf103";
+        length=16;
+        description="IPv6 Address";
+    },
+
+    {
+        name="IP_PROTO";
+        uuid="5375a0ec-b7ee-4985-b23d-642556b75543";
+        length=1;
+        description="IP Protocol";
+    },
+
+    {
+        name="PORT";
+        uuid="b0abffef-01d6-487b-bff5-a9e62b17c5b6";
+        length=2;  
+        description="Destination Port";
+    },
+
+    {
+        name="STRING";
+        uuid="c24ceea9-3906-47f3-97c4-78cb881b8de8";
+        length=-1;
+        description="String";
+    }
+);
