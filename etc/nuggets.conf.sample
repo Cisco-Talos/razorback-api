@@ -1,0 +1,150 @@
+uuids: (
+    {
+	name="ADWARE_EULA";
+	uuid="25ae7c32-2282-4345-9818-6582dea8a2d7";
+	description="Ruby script to find adware EULAs";
+    },
+    {
+        name="ARCHIVE_INFLATE";
+        uuid="849942cd-ee07-4ffd-a8d9-f1dcf1f768c1";
+        description="Archive Inflator";
+    },
+    {
+        name="CLAMAV";
+        uuid="be312018-1b8e-462e-90a8-983a036c8e8c";
+        description="Integrated ClamAV 0.96.1";
+    },
+    {
+	name="EMU_SCRIPT";
+	uuid="2d96bc81-1171-447f-9b95-4fc155aaa528";
+	description="Perl script using libemu sctest";
+    },
+    {
+        name="FILE_INJECT";
+        uuid="be312018-1b8e-462e-90a8-983a036c8e00";
+        description="File Injector";
+    },
+
+    {
+        name="FLASH_INSPECTOR";
+        uuid="20f75380-afb0-11df-866f-7b86c649596b";
+        description="Flash Inspector";
+    },
+
+    {
+        name="FS_MONITOR";
+        uuid="b1856e90-afb1-11df-a7b9-db6ce92e17a0";
+        description="File System Monitor Collector";
+    },
+
+    {
+        name="FS_WALKER";
+        uuid="fbd73e9a-b521-11df-9821-001c2309dba9";
+        description="File System Walker Collector";
+    },
+
+    {
+        name="LIBEMU";
+        uuid="40566082-afaf-11df-9ed5-e3ab45e014a4";
+        description="LibEMU Shellcode Detector";
+    },
+
+    {
+        name="OFFICECAT";
+        uuid="73392f48-afaf-11df-a519-8b58a542a7e9";
+        description="OfficeCat";
+    },
+
+    {
+        name="PDF_DISSECTOR";
+        uuid="8d412e36-afaf-11df-b123-fbc142fa749e";
+        description="Zynamics PDF Dissector";
+    },
+
+    {
+        name="POSTFIX";
+        uuid="fea51a18-afb1-11df-ba4b-9ffffd3fafdb";
+        description="PostFix Integrated Collector";
+    },
+
+    {
+        name="RUBY_SAMPLE";
+        uuid="869838F6-B6E1-11E0-B208-B735188DCB19";
+	description="Sample detection nugget written in Ruby";
+    },
+
+    {
+        name="SENDMAIL_MIlTER";
+        uuid="1a1159ba-afb2-11df-8a74-d37238e261d7";
+        description="Sendmail Milter Integrated Collector";
+    },
+
+    {
+        name="SMTP_PARSER";
+        uuid="7ab0669b-3782-5888-b451-3479bfb6cdd4";
+        description="SMTP Parser";
+    },
+
+    {
+        name="SNORT_COLLECTOR";
+        uuid="a3b124f9-ee08-5fdf-8f3e-5e8ddde083d5";
+        description="Snort As A Collector (SAAC)";
+    },
+
+    {
+        name="SQUID_COLLECTOR";
+        uuid="9d98bf86-afb1-11df-bb5e-2f259b27f5ea";
+        description="Squid Integrated Collector";
+    },
+
+    {
+        name="STEG_DETECT";
+        uuid="e3be7a1e-afb1-11df-8c80-8b75af315b73";
+        description="Stegdetect Detection Nugget";
+    },
+
+    {
+        name="VIRUS_TOTAL";
+        uuid="926b5bea-afb2-11df-8007-fb6cd1236c62";
+        description="Virus Total Integrated Inspector";
+    },
+
+    {
+        name="YARA";
+        uuid="2f631118-42cf-11e0-83c8-000c298fbda4";
+        description="Yara Integrated Detection Nugget";
+    },
+
+    {
+        name="FILE_LOG";
+        uuid="74c135c6-50b9-11e0-9ed2-e31d9c72c9f1";
+        description="File Logging Nugget";
+    },
+
+    {
+        name="PDF_LOG_1";
+        uuid="83FB62C6-2576-4A54-A3D1-E6A261E5ED94";
+        description="PDF 1 File Logging Nugget";
+    },
+    {
+        name="PDF_LOG_2";
+        uuid="6CAE9C8D-5A40-4269-AB2A-2D6C490DD849";
+        description="PDF 2 File Logging Nugget";
+    },
+    {
+        name="PDF_LOG_3";
+        uuid="21A2090B-C2DB-4FF6-92EB-D8768580CFA9";
+        description="PDF 3 File Logging Nugget";
+    },
+    {
+        name="SWF_LOG_1";
+        uuid="F1476E4A-D88E-499F-ACEE-27CFBE1F44BE";
+        description="SWF 1 File Logging Nugget";
+    },
+    {
+        name="SWF_LOG_2";
+        uuid="32230837-7005-46BE-8B5D-5E0148075E68";
+        description="SWF 2 File Logging Nugget";
+    }
+
+);

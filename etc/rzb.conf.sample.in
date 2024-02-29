@@ -1,0 +1,20 @@
+Global: {
+    MaxThreads=100;
+    HashType="SHA256";
+    MaxBlockSize=100;
+    HelloTime=2;
+    DeadTime=10;
+};
+Cache: {
+    BadLimit=256;
+    GoodLimit=256;
+};
+
+MessageQueue: {
+    Host="localhost";
+    Port=61612;
+    User="User";
+    Password="Password";
+};
+
+
