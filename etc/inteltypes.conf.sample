@@ -1,0 +1,21 @@
+uuids: (
+    {
+        name="DNS";
+        uuid="1d69351c-bc4c-56e1-8140-0d8384e61477";
+        description="DNS Network Forensics";
+    },
+    
+    {
+        name="HTTP";
+        uuid="5d1a26c7-ffa2-4067-9af8-4ed9ee383805";
+        description="HTTP Network Forensics";
+    },
+
+    {
+        name="SMTP";
+        uuid="f1ac631e-c5a4-5b71-997e-3cd4da422057";
+        description="SMTP Network Forensics";
+    }
+);
+
+

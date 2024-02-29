@@ -1,0 +1,38 @@
+# Logging output is determined by its LOG_DEST option
+#
+#
+# Minimum two options required: LOG_LEVEL and LOG_DEST
+# LOG_DEST may be one of the following: 
+#   syslog
+#   file
+#   stderr
+#
+LOG_DEST="syslog";
+
+# LOG_DEST may be one of the follwoing:
+#   debug
+#   info
+#   notice
+#   warning
+#   error
+#   critical
+#   alert
+#   emergency
+#
+LOG_LEVEL="debug";
+
+# SYSLOG_FACILITY may be one of the following:
+#   daemon
+#   user
+#   local1
+#   local2
+#   local3
+#   local4
+#   local5
+#   local6
+#   local7
+#
+SYSLOG_FACILITY="daemon";
+
+# LOG_FILE is the path to the file to be used for logging.
+LOG_FILE="/tmp/rzb.log";
