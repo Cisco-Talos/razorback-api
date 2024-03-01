@@ -1,4 +1,4 @@
-SUBDIRS = m4 etc include libssh src tests
+SUBDIRS = m4 etc include src tests
 
 EXTRA_DIST = BUGS COPYING INSTALL LICENSE README TODO
 

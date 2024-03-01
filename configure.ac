@@ -41,7 +41,7 @@ AC_ARG_ENABLE([magic_debug], [AS_HELP_STRING([--enable-magic-debug],[Enable magi
 if test "x$enable_magic_debug" = "xyes"; then
     AC_DEFINE([MIME_MAGIC_DEBUG], 1, [Magic Debug Mode])
 fi
-m4_include([libssh/configure.m4])
+#m4_include([libssh/configure.m4])
 
 AC_CHECK_HEADERS([sys/endian.h], [], [SYS_ENDIAN_HEADER="no"]) 
 # Pull in the compiler customisation options for different compilers.
@@ -62,10 +62,6 @@ m4/Makefile \
 etc/Makefile \
 include/Makefile \
 src/Makefile \
-libssh/Makefile \
-libssh/src/Makefile \
-libssh/src/threads/Makefile \
-libssh/include/Makefile \
 tests/Makefile \
 ])
 AC_OUTPUT
