@@ -85,8 +85,11 @@ transfer/http.c \
 transfer/ssh.c \
 uuids.c
 
-librazorback_api_la_CFLAGS = -DBUILDING_SO -I$(top_srcdir)/libssh/include -I$(top_srcdir)/include
-librazorback_api_la_LDFLAGS = -version-info @APIVERSION@ @XCCFLAGS@ ../libssh/src/libssh.la
+#librazorback_api_la_CFLAGS = -DBUILDING_SO -I$(top_srcdir)/libssh/include -I$(top_srcdir)/include
+#librazorback_api_la_LDFLAGS = -version-info @APIVERSION@ @XCCFLAGS@ ../libssh/src/libssh.la
+librazorback_api_la_CFLAGS = -DBUILDING_SO -I$(top_srcdir)/include
+librazorback_api_la_LDFLAGS = -version-info @APIVERSION@ @XCCFLAGS@ 
 
-AM_CPPFLAGS = -I$(srcdir) -I$(top_srcdir)/libssh/include -I$(top_srcdir)/include @extra_incl@
+#AM_CPPFLAGS = -I$(srcdir) -I$(top_srcdir)/libssh/include -I$(top_srcdir)/include @extra_incl@
+AM_CPPFLAGS = -I$(srcdir)  -I$(top_srcdir)/include @extra_incl@
  
