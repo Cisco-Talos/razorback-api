@@ -23,7 +23,7 @@
 
 static struct Queue *sg_logQueue = NULL;
 static char level_strings[][9] = {
-    "Debug",
+    "Emerg",
     "Alert",
     "Critical",
     "Error",
