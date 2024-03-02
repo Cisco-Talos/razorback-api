@@ -633,8 +633,7 @@ SO_PUBLIC bool JsonBuffer_Get_Hash (json_object * parent, const char *name, stru
 {
     struct Hash *hash;
     json_object *object, *object2;
-    const char *type, *data, *pos;
-	size_t i;
+    const char *type, *data;
 #ifdef _MSC_VER
 	char tmp[3] = { '\0', '\0','\0' };
 	unsigned long b;
@@ -665,40 +664,22 @@ SO_PUBLIC bool JsonBuffer_Get_Hash (json_object * parent, const char *name, stru
     data = json_object_get_string(object2);
 
 
-    if ((hash = calloc(1, sizeof (struct Hash))) == NULL)
-        return false;
-
     if (strcmp(type, "MD5") == 0)
-        hash->iType = HASH_TYPE_MD5;
+        hash = Hash_Create_From_String(HASH_TYPE_MD5, data);
     else if (strcmp(type, "SHA1") == 0)
-        hash->iType = HASH_TYPE_SHA1;
+        hash = Hash_Create_From_String(HASH_TYPE_SHA1, data);
     else if (strcmp(type, "SHA224") == 0)
-        hash->iType = HASH_TYPE_SHA224;
+        hash = Hash_Create_From_String(HASH_TYPE_SHA224, data);
     else if (strcmp(type, "SHA256") == 0)
-        hash->iType = HASH_TYPE_SHA256;
+        hash = Hash_Create_From_String(HASH_TYPE_SHA256, data);
     else if (strcmp(type, "SHA512") == 0)
-        hash->iType = HASH_TYPE_SHA512;
+        hash = Hash_Create_From_String(HASH_TYPE_SHA512, data);
 
-    hash->iSize = strlen(data)/2;
-    if ((hash->pData = calloc(hash->iSize, sizeof(uint8_t))) == NULL)
-    {
-        Hash_Destroy(hash);
+    if (hash== NULL) {
         return false;
     }
-    pos = data;
-    for(i = 0; i < hash->iSize; i++) {
-#ifdef _MSC_VER
-		tmp[0] = *pos;
-		tmp[1] = *(pos+1);
-		b = strtoul(tmp,NULL, 16);
-		hash->pData[i] = (uint8_t) b;
-#else
-        sscanf(pos, "%2hhx", &hash->pData[i]);
-#endif
-        pos += 2;
-    }
-    hash->iFlags = HASH_FLAG_FINAL;
     *p_pHash = hash;
+
     return true;
 }
 

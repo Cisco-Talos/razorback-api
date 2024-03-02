@@ -122,6 +122,41 @@ Hash_Create_Type (uint32_t p_iType)
     return l_pHash;
 }
 
+SO_PUBLIC struct Hash *
+Hash_Create_From_String(uint32_t p_iType, const char *p_sHash) {
+    const char *pos;
+    size_t i;
+
+    struct Hash *hash = NULL;
+
+    if ((hash = calloc(1, sizeof (struct Hash))) == NULL)
+        return false;
+
+// TODO: Validate string based on type
+    hash->iType = p_iType;
+
+    hash->iSize = strlen(p_sHash)/2;
+    if ((hash->pData = calloc(hash->iSize, sizeof(uint8_t))) == NULL)
+    {
+        Hash_Destroy(hash);
+        return NULL;
+    }
+    pos = p_sHash;
+    for(i = 0; i < hash->iSize; i++) {
+#ifdef _MSC_VER
+        tmp[0] = *pos;
+		tmp[1] = *(pos+1);
+		b = strtoul(tmp,NULL, 16);
+		hash->pData[i] = (uint8_t) b;
+#else
+        sscanf(pos, "%2hhx", &hash->pData[i]);
+#endif
+        pos += 2;
+    }
+    hash->iFlags = HASH_FLAG_FINAL;
+    return hash;
+}
+
 SO_PUBLIC bool
 Hash_Update (struct Hash * p_pHash, uint8_t * p_pData, uint32_t p_iLength)
 {

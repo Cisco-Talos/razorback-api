@@ -31,7 +31,7 @@ SO_PUBLIC extern char * Hash_ToText (const struct Hash *p_pHash);
  */
 SO_PUBLIC extern struct Hash * Hash_Create (void);
 SO_PUBLIC extern struct Hash * Hash_Create_Type (uint32_t p_iType);
-
+SO_PUBLIC extern struct Hash * Hash_Create_From_String(uint32_t p_iType, const char *p_sHash);
 /** Return the size of the digest in bytes.
  * @param p_pHash the hash.
  * @return the length in bytes.
