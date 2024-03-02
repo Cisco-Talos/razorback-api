@@ -27,7 +27,6 @@ SO_PUBLIC void __attribute__ ((constructor))
 RZB_Init_API ()
 {
 #endif
-
 		Crypto_Initialize();
 		readApiConfig();
 		configureLogging();
@@ -36,7 +35,9 @@ RZB_Init_API ()
 		initUuids();
 		initApi();
 		Message_Init();
-		Transfer_Init();
+		if (!Transfer_Init()) {
+            exit(1);
+        }
 #ifdef _MSC_VER
 		break;
 	default:
