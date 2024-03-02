@@ -58,7 +58,7 @@ struct Hash
     uint32_t iType;             ///< The hash Type.
     uint32_t iSize;             ///< size of the data stored, must be the same for all hashes in system
     uint8_t *pData;             ///< actual data of the hash
-    EVP_MD_CTX CTX;         	///< Private hash data.
+    EVP_MD_CTX *CTX;         	///< Private hash data.
     uint32_t iFlags;            ///< Hash Flags.
 };
 
