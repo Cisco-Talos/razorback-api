@@ -11,12 +11,19 @@ Debugging can be enabled by typing ./configure --enable-debug
 Run ./configure --help for all of the available options
 
 Requirements:
-uuid libraries
-ssl libraries
-magic libraries
-pthread libraries
-m libraries
-dl libraries
+
+Ubuntu focal:
+* automake
+* automake
+* autoconf
+* libtool
+* pkg-config
+* uuid-dev
+* libcurl4-openssl-dev
+* libssl-dev
+* libconfig-dev
+* libssh-dev
+* libjson-c-dev
 
 PKG-CONFIG:
 The install target installs a package metadata file in ${libdir}/pkgconfig (/usr/local/lib/pkkconfig by default).
