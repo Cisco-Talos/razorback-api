@@ -16,7 +16,6 @@
 #include <time.h>
 #include "runtime_config.h"
 #include "messages/core.h"
-
 #define MBUF_SIZE 1024
 struct StompMessage {
     char * sVerb;
@@ -448,10 +447,10 @@ Queue_Connect(struct Queue *queue)
 {
     if ((queue->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV)
     {
-        if ((queue->pReadSocket = 
-                    Queue_Connect_Socket(Config_getMqHost (), 
-                        Config_getMqPort (), Config_getMqUser (), 
-                        Config_getMqPassword (), Config_getMqSSL())) == NULL)
+        if ((queue->pReadSocket =
+             Queue_Connect_Socket(queue->sHostname, queue->iPort,
+                  queue->sUser, queue->sPassword, queue->bUseSSL)) == NULL)
+
         {
             rzb_log (LOG_ERR,
                      "%s: failed due to failure of Queue_Connect_Socket (Read)", __func__);
@@ -468,9 +467,8 @@ Queue_Connect(struct Queue *queue)
     if ((queue->iFlags & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND)
     {
         if ((queue->pWriteSocket = 
-                    Queue_Connect_Socket(Config_getMqHost (), 
-                        Config_getMqPort (), Config_getMqUser (), 
-                        Config_getMqPassword (), Config_getMqSSL())) == NULL)
+                    Queue_Connect_Socket(queue->sHostname, queue->iPort,
+                    queue->sUser, queue->sPassword, queue->bUseSSL)) == NULL)
         {
             rzb_log (LOG_ERR,
                      "%s: failed due to failure of Queue_Connect_Socket (Write)", __func__);
@@ -505,9 +503,29 @@ Queue_Reconnect(struct Queue *queue)
 
     return Queue_Connect(queue);
 }
-
 SO_PUBLIC struct Queue *
 Queue_Create (const char * p_sQueueName, int p_iFlags, int mode)
+{
+    return Queue_Create_With_Host(
+        p_sQueueName,
+        p_iFlags,
+        mode,
+        Config_getMqHost(),
+        Config_getMqPort(),
+        Config_getMqUser(),
+        Config_getMqPassword(),
+        Config_getMqSSL()
+    );
+}
+
+SO_PUBLIC struct Queue *
+Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags, int mode,
+                        const char * p_sHost,
+                        uint32_t p_iPort,
+                        const char * p_sUser,
+                        const char * p_sPassword,
+                        bool p_bUseSSL
+)
 {
     struct Queue *l_pQueue;
 
@@ -518,6 +536,11 @@ Queue_Create (const char * p_sQueueName, int p_iFlags, int mode)
         rzb_log (LOG_ERR, "%s: Failed to alloc new queue", __func__);
         return NULL;
     }
+    l_pQueue->sHostname = (char *)p_sHost;
+    l_pQueue->iPort = p_iPort;
+    l_pQueue->sUser = (char *)p_sUser;
+    l_pQueue->sPassword = (char*)p_sPassword;
+    l_pQueue->bUseSSL = p_bUseSSL;
 
     if ((l_pQueue->sName = (char *)calloc(strlen((char *)p_sQueueName)+1, sizeof(char))) == NULL)
     {
@@ -650,33 +673,39 @@ Queue_Get (struct Queue *queue)
             Queue_Destroy_Stomp_Message(message);
 			return NULL;
         }
-        if ((header = (struct MessageHeader *)List_Find(message->headers, (void*)"rzb-msg-type")) == NULL)
-        {
-            free(ret);
-            Queue_Destroy_Stomp_Message(message);
-            return NULL;
+        if ((queue->iFlags & QUEUE_FLAG_EXTERNAL_MODE) != QUEUE_FLAG_EXTERNAL_MODE) {
+            if ((header = (struct MessageHeader *) List_Find(message->headers, (void *) "rzb-msg-type")) == NULL) {
+                rzb_log(LOG_ERR, "%s: Message header missing - rzb-msg-type", __func__);
+                free(ret);
+                Queue_Destroy_Stomp_Message(message);
+                return NULL;
+            }
+            ret->type = strtoul(header->sValue, NULL, 10);
+
+            if ((header = (struct MessageHeader *) List_Find(message->headers, (void *) "rzb-msg-ver")) == NULL) {
+                rzb_log(LOG_ERR, "%s: Message header missing - rzb-msg-ver", __func__);
+                free(ret);
+                Queue_Destroy_Stomp_Message(message);
+                return NULL;
+            }
+            ret->version = strtoul(header->sValue, NULL, 10);
         }
-        ret->type =strtoul(header->sValue, NULL, 10);
-        
-        if ((header = (struct MessageHeader *)List_Find(message->headers, (void*)"rzb-msg-ver")) == NULL)
-        {
-            free(ret);
-            Queue_Destroy_Stomp_Message(message);
-            return NULL;
-        }
-        ret->version =strtoul(header->sValue, NULL, 10);
+
         ret->length = message->bodyLength;
         ret->headers = message->headers;
         ret->serialized = message->pBody;
         message->headers = NULL;
         message->pBody = NULL;
         Queue_Destroy_Stomp_Message(message);
-        if (!Message_Setup(ret))
-        {
-            free(ret);
-            return NULL;
+        if ((queue->iFlags & QUEUE_FLAG_EXTERNAL_MODE) != QUEUE_FLAG_EXTERNAL_MODE) {
+            if (!Message_Setup(ret)) {
+                rzb_log(LOG_ERR, "%s: Message_Setup failed", __func__);
+                free(ret);
+                return NULL;
+            }
+            ret->deserialize(ret, queue->mode);
         }
-        ret->deserialize(ret, queue->mode);
+
         return ret;
     }
 

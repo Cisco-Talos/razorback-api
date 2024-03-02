@@ -28,45 +28,80 @@ extern "C" {
  */
 struct Queue
 {
-    struct Socket *pReadSocket;      ///< the socket for this queue
-    struct Socket *pWriteSocket;      ///< the socket for this queue
-    char *sName;                ///< The Queue name
-    int iFlags;              ///< flags
-    int mode;
-    struct Mutex *mReadMutex; ///< The Read Lock
-    struct Mutex *mWriteMutex; ///< The write lock
+    struct Socket *pReadSocket;    ///< Read socket
+    struct Socket *pWriteSocket;   ///< Write socket
+    char *sName;                   ///< Queue name
+    int iFlags;                    ///< Flags (read/write/etc)
+    int mode;                      ///< Message processing mode (Binary/JSON)
+    struct Mutex *mReadMutex;      ///< Read Lock
+    struct Mutex *mWriteMutex;     ///< Write lock
+    char *sHostname;               ///< Broker hostname
+    uint32_t iPort;                ///< Broker port
+    char *sUser;                   ///< Broker username
+    char *sPassword;               ///< Broker password
+    bool bUseSSL;                  ///< Use SSL connection to broker
 };
 
 #define QUEUE_FLAG_SEND 0x01
 #define QUEUE_FLAG_RECV 0x02
+#define QUEUE_FLAG_EXTERNAL_MODE 0x04
 
 /** Initializes the queue
+ * This method connects to the message broker provided in the API configuration file.
  * @param *p_sQueueName the name of the queue
- * @param *p_bSubscribe whether you need to read from the queue
+ * @param *p_iFlags Flags for the connection (read/write mode, etc)
+ * @param mode Message processing mode (BINARY/JSON/etc)
  * @return a pointer to a new Queue Struct or NULL on error.
  */
 SO_PUBLIC extern struct Queue *Queue_Create (const char * p_sQueueName,
                                        int p_iFlags, int mode);
+/** Initializes the queue
+ * This method allows connections to other external message brokers if required.
+ * @param *p_sQueueName the name of the queue
+ * @param *p_iFlags Flags for the connection (read/write mode, etc)
+ * @param mode Message processing mode (BINARY/JSON/etc)
+ * @param *p_sHost Host name of the broker
+ * @param p_iPort Port number to connect to
+ * @param *p_sUser User name to connect to the broker with
+ * @param *p_sPassword Password to connect to the broker with
+ * @param p_bUseSSL Enable SSL for the broker connection
+ * @return a pointer to a new Queue Struct or NULL on error.
+ */
+SO_PUBLIC extern struct Queue *Queue_Create_With_Host (
+    const char * p_sQueueName,
+    int p_iFlags,
+    int mode,
+    const char * p_sHost,
+    uint32_t p_iPort,
+    const char * p_sUser,
+    const char * p_sPassword,
+    bool p_bUseSSL
+    );
 
 /** Terminates the queue
  * @param p_pQ the queue to terminate
  */
 SO_PUBLIC extern void Queue_Terminate (struct Queue *p_pQ);
 
-/** Gets a binary buffer from the queue
- * @param p_pQ the queue
- * @param p_pBuffer the binary buffer
- * @return true if ok, false if error or timeout (errno==EAGAIN if timeout)
+/** Gets a message from the queue
+ * @param queue the queue
+ * @return A message struct, NULL on error
  */
 SO_PUBLIC extern struct Message *Queue_Get (struct Queue *queue);
 
-/** Puts a binary buffer into the queue
- * @param p_pQueue the queue
- * @param p_pBuffer the binary buffer
+/** Sends a message to the queue
+ * @param queue the queue
+ * @param *message the message to send
  * @return true if ok, false if error or timeout (errno==EAGAIN if timeout)
  */
-SO_PUBLIC extern bool Queue_Put_Dest (struct Queue *queue, struct Message *message, char *dest);
 SO_PUBLIC extern bool Queue_Put (struct Queue *queue, struct Message *message);
+
+/** Sends a message to the queue overriding the default destination
+ * @param queue the queue
+ * @param *message the message to send
+ * @param *dest the destination queue/topic name
+ * @return true if ok, false if error or timeout (errno==EAGAIN if timeout)
+ */SO_PUBLIC extern bool Queue_Put_Dest (struct Queue *queue, struct Message *message, char *dest);
 
 /** Gets a queue name from a uuid_t
  * @param p_sLeading the leading text
