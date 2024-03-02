@@ -13,7 +13,6 @@
 #include "safewindows.h"
 #include "bobins.h"
 #else //_MSC_VER
-#include <sys/sysctl.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -80,10 +79,15 @@ getConfigFile (const char *configDir, const char *configFile)
     if (result == NULL)
         return NULL;
 
+    // The following are safe as the buffer is always larger than the 2 strings
+    //
+    #pragma GCC diagnostic push
+    #pragma GCC diagnostic ignored "-Wstringop-truncation"
+    #pragma GCC diagnostic ignored "-Wstringop-overflow"
     strncpy (result, configDir, strlen (configDir) + 1);
     strncat (result, "/", 1);
     strncat (result, configFile, strlen (configFile));
-
+    #pragma GCC diagnostic pop
     return result;
 }
 
