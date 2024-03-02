@@ -468,14 +468,19 @@ SSH_Get_Session(uuid_t nuggetId, struct ConnectedEntity *dispatcher)
 static bool
 SSH_Verify_Dispatcher(ssh_session session)
 {
-    int state, hlen;
+    int state, key_error;
+    size_t hlen;
     unsigned char *hash = NULL;
     char *hexa;
 
-    state = ssh_is_server_known(session);
 
-    hlen = ssh_get_pubkey_hash(session, &hash);
-    if (hlen < 0)
+    state = ssh_session_is_known_server(session);
+    ssh_key key;
+    ssh_get_server_publickey(session,&key);
+    key_error = ssh_get_publickey_hash(key, SSH_PUBLICKEY_HASH_SHA1, &hash, &hlen);
+
+    ssh_key_free(key);
+    if (key_error < 0)
         return false;
 
     switch (state)
@@ -500,12 +505,12 @@ SSH_Verify_Dispatcher(ssh_session session)
     case SSH_SERVER_FILE_NOT_FOUND:
         rzb_log(LOG_ERR, "%s: Could not find known host file, it will be automatically created.", __func__);
         /* fallback to SSH_SERVER_NOT_KNOWN behavior */
-
+	break;
     case SSH_SERVER_NOT_KNOWN:
         hexa = ssh_get_hexa(hash, hlen);
         rzb_log(LOG_ERR,"%s The server is unknown. Adding the key: %s", __func__, hexa);
         free(hexa);
-        if (ssh_write_knownhost(session) < 0)
+        if (ssh_session_update_known_hosts(session) < 0)
         {
             rzb_log(LOG_ERR, "%s: %s", __func__, strerror(errno));
             free(hash);
