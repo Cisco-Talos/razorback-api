@@ -11,7 +11,7 @@ Mutex_Create(int mode)
     struct Mutex *ret;
     if ((ret = (struct Mutex *)calloc(1,sizeof(struct Mutex))) == NULL)
         return NULL;
-	ret->mode = mode;
+    ret->mode = mode;
     if (!Mutex_Init(ret))
     {
         Mutex_Destroy(ret);
