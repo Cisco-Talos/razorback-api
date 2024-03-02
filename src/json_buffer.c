@@ -531,7 +531,7 @@ SO_PUBLIC bool JsonBuffer_Get_NTLVList (json_object * parent, const char * name,
 {
     struct List *list;
     json_object *object;
-	int i;
+    size_t i;
 
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
@@ -1339,7 +1339,7 @@ SO_PUBLIC bool JsonBuffer_Get_UUIDList (json_object * parent, const char * name,
     json_object *object;
     uuid_t uuid;
     const char *uuidS, *nameS, *desc; 
-	int i;
+    size_t i;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
     if (parent == NULL)
@@ -1416,7 +1416,7 @@ JsonBuffer_Get_StringList (json_object * parent, const char * name,
     struct List *list;
     json_object *object;
     const char *string;
-	int i;
+    size_t i;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
     if (parent == NULL)
