@@ -72,6 +72,7 @@ Lookup_Result checkLocalEntry(uint8_t *key, uint32_t size, uint32_t *sfflags, ui
                 //In T1? Cache is now frequent; grows T2, shrinks T1
                 cache->listSize[LT_T1]--;
                 cache->listSize[LT_T2]++;
+		__attribute__((fallthrough));
             case LT_T2:
                 //In T2? Reinsert entry as MRU, caches stay the same size
                 //*****Check to make sure hit isn't already T2 MRU
