@@ -229,7 +229,7 @@ BlockPool_AddData (struct BlockPoolItem *item, uint8_t * data,
     if (length <= 0)
     	return false;
 
-	Mutex_Lock(sg_sizeMutex);
+    Mutex_Lock(sg_sizeMutex);
     if ((Config_getBlockPoolMaxSize() > 0) &&
     		((sg_size +length )>=
     				Config_getBlockPoolMaxSize()))
