@@ -9,7 +9,7 @@
 #include <razorback/messages.h>
 #include <razorback/ntlv.h>
 
-#include <json/json.h>
+#include <json.h>
 
 #ifdef __cplusplus
 extern "C" {
