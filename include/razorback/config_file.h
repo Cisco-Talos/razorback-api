@@ -86,6 +86,10 @@ struct ConfList
 SO_PUBLIC extern bool readMyConfig (const char *configDir, const char *configFile,
                           RZBConfKey_t * config);
 
+/** Generate the path to the provided config file
+ */
+SO_PUBLIC extern char * getConfigFile (const char *configDir, const char *configFile);
+
 /** Clean the memory allocated by ::readApiConfig and ::readMyConfig
  *
  */

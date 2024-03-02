@@ -60,12 +60,11 @@ bool parseBlockWin32 (HKEY RegKey, RZBConfKey_t * block);
 #else
 bool parseBlock (config_t *, RZBConfKey_t *);
 #endif
-static char *getConfigFile (const char *, const char *);
 bool parseRoutingType (const char *, conf_int_t *);
 
 #ifndef _MSC_VER
 
-static char *
+SO_PUBLIC char *
 getConfigFile (const char *configDir, const char *configFile)
 {
 	char *result;
