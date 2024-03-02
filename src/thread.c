@@ -379,7 +379,7 @@ Thread_Yield(void)
 #ifdef _MSC_VER
     SwitchToThread();
 #else
-    pthread_yield();
+    sched_yield();
 #endif
 }
 
@@ -403,7 +403,8 @@ Thread_KeyCmp(void *a, void *id)
         return 0;
     else
         return -1;
-	return -1;
+
+    return -1;
 }
 
 SO_PUBLIC int 
@@ -417,7 +418,8 @@ Thread_Cmp(void *a, void *b)
         return 0;
     else 
         return -1;
-	return -1;
+
+    return -1;
 }
 
 static void 
