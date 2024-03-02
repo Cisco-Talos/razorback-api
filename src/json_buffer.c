@@ -28,7 +28,7 @@
 #include <openssl/evp.h>
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
-
+#include <errno.h>
 #include <string.h>
 
 SO_PUBLIC bool JsonBuffer_Put_uint8_t (json_object * parent,
@@ -221,11 +221,20 @@ SO_PUBLIC bool JsonBuffer_Get_uint32_t (json_object * parent, const char *name,
         return false;
     if ((object = json_object_object_get(parent, name))  == NULL)
         return false;
-    if (json_object_get_type(object) != json_type_string)
-        return false;
-    tmp = json_object_get_string(object);
-    if (sscanf(tmp, "%u", &val) != 1)
-        return false;
+    json_type type = json_object_get_type(object);
+    if (type == json_type_string) {
+        tmp = json_object_get_string(object);
+        if(sscanf(tmp,"%u", &val) != 1) {
+            return false;
+        }
+    } else if (type == json_type_int) {
+        errno = 0;
+        // Potential for overflow in down cast
+        val = (uint32_t)json_object_get_uint64(object);
+        if (errno != 0) {
+            return false;
+        }
+    }
     *p_pValue = val;
     return true;
 }
@@ -244,11 +253,21 @@ SO_PUBLIC bool JsonBuffer_Get_uint64_t (json_object * parent, const char *name,
         return false;
     if ((object = json_object_object_get(parent, name))  == NULL)
         return false;
-    if (json_object_get_type(object) != json_type_string)
-        return false;
-    tmp = json_object_get_string(object);
-    if (sscanf(tmp, NUM_FMT, &val) != 1)
-        return false;
+
+    json_type type = json_object_get_type(object);
+    if (type == json_type_string) {
+        tmp = json_object_get_string(object);
+        if (sscanf(tmp,NUM_FMT, &val) != 1) {
+            return false;
+        }
+    } else if (type == json_type_int) {
+        errno = 0;
+        val = json_object_get_uint64(object);
+        if (errno != 0) {
+            return false;
+        }
+    }
+
     *p_pValue = val;
 
     return true;
