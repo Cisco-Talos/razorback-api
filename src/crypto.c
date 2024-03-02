@@ -17,6 +17,7 @@ handle_error(const char *file, int lineno, const char *msg)
 //    ERR_print_errors_fp(stderr);
 }
 
+/*
 static void locking_function(int mode, int n, const char * file, int line)
 {
     if (mode & CRYPTO_LOCK)
@@ -29,6 +30,7 @@ static unsigned long id_function(void)
 {
 	return (unsigned long)Thread_GetCurrentId();
 }
+*/
 
 static bool Crypto_Initialize_OpenSSL(void)
 {
