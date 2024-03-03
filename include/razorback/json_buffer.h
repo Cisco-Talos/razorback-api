@@ -15,6 +15,8 @@
 extern "C" {
 #endif
 
+SO_PUBLIC extern bool JsonBuffer_Put_bool (json_object * parent,
+                                              const char *name, bool p_iValue);
 SO_PUBLIC extern bool JsonBuffer_Put_uint8_t (json_object * parent,
                                     const char *name, uint8_t p_iValue);
 
@@ -31,6 +33,7 @@ SO_PUBLIC extern bool JsonBuffer_Put_ByteArray (json_object * parent, const char
 SO_PUBLIC extern bool JsonBuffer_Put_String (json_object * parent, const char * name,
                                    const char * p_sString);
 
+SO_PUBLIC extern bool JsonBuffer_Get_bool (json_object * parent, const char * name, bool * p_pValue);
 SO_PUBLIC extern bool JsonBuffer_Get_uint8_t (json_object * parent, const char * name, uint8_t * p_pValue);
 
 SO_PUBLIC extern bool JsonBuffer_Get_uint16_t (json_object * parent, const char * name,

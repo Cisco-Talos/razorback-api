@@ -31,6 +31,24 @@
 #include <errno.h>
 #include <string.h>
 
+SO_PUBLIC bool JsonBuffer_Put_bool (json_object * parent,
+                                        const char *name, bool p_iValue)
+{
+    json_object *new;
+    ASSERT( parent != NULL);
+    ASSERT(name != NULL);
+    if (parent == NULL)
+        return false;
+    if (name == NULL)
+        return false;
+
+    if ((new = json_object_new_boolean(p_iValue)) == NULL)
+        return false;
+
+    json_object_object_add(parent, name, new);
+    return true;
+}
+
 SO_PUBLIC bool JsonBuffer_Put_uint8_t (json_object * parent,
                                     const char *name, uint8_t p_iValue)
 {
@@ -162,6 +180,40 @@ SO_PUBLIC bool JsonBuffer_Put_String (json_object * parent, const char * name,
 
     json_object_object_add(parent, name, new);
     
+    return true;
+}
+
+SO_PUBLIC bool JsonBuffer_Get_bool (json_object * parent, const char * name, bool * p_pValue)
+{
+    bool tmp;
+    const char *tmpS;
+    json_object *object;
+    ASSERT( parent != NULL);
+    ASSERT(name != NULL);
+    if (parent == NULL)
+        return false;
+    if (name == NULL)
+        return false;
+    if ((object = json_object_object_get(parent, name))  == NULL)
+        return false;
+
+    json_type type = json_object_get_type(object);
+    if (type == json_type_boolean) {
+        tmp = json_object_get_boolean(object);
+    }  else if (type == json_type_string) {
+        tmpS = json_object_get_string(object);
+        if (strcmp(tmpS, "true") == 0) {
+            tmp = true;
+        } else if (strcmp(tmpS, "true") == 0) {
+            tmp = false;
+        } else {
+            return false;
+        }
+    } else {
+        return false;
+    }
+
+    *p_pValue = (bool) tmp;
     return true;
 }
 
