@@ -50,6 +50,12 @@ m4_include([common_m4/compiler_options.m4])
 # Pull in the standard compiler and linker flags.
 m4_include([common_m4/cflags.m4])
 
+AC_DEFINE_UNQUOTED(NUGGET_SO_VERSION, "[NUGGET_VERSION_NUMBER]", ["So Version Of Nuggets"])
+AS_AC_EXPAND(LIBDIR, "$libdir")
+libdir=$LIBDIR
+
+AC_DEFINE_UNQUOTED(LIB_DIR, "$LIBDIR", ["Lib dir"])
+
 AC_SUBST(XCCFLAGS)
 AC_SUBST(APIVERSION)
 AC_SUBST(LIBS)
