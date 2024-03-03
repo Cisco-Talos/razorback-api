@@ -320,6 +320,12 @@ BlockPool_FinalizeItem (struct BlockPoolItem *p_pItem)
     p_pItem->iStatus = BLOCK_POOL_STATUS_FINALIZED;
     return true;
 }
+
+SO_PUBLIC struct  Hash *
+BlockPool_GetHash (struct BlockPoolItem *p_pItem) {
+    return p_pItem->pEvent->pBlock->pId->pHash;
+}
+
 void
 BlockPool_DestroyItemDataList(struct BlockPoolItem *p_pItem) 
 {

@@ -65,6 +65,8 @@ SO_PUBLIC extern bool BlockPool_AddData_FromFile(struct BlockPoolItem *item, cha
  */
 SO_PUBLIC extern bool BlockPool_FinalizeItem (struct BlockPoolItem *p_pItem);
 
+SO_PUBLIC extern struct Hash * BlockPool_GetHash (struct BlockPoolItem *p_pItem);
+
 /** Remove an item from the block pool.
  * @param *p_pItem the item to remove.
  * @return true on success false on error.
