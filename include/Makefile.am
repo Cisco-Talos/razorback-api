@@ -33,6 +33,7 @@ razorback/submission.h \
 razorback/thread.h \
 razorback/thread_pool.h \
 razorback/timer.h \
+razorback/transfer.h \
 razorback/types.h \
 razorback/uuids.h \
 razorback/visibility.h

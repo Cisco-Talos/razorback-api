@@ -45,6 +45,7 @@ extern uint32_t Config_getSubTransferThreadsMax (void);
 extern uint32_t Config_getBlockPoolMaxItems (void);
 extern uint32_t Config_getBlockPoolMaxSize (void);
 extern uint32_t Config_getBlockPoolMaxItemSize (void);
+extern char * Config_getTransferMode(void);
 
 
 
