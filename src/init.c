@@ -1,7 +1,15 @@
 #include "config.h"
 
 #include "init.h"
+#include <curl/curl.h>
 
+static bool initCurl() {
+    if (curl_global_init(CURL_GLOBAL_ALL) != 0) {
+        fprintf(stderr, "Failed to initialize libcurl\n");
+        exit(1);
+    }
+    return true;
+}
 #ifdef _MSC_VER
 #include "safewindows.h"
 #include <WinSock2.h>
@@ -28,6 +36,7 @@ RZB_Init_API ()
 {
 #endif
 		Crypto_Initialize();
+		initCurl();
 		readApiConfig();
 		configureLogging();
 		Magic_Init();
