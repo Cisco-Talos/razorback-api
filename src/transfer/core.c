@@ -99,8 +99,8 @@ Transfer_Init(void)
             return false;
         }
         *(void **)&initPlugin = dlsym(pluginDlHandle, "transferInit");
-        *(void **)&sg_sPluginDescriptor.fetch = dlsym(pluginDlHandle, "File_Fetch");
-        *(void **)&sg_sPluginDescriptor.store = dlsym(pluginDlHandle, "File_Store");
+        *(void **)&sg_sPluginDescriptor.fetch = dlsym(pluginDlHandle, "Plugin_Fetch");
+        *(void **)&sg_sPluginDescriptor.store = dlsym(pluginDlHandle, "Plugin_Store");
         if (initPlugin == NULL) {
             rzb_log(LOG_ERR, "%s: Failed find plugin init function", __func__);
             return false;

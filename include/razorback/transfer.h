@@ -10,8 +10,8 @@
 
 #define DECL_TRANSFER_INIT bool transferInit(void)
 
-#define DECL_TRANSFER_STORE bool File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
-#define DECL_TRANSFER_FETCH bool File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
+#define DECL_TRANSFER_STORE bool Plugin_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
+#define DECL_TRANSFER_FETCH bool Plugin_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 
 
 #endif //RAZORBACK_TRANSFER_H
