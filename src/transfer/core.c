@@ -22,7 +22,6 @@ struct List *sg_transportList = NULL;
 static int Transport_Cmp(void *a, void *b);
 static int Transport_KeyCmp(void *a, void *key);
 static bool sg_bTraditionalMode = true;
-static struct TransportDescriptor sg_sPluginDescriptor;
 
 char *
 Transfer_generateFilename (struct Block *block)
@@ -69,14 +68,14 @@ Transfer_Init(void)
     if (sg_transportList == NULL)
         return false;
 
+    if (!File_Init())
+        return false;
+    if (!SSH_Init())
+        return false;
+
     if (strcmp(mode, "traditional") == 0) {
         rzb_log(LOG_INFO, "%s: File transfers taking place in traditional mode", __func__);
         sg_bTraditionalMode = true;
-
-        if (!File_Init())
-            return false;
-        if (!SSH_Init())
-            return false;
     } else {
         rzb_log(LOG_INFO, "%s: File transfers taking place using plugin: %s", __func__, mode);
         sg_bTraditionalMode = false;
@@ -99,18 +98,8 @@ Transfer_Init(void)
             return false;
         }
         *(void **)&initPlugin = dlsym(pluginDlHandle, "transferInit");
-        *(void **)&sg_sPluginDescriptor.fetch = dlsym(pluginDlHandle, "Plugin_Fetch");
-        *(void **)&sg_sPluginDescriptor.store = dlsym(pluginDlHandle, "Plugin_Store");
-        if (initPlugin == NULL) {
+       if (initPlugin == NULL) {
             rzb_log(LOG_ERR, "%s: Failed find plugin init function", __func__);
-            return false;
-        }
-        if (sg_sPluginDescriptor.fetch == NULL) {
-            rzb_log(LOG_ERR, "%s: Failed find plugin fetch function", __func__);
-            return false;
-        }
-        if (sg_sPluginDescriptor.store == NULL) {
-            rzb_log(LOG_ERR, "%s: Failed find plugin store function", __func__);
             return false;
         }
 
@@ -118,10 +107,6 @@ Transfer_Init(void)
             rzb_log(LOG_ERR, "%s: Failed to initialize transfer plugin", __func__);
             return false;
         }
-        sg_sPluginDescriptor.id=255;
-        sg_sPluginDescriptor.name=mode;
-        sg_sPluginDescriptor.description="Plugin Transport";
-        List_Push(sg_transportList, &sg_sPluginDescriptor);
     }
     return true;
 }
@@ -146,22 +131,18 @@ Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
     struct TransportDescriptor *trans = NULL;
     uint8_t file = 0;
 	int i;
-	if (sg_bTraditionalMode) {
-        if (dispatcher->locality == Config_getLocalityId()) // Same locality always use file
-        {
-            trans = List_Find(sg_transportList, &file);
-        }
-        else
-            trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol);
-        if (trans == NULL)
-        {
-            return false;
-        }
-        rzb_log(LOG_DEBUG, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
-        rzb_log(LOG_DEBUG, "%s: Transport: %s", __func__, trans->name);
-    } else {
-        trans = &sg_sPluginDescriptor;
+    if (sg_bTraditionalMode && (dispatcher->locality == Config_getLocalityId())) // Same locality always use file
+    {
+        trans = List_Find(sg_transportList, &file);
     }
+    else
+        trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol);
+    if (trans == NULL)
+    {
+        return false;
+    }
+    rzb_log(LOG_DEBUG, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
+    rzb_log(LOG_DEBUG, "%s: Transport: %s", __func__, trans->name);
 
     for (i =0; i < RETRIES; i++)
 	{
@@ -177,20 +158,17 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     struct TransportDescriptor *trans = NULL;
     uint8_t file = 0;
 	int i;
-	if (sg_bTraditionalMode) {
-        if (dispatcher->locality == Config_getLocalityId()) // Same locality always use file
-            trans = List_Find(sg_transportList, &file);
-        else
-            trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol);
-        if (trans == NULL) {
-            rzb_log(LOG_ERR, "%s: Failed to find transport descriptor", __func__);
-            return false;
-        }
-        rzb_log(LOG_DEBUG, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
-        rzb_log(LOG_DEBUG, "%s: Transport: %s", __func__, trans->name);
-    } else {
-        trans = &sg_sPluginDescriptor;
+    if (sg_bTraditionalMode &&(dispatcher->locality == Config_getLocalityId())) // Same locality always use file
+        trans = List_Find(sg_transportList, &file);
+    else
+        trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol);
+    if (trans == NULL) {
+        rzb_log(LOG_ERR, "%s: Failed to find transport descriptor", __func__);
+        return false;
     }
+    rzb_log(LOG_DEBUG, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
+    rzb_log(LOG_DEBUG, "%s: Transport: %s", __func__, trans->name);
+
 	for (i = 0; i < RETRIES; i++)
 	{
 		if (trans->fetch(block, dispatcher))
@@ -201,7 +179,7 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 
 }
 
-bool
+SO_PUBLIC bool
 Transfer_Prepare_File(struct Block *block, char *file, bool temp)
 {
     ASSERT(file != NULL);

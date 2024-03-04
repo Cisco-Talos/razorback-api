@@ -4,6 +4,7 @@
 #include <razorback/types.h>
 #include <razorback/log.h>
 #include <razorback/block_pool.h>
+#include <razorback/transfer.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #ifdef _MSC_VER
@@ -18,15 +19,13 @@
 #include "transfer/core.h"
 #include "runtime_config.h"
 
-static bool File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher);
-static bool File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher);
 static struct TransportDescriptor descriptor =
 {
     0,
     "File",
     "Transfer file via shared file system",
-    File_Store,
-    File_Fetch
+    Transfer_File_Store,
+    Transfer_File_Fetch
 };
 
 bool 
@@ -34,6 +33,7 @@ File_Init(void)
 {
     return Transport_Register(&descriptor);
 }
+
 static char * File_mkdir(const char *fmt, ...)
 {
     char *dir = NULL;
@@ -118,8 +118,8 @@ writeWrap (int fd, uint8_t * data, uint64_t length)
     return 1;
 }
 
-static bool 
-File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
+SO_PUBLIC bool
+Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
 {
     int fd;
     char *filename =NULL;
@@ -206,8 +206,8 @@ File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
 
 }
 
-static bool 
-File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
+SO_PUBLIC bool
+Transfer_File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 {
     int fd;
     char *filename = NULL;

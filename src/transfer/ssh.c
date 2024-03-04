@@ -5,6 +5,7 @@
 #include <razorback/log.h>
 #include <razorback/block_pool.h>
 #include <razorback/thread.h>
+#include <razorback/transfer.h>
 
 #include <libssh/libssh.h>
 #include <libssh/sftp.h>
@@ -40,8 +41,6 @@
 
 static struct List *sessionList = NULL;
 
-static bool SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher);
-static bool SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher);
 static int SSH_Session_KeyCmp(void *a, void *id);
 static int SSH_Session_Cmp(void *a, void *b);
 static struct SSH_Session * SSH_Get_Session(uuid_t nuggetId, struct ConnectedEntity *dispatcher);
@@ -54,8 +53,8 @@ static struct TransportDescriptor descriptor =
     1,
     "SSH",
     "Transfer file via SSH (sftp)",
-    SSH_Store,
-    SSH_Fetch
+    Transfer_SSH_Store,
+    Transfer_SSH_Fetch
 };
 
 struct SSH_Session_Key
@@ -175,8 +174,8 @@ writeWrap (sftp_file fd, uint8_t * data, uint64_t length)
     return 1;
 }
 
-static bool 
-SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
+SO_PUBLIC bool
+Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
 {
     struct RazorbackContext *ctx;
     struct SSH_Session *session;
@@ -287,8 +286,8 @@ SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
     return true;
 }
 
-static bool 
-SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
+SO_PUBLIC bool
+Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 {
     struct RazorbackContext *ctx;
     struct SSH_Session *session;
