@@ -34,6 +34,22 @@ struct Mutex
 	int mode;						///< Lock mode
 };
 
+/** RWLock Control Structure
+ */
+struct RWLock
+{
+#ifdef _MSC_VER
+    HANDLE recursiveLock;			///< Recursive lock handle (win32)
+	CRITICAL_SECTION cs;			///< None recursive lock handle (win32)
+#else
+    pthread_rwlock_t lock;			///< PThreads lock structure.
+    pthread_rwlockattr_t attrs;		///< PThreads lock attributes.
+#endif
+    int mode;						///< Lock mode
+};
+
+
+
 /** Semaphore Control Structure
  */
 struct Semaphore
@@ -68,6 +84,31 @@ SO_PUBLIC extern bool Mutex_Unlock(struct Mutex *mutex);
  * @param mutex The mutex to destroy.
  */
 SO_PUBLIC extern void Mutex_Destroy(struct Mutex *mutex);
+
+
+/** Create a rwlock.
+ * @return A new rwlock structure or NULL on error.
+ */
+SO_PUBLIC extern struct RWLock * RWLock_Create();
+
+/** Lock a rwlock
+ * @param rwlock The rwlock to lock.
+ * @return true on success false on failure.
+ */
+SO_PUBLIC extern bool RWLock_ReadLock(struct RWLock *rwlock);
+SO_PUBLIC extern bool RWLock_WriteLock(struct RWLock *rwlock);
+
+/** Unlock a rwlock
+ * @param rwlock The rwlock to unlock.
+ * @return true on success false on failure.
+ */
+SO_PUBLIC extern bool RWLock_Unlock(struct RWLock *rwlock);
+
+/** Destroy a rwlock
+ * @param rwlock The rwlock to destroy.
+ */
+SO_PUBLIC extern void RWLock_Destroy(struct RWLock *rwlock);
+
 
 /** Create a semaphore
  * @param shared True if share, false if not.

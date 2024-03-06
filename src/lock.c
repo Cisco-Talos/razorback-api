@@ -2,8 +2,10 @@
 #include <razorback/debug.h>
 #include <razorback/lock.h>
 #include <razorback/log.h>
+#include <razorback/thread.h>
 
 static bool Mutex_Init(struct Mutex *);
+static bool RWLock_Init(struct RWLock *);
 
 SO_PUBLIC struct Mutex * 
 Mutex_Create(int mode)
@@ -97,6 +99,126 @@ Mutex_Destroy(struct Mutex *mutex)
 #endif //_MSC_VER
     free(mutex);
 }
+
+
+SO_PUBLIC struct RWLock *
+RWLock_Create()
+{
+    struct RWLock *ret;
+    if ((ret = calloc(1,sizeof(struct RWLock))) == NULL)
+        return NULL;
+
+    if (!RWLock_Init(ret))
+    {
+        RWLock_Destroy(ret);
+        return NULL;
+    }
+    return ret;
+}
+
+SO_PUBLIC bool
+RWLock_ReadLock(struct RWLock *rwlock)
+{
+    ASSERT(rwlock != NULL);
+    if (rwlock == NULL)
+        return false;
+#ifdef _MSC_VER
+    switch (rwlock->mode)
+    {
+    case MUTEX_MODE_RECURSIVE:
+		WaitForSingleObject(rwlock->recursiveLock, INFINITE);
+        break;
+    case MUTEX_MODE_NORMAL:
+		EnterCriticalSection(&rwlock->cs);
+        break;
+    default:
+        rzb_log(LOG_ERR, "%s: Invalid rwlock mode: %d", rwlock->mode);
+        return false;
+    }
+#else //_MSC_VER
+    if (pthread_rwlock_rdlock(&rwlock->lock) != 0)
+        return false;
+#endif //_MSC_VER
+    return true;
+}
+SO_PUBLIC bool
+RWLock_WriteLock(struct RWLock *rwlock)
+{
+    ASSERT(rwlock != NULL);
+    if (rwlock == NULL)
+        return false;
+#ifdef _MSC_VER
+    switch (rwlock->mode)
+    {
+    case MUTEX_MODE_RECURSIVE:
+		WaitForSingleObject(rwlock->recursiveLock, INFINITE);
+        break;
+    case MUTEX_MODE_NORMAL:
+		EnterCriticalSection(&rwlock->cs);
+        break;
+    default:
+        rzb_log(LOG_ERR, "%s: Invalid rwlock mode: %d", rwlock->mode);
+        return false;
+    }
+#else //_MSC_VER
+    if (pthread_rwlock_wrlock(&rwlock->lock) != 0)
+        return false;
+#endif //_MSC_VER
+    return true;
+}
+
+SO_PUBLIC bool
+RWLock_Unlock(struct RWLock *rwlock)
+{
+    ASSERT(rwlock != NULL);
+    if (rwlock == NULL)
+        return false;
+#ifdef _MSC_VER
+    switch (rwlock->mode)
+    {
+    case MUTEX_MODE_RECURSIVE:
+		ReleaseRWLock(rwlock->recursiveLock);
+        break;
+    case MUTEX_MODE_NORMAL:
+		LeaveCriticalSection(&rwlock->cs);
+        break;
+    default:
+        rzb_log(LOG_ERR, "%s: Invalid rwlock mode: %d", rwlock->mode);
+        return false;
+    }
+#else //_MSC_VER
+    if (pthread_rwlock_unlock(&rwlock->lock) != 0)
+        return false;
+#endif //_MSC_VER
+    return true;
+}
+
+SO_PUBLIC void
+RWLock_Destroy(struct RWLock *rwlock)
+{
+    ASSERT(rwlock != NULL);
+    if (rwlock == NULL)
+        return;
+#ifdef _MSC_VER
+    switch (rwlock->mode)
+    {
+    case MUTEX_MODE_RECURSIVE:
+		CloseHandle(rwlock->recursiveLock);
+        break;
+    case MUTEX_MODE_NORMAL:
+		DeleteCriticalSection(&rwlock->cs);
+        break;
+    default:
+        rzb_log(LOG_ERR, "%s: Invalid rwlock mode: %d", rwlock->mode);
+    }
+
+#else //_MSC_VER
+    pthread_rwlock_destroy(&rwlock->lock);
+    pthread_rwlockattr_destroy(&rwlock->attrs);
+#endif //_MSC_VER
+    free(rwlock);
+}
+
 
 SO_PUBLIC struct Semaphore * 
 Semaphore_Create(bool shared, unsigned int value)
@@ -207,26 +329,35 @@ static bool Mutex_Init(struct Mutex *mutex)
     return true;
 }
 #else //_MSC_VER
-
 static bool Mutex_Init(struct Mutex *mutex)
 {
     ASSERT(mutex != NULL);
-    if (mutex == NULL) 
+    if (mutex == NULL)
         return false;
     pthread_mutexattr_init(&mutex->attrs);
 
     switch (mutex->mode)
     {
-    case MUTEX_MODE_RECURSIVE:
-        pthread_mutexattr_settype(&mutex->attrs, PTHREAD_MUTEX_RECURSIVE);
-        break;
-    case MUTEX_MODE_NORMAL:
-        break;
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid mutex mode: %d", mutex->mode);
-        return false;
+        case MUTEX_MODE_RECURSIVE:
+            pthread_mutexattr_settype(&mutex->attrs, PTHREAD_MUTEX_RECURSIVE);
+            break;
+        case MUTEX_MODE_NORMAL:
+            break;
+        default:
+            rzb_log(LOG_ERR, "%s: Invalid mutex mode: %d", mutex->mode);
+            return false;
     }
-    pthread_mutex_init(&mutex->lock, &mutex->attrs); 
+    pthread_mutex_init(&mutex->lock, &mutex->attrs);
+    return true;
+}
+
+static bool RWLock_Init(struct RWLock *rwlock)
+{
+    ASSERT(rwlock != NULL);
+    if (rwlock == NULL)
+        return false;
+    pthread_rwlockattr_init(&rwlock->attrs);
+    pthread_rwlock_init(&rwlock->lock, &rwlock->attrs);
     return true;
 }
 #endif //_MSC_VER
