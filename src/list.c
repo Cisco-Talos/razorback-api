@@ -185,7 +185,6 @@ List_ForEach(struct List *list, int (*op)(void *, void *), void *userData)
     while (cur != NULL)
     {
         last = false;
-        del = false;
         if (list->nodeLock)
             list->nodeLock(cur->item);
 
