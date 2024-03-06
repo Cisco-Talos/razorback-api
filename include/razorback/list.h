@@ -40,17 +40,20 @@ struct ListNode
 {
     struct ListNode *next;	///< Next node
     struct ListNode *prev;	///< Previous node
-    void *item;				///< Item data.
+    void *item;				///< Item data
     bool del;               ///< Node deletion marker
 };
 
 /** List structure.
- * Locking notes
- * - Locks must always be acquired in a forward order
- * - Always acquire the lock for cur->next->next before releasing the cur->prev lock
- * - When the list is empty head/tail are protected using atomic exchanges
- * - When there is data in the last head/tail are protected by the head/tail->lock
- * - Length is only changed with atomic inc/dec functions
+ * Note - The list can not be mutated from the iterator!!!
+ * Calls to List_Push/List_Pop/List_Remove from inside the
+ * the iterator function will cause a deadlock.
+ * The only supported mutation inside the iterator is to
+ * request the current node is removed by returning
+ * LIST_EACH_END.  List_ForEach will process the deleted
+ * after passing through the entire list as it needs to
+ * 'upgrade' to a write lock which can not be done while
+ * holding the read lock.
  */
 struct List 
 {
