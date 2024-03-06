@@ -1,8 +1,10 @@
 #include "config.h"
 #include <razorback/debug.h>
 #include <razorback/list.h>
+#include <razorback/log.h>
 
 #include <string.h>
+#include <razorback/thread.h>
 
 static void List_RemoveNode(struct List *list, struct ListNode *node);
 
@@ -25,8 +27,8 @@ List_Create(int mode,
 
     if ((list = calloc(1,sizeof(struct List))) == NULL)
         return NULL;
-    if ((list->lock = Mutex_Create(MUTEX_MODE_RECURSIVE)) == NULL)
-    {
+
+    if ((list->lock = RWLock_Create() ) == NULL) {
         free(list);
         return NULL;
     }
@@ -35,7 +37,6 @@ List_Create(int mode,
     {
     	if ((list->sem = Semaphore_Create(true, 0)) == NULL)
     	{
-    		Mutex_Destroy(list->lock);
     		free(list);
     		return NULL;
     	}
@@ -53,28 +54,42 @@ List_Create(int mode,
     return list;
 }
 
+struct FindData {
+    struct List *list;
+    void * ret;
+    void * id;
+};
+static int List_FindKeyCmp(void * item, void *d) {
+    struct FindData *data = (struct FindData *)d;
+    if (data->list->keyCmp(item, data->id) == 0)
+    {
+        data->ret = item;
+        return LIST_EACH_END;
+    }
+    return LIST_EACH_OK;
+}
+
 SO_PUBLIC void * 
 List_Find(struct List *list, void *id)
 {
-    struct ListNode *cur;
+    struct FindData data;
     ASSERT(list != NULL);
     ASSERT(id != NULL);
     ASSERT(list->keyCmp != NULL);
 
+
     if ((list == NULL) || (id == NULL) || (list->keyCmp == NULL))
         return NULL;
 
-    Mutex_Lock(list->lock);
-    for (cur = list->head; cur != NULL; cur = cur->next)
-    {
-        if (list->keyCmp(cur->item, id) == 0)
-        {
-            Mutex_Unlock(list->lock);
-            return cur->item;
-        }
+    data.list = list;
+    data.id = id;
+    data.ret = NULL;
+
+    if (!List_ForEach(list, List_FindKeyCmp, &data)) {
+        rzb_log(LOG_ERR, "%s: Error calling List_ForEach", __func__);
     }
-    Mutex_Unlock(list->lock);
-    return NULL;
+
+    return data.ret;
 }
 
 SO_PUBLIC bool 
@@ -86,8 +101,11 @@ List_Push(struct List *list, void *item)
         return false;
     if ((node = calloc(1, sizeof(struct ListNode))) == NULL)
         return false;
+
     node->item = item;
-    Mutex_Lock(list->lock);
+
+
+    RWLock_WriteLock(list->lock);
     switch (list->mode)
     {
     case LIST_MODE_GENERIC:
@@ -97,9 +115,11 @@ List_Push(struct List *list, void *item)
     case LIST_MODE_STACK:
         List_Stack_Push(list, node);
         break;
-   }
+    }
     list->length++;
-    Mutex_Unlock(list->lock);
+    RWLock_Unlock(list->lock);
+
+
     if (list->sem != NULL)
 		Semaphore_Post(list->sem);
     return true;
@@ -109,14 +129,15 @@ SO_PUBLIC void *
 List_Pop(struct List *list)
 {
     struct ListNode *node = NULL;
-    void * ret;
+    void * ret = NULL;
     ASSERT(list != NULL);
     if (list == NULL)
         return NULL;
+
     if (list->sem != NULL)
     	Semaphore_Wait(list->sem);
-    
-    Mutex_Lock(list->lock);
+
+    RWLock_WriteLock(list->lock);
     switch (list->mode)
     {
     case LIST_MODE_GENERIC:
@@ -127,12 +148,13 @@ List_Pop(struct List *list)
         node = List_Stack_Pop(list);
         break;
     }
-    Mutex_Unlock(list->lock);
-    if (node == NULL)
-        return NULL;
+    RWLock_Unlock(list->lock);
 
-    ret = node->item;
-    free(node);
+    if (node != NULL) {
+        ret = node->item;
+        free(node);
+    }
+
     return ret;
 }
 
@@ -140,8 +162,11 @@ List_Pop(struct List *list)
 SO_PUBLIC bool
 List_ForEach(struct List *list, int (*op)(void *, void *), void *userData)
 {
-    struct ListNode *cur = NULL, *del = NULL;
-
+    struct ListNode *cur = NULL, *delNode;
+    bool del = false;
+    bool ret = true;
+    bool last = false;
+    int opRet;
     ASSERT(list != NULL);
     ASSERT(op != NULL);
 
@@ -150,77 +175,103 @@ List_ForEach(struct List *list, int (*op)(void *, void *), void *userData)
     if (op == NULL)
         return false;
 
-    Mutex_Lock(list->lock);
+    // List is empty we did what was asked successfully
+    if (list->head == NULL) {
+        return true;
+    }
+    RWLock_ReadLock(list->lock);
+    cur = list->head;
 
-    cur = list->head; 
-    while(cur != NULL)
+    while (cur != NULL)
     {
+        last = false;
+        del = false;
         if (list->nodeLock)
             list->nodeLock(cur->item);
 
-        switch (op(cur->item, userData))
+        opRet = op(cur->item, userData);
+        if (list->nodeUnlock)
+            list->nodeUnlock(cur->item);
+        switch (opRet)
         {
-        case LIST_EACH_OK:
-            if (list->nodeUnlock)
-                list->nodeUnlock(cur->item);
-            cur = cur->next;
-            break;
-        case LIST_EACH_ERROR:
-            if (list->nodeUnlock)
-                list->nodeUnlock(cur->item);
-            Mutex_Unlock(list->lock);
-            return false;
-        case LIST_EACH_REMOVE:
-            del = cur;
-            cur = cur->next;
-            if (list->nodeUnlock)
-                list->nodeUnlock(del->item);
-            List_RemoveNode(list, del);
-            if (list->destroy != NULL)
-                list->destroy(del->item);
-
-            free(del);
-            break;
-        default:
-            return false;
+            case LIST_EACH_ERROR:
+                ret = false;
+                __attribute__ ((fallthrough));
+            case LIST_EACH_END:
+                last = true;
+                break;
+            case LIST_EACH_REMOVE:
+                rzb_log(LOG_DEBUG, "%s: Delete requested marking node for deletion: %p", __func__, cur);
+                del = true;
+                cur->del = true;
+                break;
+            default:
+                break;
         }
+        cur = cur->next;
+        if (last)
+            break;
     }
-    Mutex_Unlock(list->lock);
-    return true;
+    RWLock_Unlock(list->lock);
+
+    if (del) {
+        rzb_log(LOG_DEBUG, "%s: Item deletion requested in loop pruning list", __func__);
+        RWLock_WriteLock(list->lock);
+        cur = list->head;
+        while (cur != NULL) {
+            if (cur->del) {
+                delNode = cur;
+                cur = delNode->next;
+                rzb_log(LOG_ERR, "%s: Removing deleted node from list %p", __func__, delNode);
+                List_RemoveNode(list, delNode);
+                if (list->destroy)
+                    list->destroy(delNode->item);
+                free(delNode);
+            } else {
+                cur = cur->next;
+            }
+        }
+        RWLock_Unlock(list->lock);
+    }
+    return ret;
+}
+
+
+static int List_FindRemove(void * curItem, void *d) {
+    struct FindData *data = (struct FindData *)d;
+    if ( (curItem == data->id) ||
+         (
+             (data->list->cmp != NULL) &&
+             (data->list->cmp(curItem, data->id)== 0)
+         ))
+    {
+        data->ret = curItem;
+        return LIST_EACH_REMOVE;
+    }
+    return LIST_EACH_OK;
 }
 
 SO_PUBLIC void 
 List_Remove(struct List *list, void *item)
 {
-    struct ListNode *cur = NULL, *del = NULL;
+    struct FindData data;
     ASSERT(list != NULL);
     ASSERT(item != NULL);
     if (list == NULL)
         return;
     if (item == NULL)
         return;
-    Mutex_Lock(list->lock);
+    data.id = item;
+    data.list = list;
+    data.ret = NULL;
+    if (!List_ForEach(list, List_FindRemove, &data)) {
+        rzb_log(LOG_ERR, "%s: Error calling List_ForEach", __func__);
+    }
+    if(data.ret == NULL) {
+        rzb_log(LOG_ERR, "%s: Failed remove item", __func__);
+    }
 
-    for ( cur = list->head; cur != NULL; cur = cur->next )
-    {
-        if ( (cur->item == item) ||
-        		(
-        				(list->cmp != NULL) &&
-        				(list->cmp(item, cur->item)== 0)
-        		))
-        {
-            List_RemoveNode(list, cur);
-            del = cur;
-            break;
-        }
-    }
-    Mutex_Unlock(list->lock);
-    if (del != NULL)
-    {
-        if (list->destroy != NULL)
-            list->destroy(item);
-        free(del);
-    }
+    return;
 }
 
 static void
@@ -262,42 +313,32 @@ List_RemoveNode(struct List *list, struct ListNode *node)
 SO_PUBLIC void
 List_Clear(struct List *list)
 {
-    struct ListNode *cur, *next;
+    void *item;
     ASSERT(list != NULL);
     if (list == NULL)
         return;
 
-    Mutex_Lock(list->lock);
-    next = NULL;
-    cur = list->head; 
-    while ( cur != NULL )
+    item = List_Pop(list);
+    while ( item != NULL )
     {
-        if (list->destroy != NULL)
-            list->destroy(cur->item);
-
-        List_RemoveNode(list, cur);
-        next  =cur->next;
-        free(cur);
-        cur = next;
+        if (list->destroy != NULL) {
+            list->destroy(item);
+        }
+        item = List_Pop(list);
     }
-    Mutex_Unlock(list->lock);
-
 }
 
 SO_PUBLIC size_t
 List_Length(struct List *list)
 {
-    size_t ret;
     ASSERT(list != NULL);
     if (list == NULL)
         return 0;
 
-    Mutex_Lock(list->lock);
-    ret = list->length;
-    Mutex_Unlock(list->lock);
-    return ret;
+    return list->length;
 }
 
+// TODO: Depricated
 SO_PUBLIC void
 List_Lock(struct List *list)
 {
@@ -305,9 +346,10 @@ List_Lock(struct List *list)
     if (list == NULL)
         return;
 
-    Mutex_Lock(list->lock);
+//    Mutex_Lock(list->lock);
 }
 
+// TODO: Depricated
 SO_PUBLIC void
 List_Unlock(struct List *list)
 {
@@ -315,7 +357,7 @@ List_Unlock(struct List *list)
     if (list == NULL)
         return;
 
-    Mutex_Unlock(list->lock);
+//    Mutex_Unlock(list->lock);
 }
 
 SO_PUBLIC void
@@ -326,11 +368,10 @@ List_Destroy(struct List *list)
         return;
     
     List_Clear(list);
-    Mutex_Destroy(list->lock);
     free(list);
 }
 
-int
+static int
 List_Clone_Node(void *vItem, void *vDest)
 {
     struct List *dest = (struct List*)vDest;
@@ -390,6 +431,7 @@ List_Stack_Push(struct List *list, struct ListNode *node)
     else
     {
         node->next = list->head;
+        list->head->prev = node;
         list->head = node;
     }
 }
@@ -425,8 +467,10 @@ List_Stack_Pop(struct List *list)
     if (list->head == NULL)
         return NULL;
 
+
     ret = list->head;
     List_RemoveNode(list, ret);
+
     return ret;
 }
 
@@ -443,6 +487,7 @@ ListNode * List_Queue_Pop(struct List *list)
 
     ret = list->tail;
     List_RemoveNode(list, ret);
+
     return ret;
 }
 

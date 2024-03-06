@@ -8,6 +8,7 @@
 #ifdef _MSC_VER
 #else //_MSC_VER
 #include <stdbool.h>
+#include <stdatomic.h>
 #endif //_MSC_VER
 #include <razorback/visibility.h>
 #include <razorback/lock.h>
@@ -30,6 +31,7 @@ extern "C" {
 #define LIST_EACH_OK 		0	///< Node successfully processed
 #define LIST_EACH_ERROR 	1	///< Error processing node
 #define LIST_EACH_REMOVE 	2	///< Node successfully processed, remove from list.
+#define LIST_EACH_END       3   ///< Node successfully processed, end to loop
 /// @}
 
 /** List node structure.
@@ -39,15 +41,22 @@ struct ListNode
     struct ListNode *next;	///< Next node
     struct ListNode *prev;	///< Previous node
     void *item;				///< Item data.
+    bool del;               ///< Node deletion marker
 };
 
 /** List structure.
+ * Locking notes
+ * - Locks must always be acquired in a forward order
+ * - Always acquire the lock for cur->next->next before releasing the cur->prev lock
+ * - When the list is empty head/tail are protected using atomic exchanges
+ * - When there is data in the last head/tail are protected by the head/tail->lock
+ * - Length is only changed with atomic inc/dec functions
  */
 struct List 
 {
-    struct ListNode *head;			///< Head node
-    struct ListNode *tail;			///< Tail node
-    size_t length;					///< Number of items in the list.
+    struct ListNode * head;         ///< Head node
+    struct ListNode * tail;	        ///< Tail node
+    atomic_size_t length;           ///< Number of items in the list
     int mode;						///< Operation mode
     int (*cmp)(void *, void *);		///< Node comparator
     int (*keyCmp)(void *, void *);	///< Node key comparator
@@ -55,9 +64,11 @@ struct List
     void *(*clone)(void *);			///< Node data clone
     void (*nodeLock)(void *);		///< Node lock function
     void (*nodeUnlock)(void *);		///< Node unlock function
-    struct Mutex *lock;				///< List lock.
     struct Semaphore *sem;			///< List event semaphore.
+    struct RWLock *lock;            ///< RW Lock
 };
+
+
 
 /** Create a new List.
  * @param mode The list operation mode
