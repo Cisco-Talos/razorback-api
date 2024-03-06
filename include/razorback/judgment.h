@@ -5,6 +5,7 @@
 #define RAZORBACK_JUDGMENT_H
 
 #include <razorback/visibility.h>
+#include <razorback/api.h>
 #include <razorback/types.h>
 
 #ifdef __cplusplus
