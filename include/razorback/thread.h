@@ -8,7 +8,6 @@
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 #include <razorback/lock.h>
-#include <razorback/api.h>
 #ifdef _MSC_VER
 typedef DWORD rzb_thread_t;
 #else //_MSC_VER
