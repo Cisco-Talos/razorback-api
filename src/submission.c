@@ -186,7 +186,7 @@ Submission_GlobalCache_RequestThread(struct Thread *p_pThread)
     	BlockPool_Item_Lock(item);
     	if (BlockPool_GetStatus(item) != BLOCK_POOL_STATUS_CHECK_GLOBAL_CACHE)
 		{
-    		rzb_log(LOG_ERR, "%s: Item in queue with wrong status");
+    		rzb_log(LOG_ERR, "%s: Item (%p) in queue with wrong status", __func__, item );
     		BlockPool_Item_Unlock(item);
     		continue;
 		}
