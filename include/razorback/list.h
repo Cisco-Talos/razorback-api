@@ -41,7 +41,7 @@ struct ListNode
     struct ListNode *next;	///< Next node
     struct ListNode *prev;	///< Previous node
     void *item;				///< Item data
-    bool del;               ///< Node deletion marker
+    atomic_bool del;        ///< Node deletion marker
 };
 
 /** List structure.
