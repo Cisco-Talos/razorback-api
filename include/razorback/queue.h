@@ -40,6 +40,7 @@ struct Queue
     char *sUser;                   ///< Broker username
     char *sPassword;               ///< Broker password
     bool bUseSSL;                  ///< Use SSL connection to broker
+    char *sSubscriptionId;         ///< The subscription ID
 };
 
 #define QUEUE_FLAG_SEND 0x01

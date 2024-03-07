@@ -11,6 +11,7 @@
 #define OPT_CAST const char *
 #else
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/select.h>
 #include <sys/un.h>
 #include <arpa/inet.h>
@@ -344,6 +345,8 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
             cur = cur->ai_next;
             continue;
         }
+        int flag = 1;
+        setsockopt(sock->iSocket, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
 
 #ifdef _MSC_VER
 		setsockopt(sock->iSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&nTimeout, sizeof(int));
@@ -596,47 +599,40 @@ Socket_Rx_Until (const struct Socket * sock, uint8_t ** r_buffer,
     uint8_t *buffer = NULL;
     uint8_t *tmp = NULL;
 
-	ASSERT (sock != NULL);
-	if (sock == NULL)
-		return -1;
+    ASSERT(sock != NULL);
+    if (sock == NULL)
+        return -1;
 
-	ASSERT (r_buffer != NULL);
-	if (r_buffer == NULL)
-		return -1;
+    ASSERT(r_buffer != NULL);
+    if (r_buffer == NULL)
+        return -1;
 
-	if ((buffer = calloc(MAXRWSIZE, sizeof (uint8_t))) == NULL)
-		return -1;
+    if ((buffer = calloc(MAXRWSIZE, sizeof(uint8_t))) == NULL)
+        return -1;
 
-    do
-    {
-        now = Socket_Rx (sock, 1, &buffer[total]);
-        if (now == -1)
-        {
-        	free(buffer);
+    do {
+        now = Socket_Rx(sock, 1, &buffer[total]);
+        if (now == -1) {
+            free(buffer);
             if (errno != EINTR && errno != EAGAIN)
-                rzb_log (LOG_ERR, "%s: failed due to failure of Socket_Rx", __func__);
+                rzb_log(LOG_ERR, "%s: failed due to failure of Socket_Rx", __func__);
 
             return -1;
-        }
-        else if (now == 0)
-        {
-        	free(buffer);
-        	return 0;
+        } else if (now == 0) {
+            free(buffer);
+            return 0;
         }
         total++;
-        if (buffer[total-1] == terminator)
-        {
-        	*r_buffer = buffer;
+        if (buffer[total - 1] == terminator) {
+            *r_buffer = buffer;
             return total;
         }
-        if (total == bufSize)
-        {
-        	tmp = buffer;
-        	if ((buffer = realloc(buffer, bufSize + MAXRWSIZE)) == NULL)
-        	{
-        		free(tmp);
-        		return -1;
-        	}
+        if (total == bufSize) {
+            tmp = buffer;
+            if ((buffer = realloc(buffer, bufSize + MAXRWSIZE)) == NULL) {
+                free(tmp);
+                return -1;
+            }
         }
 
     } while (now > 0);

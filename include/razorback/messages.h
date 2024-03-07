@@ -106,13 +106,13 @@ struct MessageHandler
  */
 SO_PUBLIC extern struct List * Message_Header_List_Create(void);
 
-/** Add a header to a header list structure.
- * @param headers The header list.
+/** Add a header to a message
+ * @param message The message to add the header to
  * @param name The header name.
  * @param value The header value.
  * @return true on success false on failure
  */
-SO_PUBLIC extern bool Message_Add_Header(struct List *headers, const char *name, const char *value);
+SO_PUBLIC extern bool Message_Add_Header(struct Message *message, const char *name, const char *value);
 
 /** Register a message handler
  * @param handler The handler structure.

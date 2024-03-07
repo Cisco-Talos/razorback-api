@@ -7,13 +7,6 @@
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 
-/** Message header
- */
-struct MessageHeader 
-{
-    char *sName;		///< Header name
-    char *sValue;		///< Header value
-};
 
 struct Message
 {
@@ -28,6 +21,14 @@ struct Message
     void (*destroy)(struct Message *);			///< Pointer to message destructor
 };
 
+/** Message header
+ */
+struct MessageHeader
+{
+    char *sName;	   ///< Header name
+    char *sValue;	   ///< Header value
+    void *pMessage;    ///< Message this header is for
+};
 
 
 /** Command and Control Messages

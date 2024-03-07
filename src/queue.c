@@ -24,6 +24,15 @@ struct StompMessage {
     size_t bodyLength;
 };
 
+static bool
+StompMessage_Add_Header(struct StompMessage *message, const char *name, const char *value) {
+    struct MessageHeader * header;
+    if ((header = Message_HeaderList_Add(message->headers, name, value)) == NULL) {
+        return false;
+    }
+    header->pMessage = message;
+    return true;
+}
 static void 
 Queue_Destroy_Stomp_Message (struct StompMessage *message) 
 {
@@ -88,7 +97,7 @@ readverb:
     // Copy the verb
     strncpy(message->sVerb, buffer, messageLen);
 #ifdef STOMP_DEBUG
-    rzb_log(LOG_DEBUG, "%s: Message Verb: %s - %u", __func__, message->sVerb, messageLen);
+    rzb_log(LOG_DEBUG, "%s: (%p) Message Verb: %s - Len %u", __func__, message, message->sVerb, messageLen);
 #endif
     free(buffer);
     buffer = NULL;
@@ -112,10 +121,11 @@ readverb:
         headerItem++;
 
         // Add the item to the list
-        Message_Add_Header(message->headers, buffer, headerItem);
+        Message_HeaderList_Add(message->headers, buffer, headerItem);
+
 
 #ifdef STOMP_DEBUG
-        rzb_log(LOG_DEBUG, "%s: Message Header: %s:%s", __func__, buffer, headerItem);
+        rzb_log(LOG_DEBUG, "%s: (%p) Message Header: %s:%s", __func__, message, buffer, headerItem);
 #endif
 
         if (strcasecmp(buffer, "content-length") == 0)
@@ -129,7 +139,7 @@ readverb:
                 return NULL;
             }
 #ifdef STOMP_DEBUG
-            rzb_log(LOG_DEBUG, "%s: Found content length: %d", __func__, message->bodyLength);
+            rzb_log(LOG_DEBUG, "%s: (%p) Found content length: %d", __func__, message, message->bodyLength);
 #endif
         }
 
@@ -198,7 +208,7 @@ Queue_Send_Header(void *vHeader, void *vSocket)
     struct Socket *socket = vSocket;
     char *line = NULL;
 #ifdef STOMP_DEBUG
-        rzb_log(LOG_DEBUG, "%s: Message Header: %s:%s", __func__, header->sName, header->sValue);
+        rzb_log(LOG_DEBUG, "%s: (%p) Message Header: %s:%s", __func__, header->pMessage, header->sName, header->sValue);
 #endif
     if (asprintf(&line, "%s:%s\n", header->sName, header->sValue) == -1)
     {
@@ -222,7 +232,7 @@ Queue_Send_Message(struct Socket *socket, struct StompMessage *message)
 {
     char *line;
 #ifdef STOMP_DEBUG
-    rzb_log(LOG_DEBUG, "%s: Message Verb: %s - %u", __func__, message->sVerb, message->bodyLength);
+    rzb_log(LOG_DEBUG, "%s: (%p) Message Verb: %s - %u", __func__, message, message->sVerb, message->bodyLength);
 #endif
 
     if (asprintf(&line, "%s\n", message->sVerb) == -1)
@@ -333,11 +343,19 @@ Queue_Connect_Socket( const char * address,
         return NULL;
     }
 
-    // Put headers in backwards 
-    if (!Message_Add_Header(message->headers, "passcode", password) || 
-            !Message_Add_Header(message->headers, "login", username))
-    {
-        rzb_log(LOG_ERR, "%s: Failed to add auth headers", __func__);
+    if (!
+         (
+            StompMessage_Add_Header(message, "passcode", password) &&
+            StompMessage_Add_Header(message, "login", username) &&
+            StompMessage_Add_Header(message, "accept-version", "1.2")
+            /* ActiveMQ does not support sending the host header even though
+             * it is defined as MUST in the stomp SPEC.
+             * https://stomp.github.io/stomp-specification-1.2.html#Connecting
+             *   Message_Add_Header(message->headers, "host", address)
+             */
+        )
+    ){
+        rzb_log(LOG_ERR, "%s: Failed to add connect headers", __func__);
         Queue_Destroy_Stomp_Message(message);
         Socket_Close(socket);
         return NULL;
@@ -376,9 +394,22 @@ static bool
 Queue_BeginReading (struct Queue *p_pQ)
 {
     struct StompMessage *l_pMessage;
+    struct timeval tv;
 
 	ASSERT (p_pQ != NULL);
 
+    // Generate the subscription ID
+    if (p_pQ->sSubscriptionId == NULL) {
+        gettimeofday(&tv, NULL);
+        if (asprintf(
+                &p_pQ->sSubscriptionId,
+                "%s-%llu",
+                p_pQ->sName,
+                (((long long)tv.tv_sec)*1000)+(tv.tv_usec/1000))
+                == -1) {
+            rzb_log(LOG_ERR, "%s: Failed to generate subscription ID", __func__);
+        }
+    }
     // send the subscribe message
 
     if ((l_pMessage= Queue_Message_Create("SUBSCRIBE")) == NULL) 
@@ -387,8 +418,11 @@ Queue_BeginReading (struct Queue *p_pQ)
         return false;
     }
 
-    if (!Message_Add_Header(l_pMessage->headers, "destination", p_pQ->sName) ||
-            !Message_Add_Header(l_pMessage->headers, "ack", "client"))
+    if (!(
+            StompMessage_Add_Header(l_pMessage, "destination", p_pQ->sName) &&
+            StompMessage_Add_Header(l_pMessage, "ack", "client-individual")  &&
+            StompMessage_Add_Header(l_pMessage, "id", p_pQ->sSubscriptionId)
+        ))
     {
         rzb_log(LOG_ERR, "%s: Failed to add destination headers", __func__);
         Queue_Destroy_Stomp_Message(l_pMessage);
@@ -423,7 +457,7 @@ Queue_EndReading (struct Queue *p_pQ)
         return false;
     }
 
-    if (!Message_Add_Header(l_pMessage->headers, "destination", p_pQ->sName))
+    if (!StompMessage_Add_Header(l_pMessage, "destination", p_pQ->sName))
     {
         rzb_log(LOG_ERR, "%s: Failed to add destination headers", __func__);
         Queue_Destroy_Stomp_Message(l_pMessage);
@@ -633,7 +667,7 @@ Queue_Get (struct Queue *queue)
     }
     if (strcasecmp(message->sVerb, "MESSAGE") == 0)
     {
-        if ((messageId = Queue_Message_Get_Header(message, "message-id")) == NULL)
+        if ((messageId = Queue_Message_Get_Header(message, "ack")) == NULL)
         {
             rzb_log(LOG_ERR, "%s: Failed to get message-id", __func__);
             Mutex_Unlock (queue->mReadMutex);
@@ -649,7 +683,7 @@ Queue_Get (struct Queue *queue)
             Mutex_Unlock (queue->mReadMutex);
             return NULL;
         }
-        if (!Message_Add_Header(ack->headers, "message-id", messageId))
+        if (!StompMessage_Add_Header(ack, "id", messageId))
         {
             rzb_log(LOG_ERR, "%s: Failed to add ack message-id headers", __func__);
             Queue_Destroy_Stomp_Message(ack);
@@ -742,7 +776,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
     
     Mutex_Lock (queue->mWriteMutex);
 
-    // Dont serialize the message more than once.
+    // Don't serialize the message more than once.
     if (message->serialized == NULL)
     {
         if (!message->serialize(message, queue->mode))
@@ -805,12 +839,12 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
         return false;
     }
 
-    if (!Message_Add_Header(stompMessage->headers, "receipt", messageId) ||
-            !Message_Add_Header(stompMessage->headers, "destination", dest) ||
-            !Message_Add_Header(stompMessage->headers, "amq-msg-type", "bytes") ||
-            !Message_Add_Header(stompMessage->headers, "content-length", messageLen) ||
-            !Message_Add_Header(stompMessage->headers, "rzb-msg-type", messageType) ||
-            !Message_Add_Header(stompMessage->headers, "rzb-msg-ver", messageVer))
+    if (!StompMessage_Add_Header(stompMessage, "receipt", messageId) ||
+            !StompMessage_Add_Header(stompMessage, "destination", dest) ||
+            !StompMessage_Add_Header(stompMessage, "amq-msg-type", "bytes") ||
+            !StompMessage_Add_Header(stompMessage, "content-length", messageLen) ||
+            !StompMessage_Add_Header(stompMessage, "rzb-msg-type", messageType) ||
+            !StompMessage_Add_Header(stompMessage, "rzb-msg-ver", messageVer))
     {
         rzb_log(LOG_ERR, "%s: Failed to add ack message-id headers", __func__);
         stompMessage->pBody = NULL; // Wipe this so that the message code free's it.

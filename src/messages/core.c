@@ -55,9 +55,8 @@ Message_Destroy(struct Message *message)
     free(message);
 }
 
-SO_PUBLIC bool
-Message_Add_Header(struct List *headers, const char *p_sName, const char *p_sValue)
-{
+struct MessageHeader *
+Message_HeaderList_Add(struct List * headers, const char *p_sName, const char *p_sValue ){
     struct MessageHeader *l_pHeader;
     if ((l_pHeader = calloc(1, sizeof (struct MessageHeader))) == NULL)
     {
@@ -80,6 +79,19 @@ Message_Add_Header(struct List *headers, const char *p_sName, const char *p_sVal
     strcpy(l_pHeader->sName, p_sName);
     strcpy(l_pHeader->sValue, p_sValue);
     List_Push(headers, l_pHeader);
+
+    return l_pHeader;
+}
+
+SO_PUBLIC bool
+Message_Add_Header(struct Message *p_pMessage, const char *p_sName, const char *p_sValue)
+{
+    struct MessageHeader *l_pHeader;
+    if ((l_pHeader = Message_HeaderList_Add(p_pMessage->headers, p_sName, p_sValue)) == NULL) {
+        rzb_log(LOG_ERR, "%s: (%p) Failed to add message header %s - %s", __func__, p_pMessage, p_sName, p_sValue);
+        return false;
+    }
+    l_pHeader->pMessage = p_pMessage;
     return true;
 }
 
@@ -221,9 +233,9 @@ Message_Add_Directed_Headers(struct Message *message, const uuid_t source, const
 {
     char uuid[UUID_STRING_LENGTH];
     uuid_unparse(source, uuid);
-    Message_Add_Header(message->headers, MSG_CNC_HEADER_SOURCE, uuid);
+    Message_Add_Header(message, MSG_CNC_HEADER_SOURCE, uuid);
     uuid_unparse(dest, uuid);
-    Message_Add_Header(message->headers, MSG_CNC_HEADER_DEST, uuid);
+    Message_Add_Header(message, MSG_CNC_HEADER_DEST, uuid);
 
     return true;
 }
