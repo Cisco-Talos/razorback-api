@@ -367,6 +367,7 @@ List_Destroy(struct List *list)
         return;
     
     List_Clear(list);
+    RWLock_Destroy(list->lock);
     free(list);
 }
 
