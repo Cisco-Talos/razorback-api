@@ -91,12 +91,19 @@ Transfer_Init(void)
 
         char * soFile;
         asprintf(&soFile, "%s/razorback_transfer_%s.so.%s",LIB_DIR, mode, soVersion);
+        free(soVersion);
+        soVersion = NULL;
+        
         if ((pluginDlHandle = dlopen(soFile, RTLD_LOCAL | RTLD_NOW)) == NULL) {
             char * errstr = dlerror();
 
             rzb_log(LOG_ERR, "%s: Failed to open %s, %s", __func__, soFile, errstr);
+            free(soFile);
             return false;
         }
+        free(soFile);
+        soFile = NULL;
+
         *(void **)&initPlugin = dlsym(pluginDlHandle, "transferInit");
        if (initPlugin == NULL) {
             rzb_log(LOG_ERR, "%s: Failed find plugin init function", __func__);
