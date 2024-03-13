@@ -104,13 +104,13 @@ Inspection_Thread (struct Thread *p_pThread)
         l_misMessage->pBlock = NULL;
         transfered=TRANSFER_FAIL_LOCAL;
         transferTries = 0;
-        while ((transfered != TRANSFER_OK) && (transferTries < 20))
+        while (transferTries < 20)
         {
             dispatcher = ConnectedEntityList_GetDispatcher();
             if (dispatcher == NULL)
             {
                 rzb_log(LOG_ERR, "%s: Failed to find usable dispatcher", __func__);
-                transfered = false;
+                transferTries++;
                 break;
             }
             transfered = Transfer_Fetch(l_pBlock, dispatcher);
@@ -119,10 +119,10 @@ Inspection_Thread (struct Thread *p_pThread)
                 rzb_log(LOG_ERR, "%s: Marking dispatcher unusable", __func__);
                 ConnectedEntityList_MarkDispatcherUnusable(dispatcher->uuidNuggetId);
             }
-            if (transfered != TRANSFER_OK)
-                transferTries++;
-            else
+            if (transfered == TRANSFER_OK)
                 break;
+            else
+                transferTries++;
         }
         // TODO - Return JUSDGEMENT_ERROR
         if (transfered != TRANSFER_OK)

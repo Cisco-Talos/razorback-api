@@ -93,7 +93,7 @@ Transfer_Init(void)
         asprintf(&soFile, "%s/razorback_transfer_%s.so.%s",LIB_DIR, mode, soVersion);
         free(soVersion);
         soVersion = NULL;
-        
+
         if ((pluginDlHandle = dlopen(soFile, RTLD_LOCAL | RTLD_NOW)) == NULL) {
             char * errstr = dlerror();
 

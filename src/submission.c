@@ -328,7 +328,7 @@ Submission_SubmitThread(struct Thread *p_pThread)
         }
         else
         {
-            while ((transfered != TRANSFER_OK) && (transferTries < 20))
+            while (transferTries < 20)
             {
                 dispatcher = ConnectedEntityList_GetDispatcher();
                 rzb_log(LOG_ERR, "%s: %z", __func__, dispatcher);
@@ -336,6 +336,7 @@ Submission_SubmitThread(struct Thread *p_pThread)
                 {
                     rzb_log(LOG_ERR, "%s: Failed to find usable dispatcher", __func__);
                     transfered = false;
+                    transferTries++;
                     break;
                 }
                 transfered = Transfer_Store(item, dispatcher);
