@@ -48,7 +48,8 @@ Inspection_Thread (struct Thread *p_pThread)
     struct Queue *l_pQueue;
     uint8_t l_iResult;
     struct Judgment *judgment;
-    bool transfered = false;
+    enum TransferStatus transfered;
+    int transferTries = 0;
     struct ConnectedEntity *dispatcher = NULL;
     void *threadData = NULL;
 
@@ -101,8 +102,9 @@ Inspection_Thread (struct Thread *p_pThread)
         }
         l_pBlock = l_misMessage->pBlock;
         l_misMessage->pBlock = NULL;
-        transfered=false;
-        while (!transfered)
+        transfered=TRANSFER_FAIL_LOCAL;
+        transferTries = 0;
+        while ((transfered != TRANSFER_OK) && (transferTries < 20))
         {
             dispatcher = ConnectedEntityList_GetDispatcher();
             if (dispatcher == NULL)
@@ -112,13 +114,18 @@ Inspection_Thread (struct Thread *p_pThread)
                 break;
             }
             transfered = Transfer_Fetch(l_pBlock, dispatcher);
-            if (!transfered)
+            if (transfered == TRANSFER_FAIL_DISPATCHER)
             {
                 rzb_log(LOG_ERR, "%s: Marking dispatcher unusable", __func__);
                 ConnectedEntityList_MarkDispatcherUnusable(dispatcher->uuidNuggetId);
             }
+            if (transfered != TRANSFER_OK)
+                transferTries++;
+            else
+                break;
         }
-        if (!transfered)
+        // TODO - Return JUSDGEMENT_ERROR
+        if (transfered != TRANSFER_OK)
         {
             rzb_log(LOG_ERR, "%s: Failed to transfer block giving up", __func__);
             continue;

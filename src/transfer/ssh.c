@@ -174,7 +174,7 @@ writeWrap (sftp_file fd, uint8_t * data, uint64_t length)
     return 1;
 }
 
-SO_PUBLIC bool
+SO_PUBLIC enum TransferStatus
 Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
 {
     struct RazorbackContext *ctx;
@@ -193,35 +193,35 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
     if (ctx == NULL)
     {
         rzb_log(LOG_ERR, "%s: Failed to lookup thread context", __func__);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     session = SSH_Get_Session(ctx->uuidNuggetId, dispatcher);
     if (session == NULL) 
     {
         rzb_log(LOG_ERR, "%s: Failed to lookup context protocol session", __func__);
-        return false;
+        return TRANSFER_FAIL_DISPATCHER;
     }
     if (!SSH_Check_Session(session))
-        return false;
+        return TRANSFER_FAIL_DISPATCHER;
 
     
     if ((filename = Transfer_generateFilename (item->pEvent->pBlock)) == NULL)
     {
         rzb_log (LOG_ERR, "%s: failed to generate file name", __func__);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     if (( path = createDirectory(item->pEvent->pBlock, session)) == NULL)
     {
         rzb_log (LOG_ERR, "%s: failed to create storage dir", __func__);
         free (filename);
-        return false;
+        return TRANSFER_FAIL_DISPATCHER;
     }
     if (asprintf(&fullpath, "%s/%s", path, filename) == -1)
     {
         rzb_log (LOG_ERR, "%s: failed to generate file path", __func__);
         free(path);
         free (filename);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     // Check if its there already.
     //
@@ -232,7 +232,7 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
         free(fullpath);
         free(path);
         free(filename);
-        return true;
+        return TRANSFER_OK;
     }
     
     fd = sftp_open (session->sftp, fullpath, O_RDWR | O_CREAT | O_TRUNC,
@@ -241,7 +241,7 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
     {
         rzb_log (LOG_ERR, "%s: Could not open file for writing: %s", __func__, ssh_get_error(session->ssh));
         free (filename);
-        return false;
+        return TRANSFER_FAIL_DISPATCHER;
     }
     dataItem = item->pDataHead;
     while (dataItem != NULL)
@@ -257,7 +257,7 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
                     free(path);
                     free (filename);
                     sftp_close (fd);
-                    return false;
+                    return TRANSFER_FAIL_DISPATCHER;
                 }
             }
             rewind(dataItem->data.file);
@@ -271,7 +271,7 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
                 free(fullpath);
                 free(path);
                 free (filename);
-                return false;
+                return TRANSFER_FAIL_DISPATCHER;
             }
         }
         dataItem = dataItem->pNext;
@@ -283,10 +283,10 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
     free (path);
     free(fullpath);
 
-    return true;
+    return TRANSFER_OK;
 }
 
-SO_PUBLIC bool
+SO_PUBLIC enum TransferStatus
 Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 {
     struct RazorbackContext *ctx;
@@ -309,37 +309,37 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     if ((tmp_string = calloc(1,MAX_PATH)) == NULL)
 	{
 		rzb_log(LOG_ERR, "%s: Failed to allocate path", __func__);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
 	}
 
     ctx = Thread_GetContext(Thread_GetCurrent());
     if (ctx == NULL)
     {
         rzb_log(LOG_ERR, "%s: Failed to lookup thread context", __func__);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     session = SSH_Get_Session(ctx->uuidNuggetId, dispatcher);
     if (session == NULL) {
         rzb_log(LOG_ERR, "%s: Failed to lookup context protocol session", __func__);
-        return false;
+        return TRANSFER_FAIL_DISPATCHER;
     }
     if (!SSH_Check_Session(session))
 	{
 		rzb_log(LOG_ERR, "%s: Check Session failed", __func__);
-        return false;
+        return TRANSFER_FAIL_DISPATCHER;
 	}
 
     if ((filename = Transfer_generateFilename (block)) == NULL)
     {
         rzb_log (LOG_ERR, "%s: failed to generate file name", __func__);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
 	
     if ((path = sftp_canonicalize_path(session->sftp, ".")) == NULL)
 	{
 		free(filename);
 		rzb_log(LOG_ERR, "%s: Failed to canonicalize path on server", __func__);
-		return false;
+		return TRANSFER_FAIL_DISPATCHER;
 	}
     if (asprintf(&fullpath, "%s/%c/%c/%c/%c/%s", path,
                 filename[0], filename[1], filename[2], filename[3], filename) == -1)
@@ -347,7 +347,7 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         rzb_log (LOG_ERR, "%s: failed to generate file path", __func__);
         free(path);
         free(filename);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
 
     fd = sftp_open (session->sftp, fullpath, O_RDONLY, 0);
@@ -359,7 +359,7 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     if (fd == NULL)
     {
         rzb_log(LOG_ERR, "%s: Could not open file for reading: %s", __func__, ssh_get_error(session->ssh));
-        return false;
+        return TRANSFER_FAIL_DISPATCHER;
     }
     
     tmp_string[0] = 0;
@@ -372,14 +372,14 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 #endif
     {
 		rzb_log(LOG_ERR, "%s: Cannot create temporary file name: %s, error: %s", __func__, tmp_string, strerror(errno));
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
 	//rzb_log(LOG_DEBUG, "%s: Thread ID: %d FileName: %s:", __func__, Thread_GetCurrent()->iThread, tmp_string);
     // Create tmpfile
     if ((out_file = fopen (tmp_string, "w")) == NULL)
     {
         rzb_log(LOG_ERR, "%s: Cannot create temporary file: %s, error: %s", __func__, tmp_string, strerror(errno));
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     
     while ((uint64_t)read < block->pId->iLength)
@@ -391,7 +391,7 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
             sftp_close(fd);
 			fclose(out_file);
 			remove(tmp_string);
-            return false;
+            return TRANSFER_FAIL_DISPATCHER;
         }
         if (got == 0)
             break;
@@ -404,13 +404,13 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         sftp_close (fd);
         fclose(out_file);
         remove(tmp_string);
-        return false;
+        return TRANSFER_FAIL_DISPATCHER;
     }
     sftp_close (fd);
 	fflush(out_file);
     fclose(out_file);
     // SSH only creates temp files.
-    return Transfer_Prepare_File(block, tmp_string, true);
+    return Transfer_Prepare_File(block, tmp_string, true) ? TRANSFER_OK : TRANSFER_FAIL_LOCAL;
 }
 
 

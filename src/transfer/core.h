@@ -14,8 +14,8 @@ extern "C" {
 char * Transfer_generateFilename (struct Block *block);
 
 bool  Transport_IsSupported(uint8_t protocol);
-bool Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher);
-bool Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher);
+enum TransferStatus Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher);
+enum TransferStatus Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher);
 void Transfer_Free(struct Block *block, struct ConnectedEntity *dispatcher);
 
 

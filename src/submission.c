@@ -289,7 +289,8 @@ Submission_SubmitThread(struct Thread *p_pThread)
 	struct Message *message;
     uint8_t storedLocality = 0;
     struct ConnectedEntity *dispatcher = NULL;
-    bool transfered = false;
+    enum TransferStatus transfered = TRANSFER_FAIL_LOCAL;
+    int transferTries = 0;
     uint32_t reason = 0;
     struct BlockPoolItem *item = NULL;
     struct Queue *queue = NULL;
@@ -303,8 +304,9 @@ Submission_SubmitThread(struct Thread *p_pThread)
 
     while (!Thread_IsStopped(p_pThread))
     {
+        transfered = TRANSFER_FAIL_LOCAL;
+        transferTries = 0;
     	item = List_Pop(submitQueue);
-    	transfered = false;
     	if (item == NULL)
     	{
     		rzb_log(LOG_ERR, "%s: Failed to dequeue item", __func__);
@@ -326,7 +328,7 @@ Submission_SubmitThread(struct Thread *p_pThread)
         }
         else
         {
-            while (!transfered)
+            while ((transfered != TRANSFER_OK) && (transferTries < 20))
             {
                 dispatcher = ConnectedEntityList_GetDispatcher();
                 rzb_log(LOG_ERR, "%s: %z", __func__, dispatcher);
@@ -337,13 +339,17 @@ Submission_SubmitThread(struct Thread *p_pThread)
                     break;
                 }
                 transfered = Transfer_Store(item, dispatcher);
-                if (!transfered)
+                if (transfered == TRANSFER_FAIL_DISPATCHER)
                 {
                     rzb_log(LOG_ERR, "%s: Marking dispatcher unusable", __func__);
                     ConnectedEntityList_MarkDispatcherUnusable(dispatcher->uuidNuggetId);
                 }
+                if (transfered == TRANSFER_OK)
+                    break;
+                else
+                    transferTries++;
             }
-            if (!transfered)
+            if (transfered != TRANSFER_OK)
             {
                 rzb_log(LOG_ERR, "%s: Failed to transfer block giving up", __func__);
                 if (item->submittedCallback != NULL)

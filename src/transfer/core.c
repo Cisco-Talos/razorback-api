@@ -125,12 +125,13 @@ Transport_IsSupported(uint8_t protocol)
     return !(trans == NULL);
 }
 
-bool 
+enum TransferStatus
 Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
 {
     struct TransportDescriptor *trans = NULL;
     uint8_t file = 0;
 	int i;
+	enum TransferStatus status;
     if (sg_bTraditionalMode && (dispatcher->locality == Config_getLocalityId())) // Same locality always use file
     {
         trans = List_Find(sg_transportList, &file);
@@ -139,44 +140,48 @@ Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
         trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol);
     if (trans == NULL)
     {
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     rzb_log(LOG_DEBUG, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
     rzb_log(LOG_DEBUG, "%s: Transport: %s", __func__, trans->name);
 
     for (i =0; i < RETRIES; i++)
 	{
-		if (trans->store(item, dispatcher))
-			return true;
+		status = trans->store(item, dispatcher);
+		if (status == TRANSFER_OK)
+		    break;
 	}
-	return false;
+	return status;
 }
 
-bool 
+enum TransferStatus
 Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 {
     struct TransportDescriptor *trans = NULL;
     uint8_t file = 0;
 	int i;
+	enum TransferStatus status;
+
     if (sg_bTraditionalMode &&(dispatcher->locality == Config_getLocalityId())) // Same locality always use file
         trans = List_Find(sg_transportList, &file);
     else
         trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol);
     if (trans == NULL) {
         rzb_log(LOG_ERR, "%s: Failed to find transport descriptor", __func__);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     rzb_log(LOG_DEBUG, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
     rzb_log(LOG_DEBUG, "%s: Transport: %s", __func__, trans->name);
 
+
 	for (i = 0; i < RETRIES; i++)
 	{
-		if (trans->fetch(block, dispatcher))
-			return true;
+		status = trans->fetch(block, dispatcher);
+		if (status == TRANSFER_OK)
+			break;
 		rzb_log(LOG_ERR, "%s: Retrying transfer", __func__);
 	}
-	return false;
-
+	return status;
 }
 
 SO_PUBLIC bool

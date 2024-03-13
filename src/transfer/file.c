@@ -118,7 +118,7 @@ writeWrap (int fd, uint8_t * data, uint64_t length)
     return 1;
 }
 
-SO_PUBLIC bool
+SO_PUBLIC enum TransferStatus
 Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
 {
     int fd;
@@ -134,20 +134,20 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     if ((filename = Transfer_generateFilename (item->pEvent->pBlock)) == NULL)
     {
         rzb_log (LOG_ERR, "%s: failed to generate file name", __func__);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     if ((dir = createDirectory(item->pEvent->pBlock, Config_getLocalityBlockStore())) == NULL)
     {
         rzb_log (LOG_ERR, "%s: failed to create storage dir", __func__);
         free(filename);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     if (asprintf(&path, "%s/%s", dir, filename) == -1)
     {
         rzb_log (LOG_ERR, "%s: failed to generate file path", __func__);
         free(filename);
         free(dir);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     free(filename);
     free(dir);
@@ -157,7 +157,7 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     {
         close(fd);
         free(path);
-        return true;
+        return TRANSFER_OK;
     }
     fd = open (path, O_RDWR | O_CREAT | O_TRUNC,
                S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
@@ -165,7 +165,7 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     {
         rzb_perror ("StoreDataAsFile: Could not open file for writing: %s");
         free (filename);
-        return 0;
+        return TRANSFER_FAIL_LOCAL;
     }
     dataItem = item->pDataHead;
     while (dataItem != NULL)
@@ -179,7 +179,7 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
                     rzb_log (LOG_ERR, "%s: Write failed.", __func__);
                     free (filename);
                     close (fd);
-                    return false;
+                    return TRANSFER_FAIL_LOCAL;
                 }
             }
             rewind(dataItem->data.file);
@@ -192,7 +192,7 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
                 rzb_log (LOG_ERR, "%s: Write failed.", __func__);
                 free (filename);
                 close (fd);
-                return false;
+                return TRANSFER_FAIL_LOCAL;
             }
         }
         dataItem = dataItem->pNext;
@@ -202,11 +202,11 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
 
     free (path);
 
-    return true;
+    return TRANSFER_OK;
 
 }
 
-SO_PUBLIC bool
+SO_PUBLIC enum TransferStatus
 Transfer_File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 {
     int fd;
@@ -222,13 +222,13 @@ Transfer_File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     if ((filename = Transfer_generateFilename (block)) == NULL)
     {
         rzb_log (LOG_ERR, "%s: failed to generate file name", __func__);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     if (asprintf(&path, "%s/%c/%c/%c/%c/%s", Config_getLocalityBlockStore(),
                 filename[0], filename[1], filename[2], filename[3], filename) == -1)
     {
         rzb_log (LOG_ERR, "%s: failed to generate file path", __func__);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     free (filename); filename = NULL;
 
@@ -242,18 +242,18 @@ Transfer_File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     {
         rzb_perror
             ("RetrieveDataAsFile: Could not open file for reading: %s");
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
 
     if (fstat (fd, &fs) == -1)
     {
         rzb_perror ("RetrieveDataAsFile: Could not stat file: %s");
         close (fd);
-        return false;
+        return TRANSFER_FAIL_LOCAL;
     }
     close(fd);
 
-    return Transfer_Prepare_File(block, path, false);
+    return Transfer_Prepare_File(block, path, false) ? TRANSFER_OK : TRANSFER_FAIL_LOCAL;
 
 }
 
