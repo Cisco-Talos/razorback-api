@@ -18,7 +18,7 @@
 
 #define RETRIES 5
 
-struct List *sg_transportList = NULL;
+List_t *sg_transportList = NULL;
 static int Transport_Cmp(void *a, void *b);
 static int Transport_KeyCmp(void *a, void *key);
 static bool sg_bTraditionalMode = true;

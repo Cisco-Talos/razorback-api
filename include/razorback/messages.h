@@ -104,7 +104,7 @@ struct MessageHandler
 /** Create a list for storing message headers
  * @return A new list on success, NULL on failure.
  */
-SO_PUBLIC extern struct List * Message_Header_List_Create(void);
+SO_PUBLIC extern List_t * Message_Header_List_Create(void);
 
 /** Add a header to a message
  * @param message The message to add the header to
@@ -401,7 +401,7 @@ SO_PUBLIC extern struct Message *
 MessageAlertPrimary_Initialize (
                                    struct Event *event,
                                    struct Block *block,
-                                   struct List *metadata,
+                                   List_t *metadata,
                                    struct Nugget *nugget,
                                    struct Judgment *judgment,
                                    uint32_t new_SF_Flags, uint32_t new_Ent_Flags,

@@ -747,17 +747,11 @@ Default_processRegErrMessage (struct Message *message)
 }
 
 static void
-CnC_UpdateUUIDList(int listType, struct List *msgList)
+CnC_UpdateUUIDList(int listType, List_t *msgList)
 {
-    struct List *list;
+    List_t *list;
     list = UUID_Get_List(listType);
-    List_Lock(list);
-    List_Clear(list);
-    list->head = msgList->head;
-    list->tail = msgList->tail;
-    list->length = msgList->length;
-    msgList->head = NULL;
-    msgList->tail = NULL;
+    List_Transfer(list, msgList);
     List_Unlock(list);
 }
 static bool

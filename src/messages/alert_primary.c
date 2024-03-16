@@ -36,7 +36,7 @@ SO_PUBLIC struct Message *
 MessageAlertPrimary_Initialize (
                                    struct Event *event,
                                    struct Block *block,
-                                   struct List *metadata,
+                                   List_t *metadata,
                                    struct Nugget *nugget,
                                    struct Judgment *judgment,
                                    uint32_t new_SF_Flags, uint32_t new_Ent_Flags,

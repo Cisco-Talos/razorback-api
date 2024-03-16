@@ -11,7 +11,6 @@
 #include <stdatomic.h>
 #endif //_MSC_VER
 #include <razorback/visibility.h>
-#include <razorback/lock.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,43 +33,7 @@ extern "C" {
 #define LIST_EACH_END       3   ///< Node successfully processed, end to loop
 /// @}
 
-/** List node structure.
- */
-struct ListNode
-{
-    struct ListNode *next;	///< Next node
-    struct ListNode *prev;	///< Previous node
-    void *item;				///< Item data
-    atomic_bool del;        ///< Node deletion marker
-};
-
-/** List structure.
- * Note - The list can not be mutated from the iterator!!!
- * Calls to List_Push/List_Pop/List_Remove from inside the
- * the iterator function will cause a deadlock.
- * The only supported mutation inside the iterator is to
- * request the current node is removed by returning
- * LIST_EACH_END.  List_ForEach will process the deleted
- * after passing through the entire list as it needs to
- * 'upgrade' to a write lock which can not be done while
- * holding the read lock.
- */
-struct List 
-{
-    struct ListNode * head;         ///< Head node
-    struct ListNode * tail;	        ///< Tail node
-    atomic_size_t length;           ///< Number of items in the list
-    int mode;						///< Operation mode
-    int (*cmp)(void *, void *);		///< Node comparator
-    int (*keyCmp)(void *, void *);	///< Node key comparator
-    void (*destroy)(void *);		///< Node data destructor
-    void *(*clone)(void *);			///< Node data clone
-    void (*nodeLock)(void *);		///< Node lock function
-    void (*nodeUnlock)(void *);		///< Node unlock function
-    struct Semaphore *sem;			///< List event semaphore.
-    struct RWLock *lock;            ///< RW Lock
-};
-
+typedef struct _List List_t;
 
 
 /** Create a new List.
@@ -83,7 +46,7 @@ struct List
  * @param nodeUnlock Function pointer to the node unlock routine. (Optional - Use NULL if node locking is not required)
  * @return A new List on success, NULL on error.
  */
-SO_PUBLIC extern struct List * List_Create(int mode, 
+SO_PUBLIC extern List_t * List_Create(int mode,
         int (*cmp)(void *, void *), 
         int (*keyCmp)(void *, void *), 
         void (*destroy)(void *), 
@@ -96,27 +59,28 @@ SO_PUBLIC extern struct List * List_Create(int mode,
  * @param item The item to add.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern bool List_Push(struct List *list, void *item);
+SO_PUBLIC extern bool List_Push(List_t *list, void *item);
 
 /** Remove the next item from a List.
  * @note For a list in queue or stack mode, this function will block until an item is available. In gerneral mode NULL will be returned if there is item to remove.
  * @param list The List to remove the item from.
  * @return A pointer to the removed item on success, NULL on failure.
  */
-SO_PUBLIC extern void * List_Pop(struct List *list);
+SO_PUBLIC extern void * List_Pop(List_t *list);
 
 /** Remove the item from the list.
  * @param list The List to remove the item from.
  * @param item The item to remove.
+ * @return true if the item was removed, false if the item was not found.
  */
-SO_PUBLIC extern void List_Remove(struct List *list, void *item);
+SO_PUBLIC extern bool List_Remove(List_t *list, void *item);
 
 /** Search a list for the item by key.
  * @param list The List to search.
  * @param id The node key.
  * @return A pointer to the item if found, NULL if not.
  */
-SO_PUBLIC extern void * List_Find(struct List *list, void *id);
+SO_PUBLIC extern void * List_Find(List_t *list, void *id);
 
 /** Iterate all items in a list executing op for each node.
  * @param list The List to iterate.
@@ -124,41 +88,48 @@ SO_PUBLIC extern void * List_Find(struct List *list, void *id);
  * @param userData User data to pass as the ud argument to op.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern bool List_ForEach(struct List *list, int (*op)(void *i, void *ud), void *userData);
+SO_PUBLIC extern bool List_ForEach(List_t *list, int (*op)(void *i, void *ud), void *userData);
 
 /** Get the number of items in a List in a thread safe fashion.
  * @param list The list to get the size of
  * @return The number of items in the list.
  */
-SO_PUBLIC extern size_t List_Length(struct List *list);
+SO_PUBLIC extern size_t List_Length(List_t *list);
 
 /** Remove all items from a List.
  * @param list The List to clear.
  */
-SO_PUBLIC extern void List_Clear(struct List *list);
+SO_PUBLIC extern void List_Clear(List_t *list);
 /** Lock a list.
  * @param list The List to lock.
  * @return true on success, false on error
  */
-SO_PUBLIC extern void List_Lock(struct List *list);
+SO_PUBLIC extern void List_Lock(List_t *list);
 
 /** Unlock a list.
  * @param list The List to unlock.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern void List_Unlock(struct List *list);
+SO_PUBLIC extern void List_Unlock(List_t *list);
 
 /** Destroy a List
  * @param list The List to destroy.
  */
-SO_PUBLIC extern void List_Destroy(struct List *list);
+SO_PUBLIC extern void List_Destroy(List_t *list);
 
 /** Clone a list and its contents.
  * @note The list must have been created with a none NULL clone function pointer.
  * @param list The List to clone.
  * @return A new list on success, NULL on error.
  */
-SO_PUBLIC extern struct List* List_Clone (struct List *source);
+SO_PUBLIC extern List_t* List_Clone (List_t *source);
+
+/** Transfer list contents
+ * @param dest The destination list
+ * @param source The source list
+ * @return true on success, false on error.
+ */
+SO_PUBLIC extern bool List_Transfer (List_t *dest, List_t *source);
 
 #ifdef __cplusplus
 }

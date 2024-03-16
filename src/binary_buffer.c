@@ -479,7 +479,7 @@ BinaryBuffer_Put_NTLVItem (struct NTLVItem *p_pItem,struct BinaryBuffer *p_pBuff
 
 bool
 BinaryBuffer_Put_NTLVList (struct BinaryBuffer * p_pBuffer,
-                           struct List * p_pList)
+                           List_t * p_pList)
 {
     ASSERT (p_pBuffer != NULL);
     ASSERT (p_pList != NULL);
@@ -508,9 +508,9 @@ BinaryBuffer_Put_NTLVList (struct BinaryBuffer * p_pBuffer,
 
 bool
 BinaryBuffer_Get_NTLVList (struct BinaryBuffer * p_pBuffer,
-                           struct List ** p_pList)
+                           List_t ** p_pList)
 {
-    struct List * l_pList;
+    List_t * l_pList;
     uint32_t l_iCount;
     uint32_t l_iIndex;
     uuid_t l_uuiNameTemp;
@@ -1250,9 +1250,9 @@ BinaryBuffer_Get_Judgment (struct BinaryBuffer *p_pBuffer,
 }
 
 bool
-BinaryBuffer_Get_UUIDList(struct BinaryBuffer *buffer, struct List **r_list)
+BinaryBuffer_Get_UUIDList(struct BinaryBuffer *buffer, List_t **r_list)
 {
-    struct List *list;
+    List_t *list;
     uint32_t count;
     uuid_t *uuids = NULL;
     uint32_t namesSize;
@@ -1338,7 +1338,7 @@ BinaryBuffer_UUIDList_AddData(void *vItem, void *vStatus)
 
 
 bool
-BinaryBuffer_Put_UUIDList(struct BinaryBuffer *buffer, struct List *list)
+BinaryBuffer_Put_UUIDList(struct BinaryBuffer *buffer, List_t *list)
 {
     uint8_t *data;
     uint32_t size = UUIDList_BinarySize(list);
@@ -1369,9 +1369,9 @@ BinaryBuffer_Put_UUIDList(struct BinaryBuffer *buffer, struct List *list)
 }
 
 bool
-BinaryBuffer_Get_StringList(struct BinaryBuffer *buffer, struct List **r_list)
+BinaryBuffer_Get_StringList(struct BinaryBuffer *buffer, List_t **r_list)
 {
-    struct List *list;
+    List_t *list;
     uint32_t count;
     uint32_t pos = 0;
     char *item;
@@ -1406,7 +1406,7 @@ BinaryBuffer_Put_StringListItem(void *vItem, void *vBuffer)
 }
 
 bool 
-BinaryBuffer_Put_StringList(struct BinaryBuffer *buffer, struct List *list)
+BinaryBuffer_Put_StringList(struct BinaryBuffer *buffer, List_t *list)
 {
     uint32_t count = List_Length(list);
     

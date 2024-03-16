@@ -12,7 +12,7 @@
 
 /** Globals
 */
-static struct List *sg_qlInspectorQueue;
+static List_t *sg_qlInspectorQueue;
 static bool sg_bInspectorIntialized = false;
 
 static void

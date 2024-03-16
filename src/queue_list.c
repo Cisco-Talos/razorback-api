@@ -8,7 +8,7 @@
 static int QueueList_KeyCmp(void *a, void *id);
 static int QueueList_Cmp(void *a, void *b);
 
-SO_PUBLIC struct List *
+SO_PUBLIC List_t *
 QueueList_Create (void)
 {
     return List_Create(LIST_MODE_GENERIC,
@@ -21,7 +21,7 @@ QueueList_Create (void)
 }
 
 SO_PUBLIC struct Queue *
-QueueList_Find (struct List *p_pList, const uuid_t p_pId)
+QueueList_Find (List_t *p_pList, const uuid_t p_pId)
 {
     struct QueueListEntry *entry;
 
@@ -38,7 +38,7 @@ QueueList_Find (struct List *p_pList, const uuid_t p_pId)
 }
 
 SO_PUBLIC bool
-QueueList_Add (struct List * p_pList, struct Queue * p_pQ,
+QueueList_Add (List_t * p_pList, struct Queue * p_pQ,
                const uuid_t p_pId)
 {
     struct QueueListEntry *l_pEntry;
@@ -64,7 +64,7 @@ QueueList_Add (struct List * p_pList, struct Queue * p_pQ,
 }
 
 SO_PUBLIC bool
-QueueList_Remove (struct List *p_pList, const uuid_t p_pId)
+QueueList_Remove (List_t *p_pList, const uuid_t p_pId)
 {
     struct QueueListEntry *entry;
 

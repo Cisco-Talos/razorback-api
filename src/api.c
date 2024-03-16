@@ -33,7 +33,7 @@ static void Razorback_Output_Thread (struct Thread *thread);
 static int Context_KeyCmp(void *a, void *b);
 static int Context_Cmp(void *a, void *b);
 
-static struct List *sg_ContextList;
+static List_t *sg_ContextList;
 void initApi(void)
 {
     sg_ContextList = List_Create(LIST_MODE_GENERIC, 

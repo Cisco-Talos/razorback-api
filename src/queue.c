@@ -19,7 +19,7 @@
 #define MBUF_SIZE 1024
 struct StompMessage {
     char * sVerb;
-    struct List *headers;
+    List_t *headers;
     uint8_t *pBody;
     size_t bodyLength;
 };

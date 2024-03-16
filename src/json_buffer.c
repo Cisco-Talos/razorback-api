@@ -427,7 +427,7 @@ SO_PUBLIC bool JsonBuffer_Put_UUID (json_object * parent, const char * name, uui
 }
 
 static bool
-JsonBuffer_Get_NTLVItem (struct List *list, json_object *parent )
+JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
 {
     char *str = NULL;
     uint8_t *byteData = NULL;
@@ -577,7 +577,7 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
 }
 
 SO_PUBLIC bool JsonBuffer_Put_NTLVList (json_object * parent, const char * name,
-                                     struct List *p_pList)
+                                     List_t *p_pList)
 {
     json_object *object;
     ASSERT( parent != NULL);
@@ -598,9 +598,9 @@ SO_PUBLIC bool JsonBuffer_Put_NTLVList (json_object * parent, const char * name,
 }
 
 SO_PUBLIC bool JsonBuffer_Get_NTLVList (json_object * parent, const char * name,
-                                     struct List **p_pList)
+                                     List_t **p_pList)
 {
-    struct List *list;
+    List_t *list;
     json_object *object;
     size_t i;
 
@@ -1367,7 +1367,7 @@ JsonBuffer_Put_UUIDList_Add(void *vnode, void *varray)
 
 SO_PUBLIC bool 
 JsonBuffer_Put_UUIDList (json_object * parent, const char * name, 
-                                           struct List * list)
+                                           List_t * list)
 {
     json_object *object;
     ASSERT( parent != NULL);
@@ -1385,9 +1385,9 @@ JsonBuffer_Put_UUIDList (json_object * parent, const char * name,
 }
 
 SO_PUBLIC bool JsonBuffer_Get_UUIDList (json_object * parent, const char * name, 
-                                           struct List ** r_list)
+                                           List_t ** r_list)
 {
-    struct List *list;
+    List_t *list;
     json_object *object;
     uuid_t uuid;
     const char *uuidS, *nameS, *desc; 
@@ -1444,7 +1444,7 @@ JsonBuffer_Put_StringList_Add(void *vnode, void *varray)
 
 SO_PUBLIC bool 
 JsonBuffer_Put_StringList (json_object * parent, const char * name, 
-                                           struct List * list)
+                                           List_t * list)
 {
     json_object *object;
     ASSERT( parent != NULL);
@@ -1463,9 +1463,9 @@ JsonBuffer_Put_StringList (json_object * parent, const char * name,
 
 SO_PUBLIC bool 
 JsonBuffer_Get_StringList (json_object * parent, const char * name, 
-                                           struct List ** r_list)
+                                           List_t ** r_list)
 {
-    struct List *list;
+    List_t *list;
     json_object *object;
     const char *string;
     size_t i;

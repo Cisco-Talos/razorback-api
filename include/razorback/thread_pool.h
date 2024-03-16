@@ -34,7 +34,7 @@ struct ThreadPool
     struct RazorbackContext *context;       ///< Context to spawn threads in
     void (*mainFunction) (struct Thread *); ///< Main function for spawned threads
     const char *namePattern;                ///< Name pattern for threads
-    struct List *list;						///< Worker list.
+    List_t *list;						///< Worker list.
 };
 
 /** Create a ThreadPool

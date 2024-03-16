@@ -17,7 +17,7 @@ StringList_ItemSize(const char *item, uint32_t *counter)
 }
 
 SO_PUBLIC uint32_t
-StringList_Size (struct List * list)
+StringList_Size (List_t * list)
 {
     uint32_t size = 0;
 
@@ -70,7 +70,7 @@ String_Clone(void *o)
 }
 
 
-SO_PUBLIC struct List *
+SO_PUBLIC List_t *
 StringList_Create (void)
 {
     return List_Create(LIST_MODE_GENERIC, 
@@ -81,7 +81,7 @@ StringList_Create (void)
 }
 
 SO_PUBLIC bool 
-StringList_Add (struct List *p_pList, const char *string)
+StringList_Add (List_t *p_pList, const char *string)
 {
     char *new;
     if (( new = calloc(strlen(string)+1, sizeof(char))) == NULL)

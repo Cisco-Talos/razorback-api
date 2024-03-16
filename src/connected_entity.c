@@ -17,6 +17,8 @@
 #define SEARCH_KEY_APP_TYPE     (1 << 1)
 #define SEARCH_KEY_NUGGET_TYPE  (1 << 2)
 #define SEARCH_KEY_DD           (1 << 3)
+#define SEARCH_KEY_LOCALITY     (1 << 4)
+#define SEARCH_KEY_USABLE       (1 << 5)
 
 static int ConnectedEntity_KeyCmp(void *a, void *id);
 static int ConnectedEntity_Cmp(void *a, void *b);
@@ -30,6 +32,7 @@ struct ConnectedEntityKey
     unsigned char *nuggetId;
     unsigned char *appType;
     unsigned char *nuggetType;
+    uint32_t locality;
 };
 
 
@@ -40,8 +43,8 @@ struct ConnectedEntityHook
     void (*entityRemoved) (struct ConnectedEntity *entity, uint32_t remainingCount);
 };
 
-static struct List *sg_pEntityList = NULL;
-static struct List *sg_pHookList = NULL;
+static List_t *sg_pEntityList = NULL;
+static List_t *sg_pHookList = NULL;
 
 static void ConnectedEntityList_Prune (void *userData);
 
@@ -309,7 +312,7 @@ static int
 ConnectedEntityList_CollectDispatchers(void *item, void *userData)
 {
     struct ConnectedEntity *entity = item;
-    struct List *list = userData;
+    List_t *list = userData;
     uuid_t uuid;
     UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, uuid);
     if ((uuid_compare(uuid, entity->uuidNuggetType) == 0))
@@ -318,18 +321,21 @@ ConnectedEntityList_CollectDispatchers(void *item, void *userData)
     return LIST_EACH_OK;
 }
 
+
 struct ConnectedEntity *
 ConnectedEntityList_GetDispatcher(void)
 {
-    struct List *dispatchers = NULL;
+    List_t *dispatchers = NULL;
     uint32_t dispatcherCount;
     uint8_t locality = Config_getLocalityId();
     conf_int_t *localities = Config_getLocalityBackupOrder();
     conf_int_t localityCount = Config_getLocalityBackupCount();
-    struct ListNode *node;
     struct ConnectedEntity *entity;
     struct ConnectedEntity *ret;
 	conf_int_t i;
+	struct ConnectedEntityKey searchKey;
+
+	memset(&searchKey, 0, sizeof(struct ConnectedEntityKey));
 
     dispatchers = List_Create(LIST_MODE_GENERIC,
             ConnectedEntity_Cmp, // Cmp
@@ -353,46 +359,26 @@ ConnectedEntityList_GetDispatcher(void)
         return NULL;
     }
     // Our locality
-    for (node = dispatchers->head; node != NULL; node = node->next)
-    {
-        entity = node->item;
-        if ( (entity->locality == locality) &&
-                (entity->dispatcher->usable))
-        {
-            goto getdispdone;
-        }
-    }
+    searchKey.locality = locality;
+    searchKey.searchKeys |= SEARCH_KEY_LOCALITY;
+    searchKey.searchKeys |= SEARCH_KEY_USABLE;
+    entity = List_Find(dispatchers, &searchKey);
+    if (entity != NULL)
+        goto getdispdone;
 
     // Backup localities in order
     for (i = 0; i < localityCount; i++)
     {
-        for (node = dispatchers->head; node != NULL; node = node->next)
-        {
-            entity = node->item;
-            if ( (entity->locality == localities[i]) &&
-                    (entity->dispatcher->usable))
-            {
-                goto getdispdone;
-            }
-        }
-    }
-    // Random locality
-    for (node = dispatchers->head; node != NULL; node = node->next)
-    {
-        entity = node->item;
-        if (entity->dispatcher->usable)
-        {
+        searchKey.locality = localities[i];
+        entity = List_Find(dispatchers, &searchKey);
+        if (entity != NULL) {
             goto getdispdone;
         }
     }
-            
-    if (node == NULL)
-    {
-        List_Destroy(dispatchers);
-        List_Unlock(sg_pEntityList);
-        rzb_log(LOG_ERR, "%s: Failed to find dispatcher", __func__);
-        return NULL;
-    }
+    // Random locality
+    searchKey.searchKeys = SEARCH_KEY_USABLE;
+    entity = List_Find(dispatchers, &searchKey);
+
 
 getdispdone:
     ret = ConnectedEntity_Clone(entity);
@@ -400,6 +386,7 @@ getdispdone:
     List_Unlock(sg_pEntityList);
     if (ret == NULL)
         rzb_log(LOG_ERR, "%s: Failed to clone dispatcher", __func__);
+
     return ret;
 }
 
@@ -540,6 +527,23 @@ ConnectedEntity_KeyCmp(void *a, void *id)
         if (entity->dispatcher != NULL)
         {
             if ((entity->dispatcher->flags & DISP_HELLO_FLAG_DD) != 0)
+                ret = 0;
+            else if (ret == 0)
+                ret = -1;
+        }
+    }
+    if ((key->searchKeys & SEARCH_KEY_LOCALITY) != 0)
+    {
+        if (entity->locality == key->locality)
+            ret = 0;
+        else if (ret == 0)
+            ret = -1;
+    }
+    if ((key->searchKeys & SEARCH_KEY_USABLE) != 0)
+    {
+        if (entity->dispatcher != NULL)
+        {
+            if (entity->dispatcher->usable)
                 ret = 0;
             else if (ret == 0)
                 ret = -1;

@@ -11,10 +11,11 @@
 #include "runtime_config.h"
 
 
-static struct List *sg_threadList;
+static List_t *sg_threadList;
 
 #ifdef _MSC_VER
 static volatile int initialized = 0;
+
 
 static void initThreading_win32(void);
 #else //_MSC_VER
@@ -106,7 +107,7 @@ Thread_Launch (void (*fpFunction) (struct Thread *), void *userData,
 #endif //_MSC_VER
 
     // Racy 
-    if (sg_threadList->length == Config_getThreadLimit ())
+    if (List_Length(sg_threadList) == Config_getThreadLimit ())
         return NULL;
 
     // allocate memory for thread structure
@@ -387,9 +388,7 @@ SO_PUBLIC uint32_t
 Thread_getCount (void)
 {
     uint32_t num;
-    List_Lock(sg_threadList);
-    num = sg_threadList->length;
-    List_Unlock(sg_threadList);
+    num = List_Length(sg_threadList);
     return num;
 }
 

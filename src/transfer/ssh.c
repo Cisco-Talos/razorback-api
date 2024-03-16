@@ -39,7 +39,7 @@
 
 
 
-static struct List *sessionList = NULL;
+static List_t *sessionList = NULL;
 
 static int SSH_Session_KeyCmp(void *a, void *id);
 static int SSH_Session_Cmp(void *a, void *b);
@@ -526,16 +526,32 @@ SSH_Verify_Dispatcher(ssh_session session)
     free(hash);
     return true;
 }
-
-static bool 
+struct ConnectionStatus {
+    struct SSH_Session * session;
+    bool connected;
+};
+static int
+SSH_Connect_Address(void *i, void*ud)
+{
+    struct ConnectionStatus *status = ud;
+    char *address = i;
+    ssh_options_set(status->session->ssh, SSH_OPTIONS_HOST, address);
+    if (ssh_connect(status->session->ssh) != SSH_OK) {
+        rzb_log(LOG_ERR, "%s: Failed to connect session (%s)", __func__, address);
+    } else {
+        status->connected = true;
+        return LIST_EACH_END;
+    }
+    return LIST_EACH_OK;
+}
+static bool
 SSH_Check_Session(struct SSH_Session *session)
 {
     char user[UUID_STRING_LENGTH];
-    struct ListNode * cur = NULL;
-    bool connected = false;
     ASSERT(session != NULL);
     if (session == NULL)
         return false;
+    struct ConnectionStatus status = {session, false};
 
     // New connection
     if (session->ssh == NULL)
@@ -549,18 +565,9 @@ SSH_Check_Session(struct SSH_Session *session)
         ssh_options_set(session->ssh, SSH_OPTIONS_PORT, &session->dispatcher->dispatcher->port);
         ssh_options_set(session->ssh, SSH_OPTIONS_USER, user);
         ssh_options_set(session->ssh, SSH_OPTIONS_KNOWNHOSTS,SSH_GetKnownDispatchers());
-        connected = false;
-        for (cur = session->dispatcher->dispatcher->addressList->head; cur != NULL && (!connected); cur = cur->next)
-        {
-            ssh_options_set(session->ssh, SSH_OPTIONS_HOST, cur->item);
-            if (ssh_connect(session->ssh) != SSH_OK)
-            {
-                rzb_log(LOG_ERR, "%s: Failed to connect session (%s)", __func__, cur->item);
-            }
-            else
-                connected = true;
-        }
-        if (!connected)
+        List_ForEach(session->dispatcher->dispatcher->addressList, SSH_Connect_Address, &status);
+
+        if (!status.connected)
         {
             rzb_log(LOG_ERR, "%s: Failed to connected to dispatcher", __func__);
             ssh_disconnect(session->ssh);

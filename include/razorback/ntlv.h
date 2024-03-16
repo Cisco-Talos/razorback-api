@@ -20,7 +20,7 @@ struct NTLVItem
     uint8_t *pData;             ///< The data
 };
 
-SO_PUBLIC extern struct List * NTLVList_Create(void);
+SO_PUBLIC extern List_t * NTLVList_Create(void);
 /** Add a new entry to a user data list
  * @param *p_pList The destination
  * @param uuidName The name
@@ -29,11 +29,11 @@ SO_PUBLIC extern struct List * NTLVList_Create(void);
  * @param *p_pData The data
  * @return true on success, false on failure.
  */
-SO_PUBLIC extern bool NTLVList_Add (struct List *p_pList, uuid_t uuidName,
+SO_PUBLIC extern bool NTLVList_Add (List_t *p_pList, uuid_t uuidName,
                           uuid_t uuidType, uint32_t p_iSize,
                           const uint8_t * p_pData);
 
-SO_PUBLIC extern bool NTLVList_Get (struct List *p_pList, uuid_t uuidName,
+SO_PUBLIC extern bool NTLVList_Get (List_t *p_pList, uuid_t uuidName,
                           uuid_t uuidType, uint32_t *p_iSize,
                           const uint8_t ** p_pData);
 
@@ -41,7 +41,7 @@ SO_PUBLIC extern bool NTLVList_Get (struct List *p_pList, uuid_t uuidName,
  * @param *p_pList The list
  * @return The size of the items in the list.
  */
-SO_PUBLIC extern uint32_t NTLVList_Size (struct List *list);
+SO_PUBLIC extern uint32_t NTLVList_Size (List_t *list);
 
 #ifdef __cplusplus
 }

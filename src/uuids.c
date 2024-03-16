@@ -39,15 +39,15 @@ struct UUIDKey
     uuid_t uuid;
     const char *name;
 };
-static struct List *sg_DataTypeList;
-static struct List *sg_IntelTypeList;
-static struct List *sg_NtlvTypeList;
-static struct List *sg_NtlvNameList;
-static struct List *sg_NuggetList;
-static struct List *sg_NuggetTypeList;
+static List_t *sg_DataTypeList;
+static List_t *sg_IntelTypeList;
+static List_t *sg_NtlvTypeList;
+static List_t *sg_NtlvNameList;
+static List_t *sg_NuggetList;
+static List_t *sg_NuggetTypeList;
 
 SO_PUBLIC bool
-UUID_Add_List_Entry (struct List *list, uuid_t p_uuid,
+UUID_Add_List_Entry (List_t *list, uuid_t p_uuid,
                    const char *p_sName, const char *p_sDescr)
 {
     struct UUIDListNode *l_pListNode;
@@ -78,7 +78,7 @@ UUID_Add_List_Entry (struct List *list, uuid_t p_uuid,
     return List_Push(list, l_pListNode);
 }
 
-SO_PUBLIC struct List *
+SO_PUBLIC List_t *
 UUID_Get_List(int type)
 {
     switch (type)
@@ -103,7 +103,7 @@ UUID_Get_List(int type)
 static struct UUIDListNode *
 UUID_getNodeByName (const char *p_sName, int p_iType)
 {
-    struct List *list = NULL;
+    List_t *list = NULL;
     struct UUIDKey key;
     key.type=UUID_KEY_NAME;
     key.name=p_sName;
@@ -116,7 +116,7 @@ UUID_getNodeByName (const char *p_sName, int p_iType)
 static struct UUIDListNode *
 UUID_getNodeByUUID (uuid_t p_uuid, int p_iType)
 {
-    struct List *list = NULL;
+    List_t *list = NULL;
     struct UUIDKey key;
     key.type=UUID_KEY_UUID;
     uuid_copy(key.uuid, p_uuid);
@@ -158,7 +158,7 @@ initUuids (void)
 SO_PUBLIC bool
 UUID_Get_UUID (const char *p_sName, int p_iType, uuid_t r_uuid)
 {
-    struct List *list;
+    List_t *list;
     struct UUIDListNode *l_pListNode;
 
     list = UUID_Get_List(p_iType);
@@ -176,7 +176,7 @@ UUID_Get_UUID (const char *p_sName, int p_iType, uuid_t r_uuid)
 SO_PUBLIC char *
 UUID_Get_Description (const char *p_sName, int p_iType)
 {
-    struct List *list;
+    List_t *list;
     struct UUIDListNode *l_pListNode;
     char * ret;
     list = UUID_Get_List(p_iType);
@@ -198,7 +198,7 @@ UUID_Get_Description (const char *p_sName, int p_iType)
 SO_PUBLIC char *
 UUID_Get_DescriptionByUUID (uuid_t p_uuid, int p_iType)
 {
-    struct List *list;
+    List_t *list;
     struct UUIDListNode *l_pListNode;
     char * ret;
     list = UUID_Get_List(p_iType);
@@ -221,7 +221,7 @@ UUID_Get_DescriptionByUUID (uuid_t p_uuid, int p_iType)
 SO_PUBLIC char *
 UUID_Get_NameByUUID (uuid_t p_uuid, int p_iType)
 {
-    struct List *list;
+    List_t *list;
     struct UUIDListNode *l_pListNode;
     char * ret;
     list = UUID_Get_List(p_iType);
@@ -245,7 +245,7 @@ UUID_Get_NameByUUID (uuid_t p_uuid, int p_iType)
 SO_PUBLIC char *
 UUID_Get_UUIDAsString (const char *p_sName, int p_iType)
 {
-    struct List *list;
+    List_t *list;
     struct UUIDListNode *l_pListNode;
     char *l_sTemp;
 
@@ -327,10 +327,10 @@ UUID_Destroy(void *a)
     free(current);
 }
 
-SO_PUBLIC struct List * 
+SO_PUBLIC List_t *
 UUID_Create_List (void)
 {
-    struct List *list;
+    List_t *list;
     list = List_Create(LIST_MODE_GENERIC, 
             UUID_Cmp,
             UUID_KeyCmp,
@@ -355,7 +355,7 @@ UUID_MessageAddNameSize(void *vItem, void *vCount)
 }
 
 size_t
-UUIDList_BinarySize(struct List *list)
+UUIDList_BinarySize(List_t *list)
 {
     size_t size = List_Length(list)*16;
     List_ForEach(list, UUID_MessageAddNameSize, &size);

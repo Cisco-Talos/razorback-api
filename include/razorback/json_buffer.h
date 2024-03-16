@@ -55,10 +55,10 @@ SO_PUBLIC extern bool JsonBuffer_Get_UUID (json_object * parent, const char *nam
 SO_PUBLIC extern bool JsonBuffer_Put_UUID (json_object * parent, const char * name, uuid_t p_uuid);
 
 SO_PUBLIC extern bool JsonBuffer_Put_NTLVList (json_object * parent, const char * name,
-                                     struct List *p_pList);
+                                     List_t *p_pList);
 
 SO_PUBLIC extern bool JsonBuffer_Get_NTLVList (json_object * parent, const char * name,
-                                     struct List **p_pList);
+                                     List_t **p_pList);
 
 SO_PUBLIC extern bool JsonBuffer_Put_Hash (json_object * parent, const char * name,
                                  const struct Hash *p_pHash);
@@ -104,14 +104,14 @@ SO_PUBLIC extern bool JsonBuffer_Get_Nugget (json_object * parent, const char * 
                                            struct Nugget ** r_nugget);
 
 SO_PUBLIC extern bool JsonBuffer_Put_UUIDList (json_object * parent, const char * name, 
-                                           struct List * list);
+                                           List_t * list);
 SO_PUBLIC extern bool JsonBuffer_Get_UUIDList (json_object * parent, const char * name, 
-                                           struct List ** r_list);
+                                           List_t ** r_list);
 
 SO_PUBLIC extern bool JsonBuffer_Put_StringList (json_object * parent, const char * name, 
-                                           struct List * list);
+                                           List_t * list);
 SO_PUBLIC extern bool JsonBuffer_Get_StringList (json_object * parent, const char * name, 
-                                           struct List ** r_list);
+                                           List_t ** r_list);
 SO_PUBLIC extern bool 
 JsonBuffer_Put_uint8List (json_object * parent, const char * name, 
                                            uint8_t *list, uint32_t count);

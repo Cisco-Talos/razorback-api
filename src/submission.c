@@ -29,8 +29,8 @@ void Submission_GlobalCache_ResponseThread(struct Thread *p_pThread);
 int Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void *);
 void Submission_SubmitThread(struct Thread *p_pThread);
 
-static struct List *requestQueue = NULL;
-static struct List *submitQueue = NULL;
+static List_t *requestQueue = NULL;
+static List_t *submitQueue = NULL;
 
 static struct RazorbackContext *sg_pContext = NULL;
 static bool sg_bInitDone=false;

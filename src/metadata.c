@@ -12,7 +12,7 @@
 
 
 SO_PUBLIC bool 
-Metadata_Add_String (struct List *list, uuid_t name, const char *string)
+Metadata_Add_String (List_t *list, uuid_t name, const char *string)
 {
     uuid_t uuidType;
     if (!UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuidType))
@@ -24,7 +24,7 @@ Metadata_Add_String (struct List *list, uuid_t name, const char *string)
 }
 
 SO_PUBLIC bool 
-Metadata_Get_String (struct List *list, uuid_t name, uint32_t *len, const char **string)
+Metadata_Get_String (List_t *list, uuid_t name, uint32_t *len, const char **string)
 {
     uuid_t uuidType;
     if (!UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuidType))
@@ -36,7 +36,7 @@ Metadata_Get_String (struct List *list, uuid_t name, uint32_t *len, const char *
 }
 
 SO_PUBLIC bool 
-Metadata_Add_IPv4 (struct List *list, uuid_t name, const uint8_t *addr)
+Metadata_Add_IPv4 (List_t *list, uuid_t name, const uint8_t *addr)
 {
     uuid_t uuidType;
     if (!UUID_Get_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, uuidType))
@@ -48,7 +48,7 @@ Metadata_Add_IPv4 (struct List *list, uuid_t name, const uint8_t *addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Get_IPv4 (struct List *list, uuid_t name, const uint8_t **addr)
+Metadata_Get_IPv4 (List_t *list, uuid_t name, const uint8_t **addr)
 {
     uuid_t uuidType;
     uint32_t size;
@@ -61,7 +61,7 @@ Metadata_Get_IPv4 (struct List *list, uuid_t name, const uint8_t **addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_IPv6 (struct List *list, uuid_t name, const uint8_t *addr)
+Metadata_Add_IPv6 (List_t *list, uuid_t name, const uint8_t *addr)
 {
     uuid_t uuidType;
     if (!UUID_Get_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, uuidType))
@@ -73,7 +73,7 @@ Metadata_Add_IPv6 (struct List *list, uuid_t name, const uint8_t *addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Get_IPv6 (struct List *list, uuid_t name, const uint8_t **addr)
+Metadata_Get_IPv6 (List_t *list, uuid_t name, const uint8_t **addr)
 {
     uuid_t uuidType;
     uint32_t size;
@@ -86,7 +86,7 @@ Metadata_Get_IPv6 (struct List *list, uuid_t name, const uint8_t **addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_Port (struct List *list, uuid_t name, const uint16_t port)
+Metadata_Add_Port (List_t *list, uuid_t name, const uint16_t port)
 {
     uuid_t uuidType;
     if (!UUID_Get_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, uuidType))
@@ -98,7 +98,7 @@ Metadata_Add_Port (struct List *list, uuid_t name, const uint16_t port)
 }
 
 SO_PUBLIC bool 
-Metadata_Get_Port (struct List *list, uuid_t name, uint16_t *port)
+Metadata_Get_Port (List_t *list, uuid_t name, uint16_t *port)
 {
     uuid_t uuidType;
     uint32_t size;
@@ -117,7 +117,7 @@ Metadata_Get_Port (struct List *list, uuid_t name, uint16_t *port)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_Filename (struct List *list, const char *name)
+Metadata_Add_Filename (List_t *list, const char *name)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_FILENAME, UUID_TYPE_NTLV_NAME, uuidName))
@@ -129,7 +129,7 @@ Metadata_Add_Filename (struct List *list, const char *name)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_Hostname (struct List *list, const char *name)
+Metadata_Add_Hostname (List_t *list, const char *name)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_HOSTNAME, UUID_TYPE_NTLV_NAME, uuidName))
@@ -141,7 +141,7 @@ Metadata_Add_Hostname (struct List *list, const char *name)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_URI (struct List *list, const char *name)
+Metadata_Add_URI (List_t *list, const char *name)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_URI, UUID_TYPE_NTLV_NAME, uuidName))
@@ -153,7 +153,7 @@ Metadata_Add_URI (struct List *list, const char *name)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_HttpRequest (struct List *list, const char *name)
+Metadata_Add_HttpRequest (List_t *list, const char *name)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_HTTP_REQUEST, UUID_TYPE_NTLV_NAME, uuidName))
@@ -165,7 +165,7 @@ Metadata_Add_HttpRequest (struct List *list, const char *name)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_HttpResponse (struct List *list, const char *name)
+Metadata_Add_HttpResponse (List_t *list, const char *name)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_HTTP_RESPONSE, UUID_TYPE_NTLV_NAME, uuidName))
@@ -177,7 +177,7 @@ Metadata_Add_HttpResponse (struct List *list, const char *name)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_MalwareName (struct List *list, const char *vendor, const char *name)
+Metadata_Add_MalwareName (List_t *list, const char *vendor, const char *name)
 {
     uuid_t uuidName;
     char *tmp;
@@ -198,7 +198,7 @@ Metadata_Add_MalwareName (struct List *list, const char *vendor, const char *nam
 }
 
 SO_PUBLIC bool 
-Metadata_Add_Report (struct List *list, const char *text)
+Metadata_Add_Report (List_t *list, const char *text)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_REPORT, UUID_TYPE_NTLV_NAME, uuidName))
@@ -210,7 +210,7 @@ Metadata_Add_Report (struct List *list, const char *text)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_CVE (struct List *list, const char *text)
+Metadata_Add_CVE (List_t *list, const char *text)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_CVE, UUID_TYPE_NTLV_NAME, uuidName))
@@ -222,7 +222,7 @@ Metadata_Add_CVE (struct List *list, const char *text)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_BID (struct List *list, const char *text)
+Metadata_Add_BID (List_t *list, const char *text)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_BID, UUID_TYPE_NTLV_NAME, uuidName))
@@ -233,7 +233,7 @@ Metadata_Add_BID (struct List *list, const char *text)
     return Metadata_Add_String(list, uuidName, text);
 }
 SO_PUBLIC bool 
-Metadata_Add_OSVDB (struct List *list, const char *text)
+Metadata_Add_OSVDB (List_t *list, const char *text)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_OSVDB, UUID_TYPE_NTLV_NAME, uuidName))
@@ -245,7 +245,7 @@ Metadata_Add_OSVDB (struct List *list, const char *text)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_IPv4_Source (struct List *list, const uint8_t *addr)
+Metadata_Add_IPv4_Source (List_t *list, const uint8_t *addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
@@ -257,7 +257,7 @@ Metadata_Add_IPv4_Source (struct List *list, const uint8_t *addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Get_IPv4_Source (struct List *list, const uint8_t **addr)
+Metadata_Get_IPv4_Source (List_t *list, const uint8_t **addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
@@ -269,7 +269,7 @@ Metadata_Get_IPv4_Source (struct List *list, const uint8_t **addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_IPv4_Destination (struct List *list, const uint8_t *addr)
+Metadata_Add_IPv4_Destination (List_t *list, const uint8_t *addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))
@@ -281,7 +281,7 @@ Metadata_Add_IPv4_Destination (struct List *list, const uint8_t *addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Get_IPv4_Destination (struct List *list, const uint8_t **addr)
+Metadata_Get_IPv4_Destination (List_t *list, const uint8_t **addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))
@@ -293,7 +293,7 @@ Metadata_Get_IPv4_Destination (struct List *list, const uint8_t **addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_IPv6_Source (struct List *list, const uint8_t *addr)
+Metadata_Add_IPv6_Source (List_t *list, const uint8_t *addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
@@ -305,7 +305,7 @@ Metadata_Add_IPv6_Source (struct List *list, const uint8_t *addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Get_IPv6_Source (struct List *list, const uint8_t **addr)
+Metadata_Get_IPv6_Source (List_t *list, const uint8_t **addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
@@ -317,7 +317,7 @@ Metadata_Get_IPv6_Source (struct List *list, const uint8_t **addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_IPv6_Destination (struct List *list, const uint8_t *addr)
+Metadata_Add_IPv6_Destination (List_t *list, const uint8_t *addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))
@@ -329,7 +329,7 @@ Metadata_Add_IPv6_Destination (struct List *list, const uint8_t *addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Get_IPv6_Destination (struct List *list, const uint8_t **addr)
+Metadata_Get_IPv6_Destination (List_t *list, const uint8_t **addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))
@@ -341,7 +341,7 @@ Metadata_Get_IPv6_Destination (struct List *list, const uint8_t **addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_Port_Source (struct List *list, const uint16_t addr)
+Metadata_Add_Port_Source (List_t *list, const uint16_t addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
@@ -353,7 +353,7 @@ Metadata_Add_Port_Source (struct List *list, const uint16_t addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Get_Port_Source (struct List *list, uint16_t *addr)
+Metadata_Get_Port_Source (List_t *list, uint16_t *addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
@@ -365,7 +365,7 @@ Metadata_Get_Port_Source (struct List *list, uint16_t *addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Add_Port_Destination (struct List *list, const uint16_t addr)
+Metadata_Add_Port_Destination (List_t *list, const uint16_t addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))
@@ -377,7 +377,7 @@ Metadata_Add_Port_Destination (struct List *list, const uint16_t addr)
 }
 
 SO_PUBLIC bool 
-Metadata_Get_Port_Destination (struct List *list, uint16_t *addr)
+Metadata_Get_Port_Destination (List_t *list, uint16_t *addr)
 {
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))

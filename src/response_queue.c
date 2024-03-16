@@ -11,7 +11,7 @@
 
 /** Globals
 */
-static struct List *sg_qlResponseQueue;
+static List_t *sg_qlResponseQueue;
 static bool sg_bResponseInitialized = false;
 
 static void

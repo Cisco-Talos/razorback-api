@@ -12,7 +12,7 @@ struct NTLV_Key
     uuid_t type;
 };
 SO_PUBLIC bool
-NTLVList_Get (struct List *list, uuid_t name,
+NTLVList_Get (List_t *list, uuid_t name,
               uuid_t type, uint32_t *size, const uint8_t ** data)
 {
     struct NTLVItem *item;
@@ -30,7 +30,7 @@ NTLVList_Get (struct List *list, uuid_t name,
 }
 
 SO_PUBLIC bool
-NTLVList_Add (struct List *list, uuid_t name,
+NTLVList_Add (List_t *list, uuid_t name,
               uuid_t type, uint32_t size, const uint8_t * data)
 {
     struct NTLVItem *item;
@@ -79,7 +79,7 @@ NTLV_ItemSize(struct NTLVItem *item, uint32_t *counter)
 }
 
 SO_PUBLIC uint32_t
-NTLVList_Size (struct List * list)
+NTLVList_Size (List_t * list)
 {
     uint32_t size = 0;
 
@@ -147,7 +147,7 @@ NTLV_Clone(void *o)
 }
 
 
-SO_PUBLIC struct List *
+SO_PUBLIC List_t *
 NTLVList_Create (void)
 {
     return List_Create(LIST_MODE_GENERIC, 

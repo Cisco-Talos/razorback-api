@@ -187,7 +187,7 @@ extern bool BinaryBuffer_Put_UUID (struct BinaryBuffer *p_pBuffer,
  * @return true on success false on error.
  */
 extern bool BinaryBuffer_Put_NTLVList (struct BinaryBuffer *p_pBuffer,
-                                       struct List *p_pList);
+                                       List_t *p_pList);
 
 /** Get a NTLV list from the message
  * @param *p_pBuffer the message buffer
@@ -195,7 +195,7 @@ extern bool BinaryBuffer_Put_NTLVList (struct BinaryBuffer *p_pBuffer,
  * @return true on success false on error.
  */
 extern bool BinaryBuffer_Get_NTLVList (struct BinaryBuffer *p_pBuffer,
-                                       struct List **p_pList);
+                                       List_t **p_pList);
 
 /** puts a hash into a binary buffer
  * @param p_pBuffer the binary buffer
@@ -294,15 +294,15 @@ extern bool BinaryBuffer_Get_Judgment (struct BinaryBuffer *p_pBuffer,
                                     struct Judgment **p_pJudgment);
 
 bool
-BinaryBuffer_Get_UUIDList(struct BinaryBuffer *buffer, struct List **r_list);
+BinaryBuffer_Get_UUIDList(struct BinaryBuffer *buffer, List_t **r_list);
 bool
-BinaryBuffer_Put_UUIDList(struct BinaryBuffer *buffer, struct List *list);
+BinaryBuffer_Put_UUIDList(struct BinaryBuffer *buffer, List_t *list);
 
 bool
-BinaryBuffer_Get_StringList(struct BinaryBuffer *buffer, struct List **r_list);
+BinaryBuffer_Get_StringList(struct BinaryBuffer *buffer, List_t **r_list);
 
 bool
-BinaryBuffer_Put_StringList(struct BinaryBuffer *buffer, struct List *list);
+BinaryBuffer_Put_StringList(struct BinaryBuffer *buffer, List_t *list);
 #ifdef __cplusplus
 }
 #endif

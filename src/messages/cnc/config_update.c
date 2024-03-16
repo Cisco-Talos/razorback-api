@@ -44,7 +44,7 @@ MessageConfigurationUpdate_Initialize (
 {
     struct MessageConfigurationUpdate *message;
     struct Message *msg;
-    struct List *list;
+    List_t *list;
 
     if ((msg = Message_Create_Directed(MESSAGE_TYPE_CONFIG_UPDATE, MESSAGE_VERSION_1, sizeof(struct MessageConfigurationUpdate), p_uuidSourceNugget, p_uuidDestNugget)) == NULL)
         return NULL;

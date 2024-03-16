@@ -13,7 +13,7 @@ struct Message
     uint32_t type;             					///< Message type
     size_t length;           					///< Message length
     uint32_t version;          					///< Message version
-    struct List *headers;						///< Message headers list
+    List_t *headers;						///< Message headers list
     void *message;								///< Message structure
     uint8_t *serialized;						///< Serialized message string
     bool (*serialize)(struct Message *, int);	///< Pointer to message serialization function
@@ -53,7 +53,7 @@ struct MessageHello
     uint8_t locality;           ///< Nugget Locality
     uint8_t priority;           ///< Dispatcher priority
     uint32_t flags;             ///< Dispatcher flags
-    struct List *addressList;   ///< Dispatcher address list.
+    List_t *addressList;   ///< Dispatcher address list.
     uint8_t protocol;           ///< Dispatcher transfer protocol.
     uint16_t port;              ///< Dispatcher transfer server port.
 };
@@ -73,9 +73,9 @@ struct MessageRegistrationRequest
  */
 struct MessageConfigurationUpdate
 {
-    struct List *ntlvTypes;		///< List of NTLV Type UUIDs
-    struct List *ntlvNames;		///< List of NTLV Name UUIDs
-    struct List *dataTypes;		///< List of data type UUIDs
+    List_t *ntlvTypes;		///< List of NTLV Type UUIDs
+    List_t *ntlvNames;		///< List of NTLV Name UUIDs
+    List_t *dataTypes;		///< List of data type UUIDs
 };
 
 /** Configuration Update Success
@@ -160,7 +160,7 @@ struct MessageInspectionSubmission
     uint32_t iReason;           	///< Submission Reason
 	struct Block *pBlock;			///< Data block
     struct EventId *eventId;		///< Triggering event id
-    struct List *pEventMetadata;	///< Event metadata list
+    List_t *pEventMetadata;	///< Event metadata list
     uint32_t localityCount;			///< Number of localities the block is stored in
     uint8_t *localityList;			///< Array of localities that block is stored in
 };
@@ -180,7 +180,7 @@ struct MessageAlertPrimary
     struct Event *event;        ///< The event
     uint32_t gid;				///< Alert GID
     uint32_t sid;				///< Alert SID
-    struct List *metadata;		///< Alert Metadata
+    List_t *metadata;		///< Alert Metadata
     uint8_t priority;			///< Alert Priority
     char *message;				///< Alert message string
     uint64_t seconds;			///< Time stamp (Seconds)

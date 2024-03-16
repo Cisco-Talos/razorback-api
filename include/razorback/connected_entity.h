@@ -22,7 +22,7 @@ struct DispatcherEntity
 {
     uint8_t priority;           ///< Dispatcher priority
     uint32_t flags;             ///< Dispatcher flags
-    struct List * addressList;  ///< Dispatcher address list.
+    List_t * addressList;  ///< Dispatcher address list.
     uint8_t protocol;
     uint16_t port;
     bool usable;

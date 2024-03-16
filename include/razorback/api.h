@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-#define DECL_INSPECTION_FUNC(a) uint8_t a (struct Block *block, struct EventId *eventId, struct List *eventMetadata, void *threadData)
+#define DECL_INSPECTION_FUNC(a) uint8_t a (struct Block *block, struct EventId *eventId, List_t *eventMetadata, void *threadData)
 #define DECL_NUGGET_INIT bool initNug(void)
 #define DECL_NUGGET_THREAD_INIT(a) bool a (void ** threadData)
 #define DECL_NUGGET_THREAD_CLEANUP(a) void a (void * threadData)
@@ -29,7 +29,7 @@ extern "C" {
  */
 struct RazorbackInspectionHooks
 {
-    uint8_t (*processBlock) (struct Block *, struct EventId *, struct List *, void *);    	///< FP to inspection handler
+    uint8_t (*processBlock) (struct Block *, struct EventId *, List_t *, void *);    	///< FP to inspection handler
     bool (*processDeferredList) (struct DeferredList *);            						///< FP to pending items
     bool (*initThread) (void  **);															///< FP to per thread init function
     void (*cleanupThread) (void *);															///< FP to per thread cleanup function
@@ -103,7 +103,7 @@ struct RazorbackContext
      */
     struct Output
     {
-		struct List *threads;								///< Output Thread List
+		List_t *threads;								///< Output Thread List
     } output;
 
     /** Dispatcher specific data.
@@ -114,7 +114,7 @@ struct RazorbackContext
     	uint8_t priority;									///< Dispatcher Priority
     	uint16_t port;										///< Dispatcher Transfer Port
     	uint8_t protocol;									///< Dispatcher Transfer Protocol
-    	struct List *addressList;							///< Dispatcher Transfer Address List
+    	List_t *addressList;							///< Dispatcher Transfer Address List
     } dispatcher;
 };
 

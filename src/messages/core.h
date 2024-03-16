@@ -9,7 +9,7 @@ extern "C" {
 struct Message * Message_Create(uint32_t type, uint32_t version, size_t msgSize);
 void Message_Destroy(struct Message *message);
 bool Message_Setup(struct Message *message);
-struct MessageHeader * Message_HeaderList_Add(struct List * headers, const char *p_sName, const char *p_sValue );
+struct MessageHeader * Message_HeaderList_Add(List_t * headers, const char *p_sName, const char *p_sValue );
 void MessageBlockSubmission_Init(void);
 void MessageCacheReq_Init(void);
 void MessageCacheResp_Init(void);

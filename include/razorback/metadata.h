@@ -22,7 +22,7 @@ extern "C" {
  * @return True on success, false on error.
  */
 
-SO_PUBLIC extern bool Metadata_Add_String (struct List *list, uuid_t name, const char *string);
+SO_PUBLIC extern bool Metadata_Add_String (List_t *list, uuid_t name, const char *string);
 
 /** Get a string from a metadata list.
  * @note This will return the first item in the list with that name.  If there is more than
@@ -33,7 +33,7 @@ SO_PUBLIC extern bool Metadata_Add_String (struct List *list, uuid_t name, const
  * @param string The a pointer to a char* to store the string in
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Get_String (struct List *list, uuid_t name, uint32_t *len, const char **string);
+SO_PUBLIC extern bool Metadata_Get_String (List_t *list, uuid_t name, uint32_t *len, const char **string);
 
 /** Add an IPv4 address to a metadata list.
  * @param list The metadata list.
@@ -41,7 +41,7 @@ SO_PUBLIC extern bool Metadata_Get_String (struct List *list, uuid_t name, uint3
  * @param addr The IP address.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_IPv4 (struct List *list, uuid_t name, const uint8_t *addr);
+SO_PUBLIC extern bool Metadata_Add_IPv4 (List_t *list, uuid_t name, const uint8_t *addr);
 
 /** Get an IPv4 address from the metadata list.
  * @param list The metadata list.
@@ -49,7 +49,7 @@ SO_PUBLIC extern bool Metadata_Add_IPv4 (struct List *list, uuid_t name, const u
  * @param addr A pointer to a uint8_t* to store the address in.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Get_IPv4 (struct List *list, uuid_t name, const uint8_t **addr);
+SO_PUBLIC extern bool Metadata_Get_IPv4 (List_t *list, uuid_t name, const uint8_t **addr);
 
 /** Add an IPv6 address to a metadata list
  * @param list The metadata list.
@@ -57,7 +57,7 @@ SO_PUBLIC extern bool Metadata_Get_IPv4 (struct List *list, uuid_t name, const u
  * @param addr The address to add to the list,
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_IPv6 (struct List *list, uuid_t name, const uint8_t *addr);
+SO_PUBLIC extern bool Metadata_Add_IPv6 (List_t *list, uuid_t name, const uint8_t *addr);
 
 /** Get an IPv6 address from metadata list.
  * @param list The metadata list.
@@ -65,7 +65,7 @@ SO_PUBLIC extern bool Metadata_Add_IPv6 (struct List *list, uuid_t name, const u
  * @param addr A pointer to a uint8_* to store the address in.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Get_IPv6 (struct List *list, uuid_t name, const uint8_t **addr);
+SO_PUBLIC extern bool Metadata_Get_IPv6 (List_t *list, uuid_t name, const uint8_t **addr);
 
 /** Add a port to a metadata list.
  * @param list The metadata list.
@@ -73,7 +73,7 @@ SO_PUBLIC extern bool Metadata_Get_IPv6 (struct List *list, uuid_t name, const u
  * @param port The port to add to the list.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_Port (struct List *list, uuid_t name, const uint16_t port);
+SO_PUBLIC extern bool Metadata_Add_Port (List_t *list, uuid_t name, const uint16_t port);
 
 /** Get a port from a metadata list.
  * @param list The metadata list.
@@ -81,35 +81,35 @@ SO_PUBLIC extern bool Metadata_Add_Port (struct List *list, uuid_t name, const u
  * @param port A pointer to the uint16_t to store the port in.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Get_Port (struct List *list, uuid_t name, uint16_t *port);
+SO_PUBLIC extern bool Metadata_Get_Port (List_t *list, uuid_t name, uint16_t *port);
 
 /** Add a filename to a metadata list.
  * @param list The metadata list.
  * @param name The file name.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_Filename (struct List *list, const char *name);
+SO_PUBLIC extern bool Metadata_Add_Filename (List_t *list, const char *name);
 
 /** Add a hostname to a metadata list.
  * @param list The metadata list.
  * @param name The hostname.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_Hostname (struct List *list, const char *name);
+SO_PUBLIC extern bool Metadata_Add_Hostname (List_t *list, const char *name);
 
 /** Add a URI to a metadata list.
  * @param list The metadata list.
  * @param uri The URI to add.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_URI (struct List *list, const char *uri);
+SO_PUBLIC extern bool Metadata_Add_URI (List_t *list, const char *uri);
 
 /** Add a path to a metadata list.
  * @param list The metadata list.
  * @param path The path to add.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_Path (struct List *list, const char *path);
+SO_PUBLIC extern bool Metadata_Add_Path (List_t *list, const char *path);
 
 /** Add a malware name to a metadata list.
  * @param list The metadata list.
@@ -117,133 +117,133 @@ SO_PUBLIC extern bool Metadata_Add_Path (struct List *list, const char *path);
  * @param name The vendors name for the malware.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_MalwareName (struct List *list, const char *vendor, const char *name);
+SO_PUBLIC extern bool Metadata_Add_MalwareName (List_t *list, const char *vendor, const char *name);
 
 /** Add a report to a metadata list.
  * @param list The metadata list.
  * @param text The report text.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_Report (struct List *list, const char *text);
+SO_PUBLIC extern bool Metadata_Add_Report (List_t *list, const char *text);
 
 /** Add a CVE to a metadata list.
  * @param list The metadata list.
  * @param text The CVE number.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_CVE (struct List *list, const char *text);
+SO_PUBLIC extern bool Metadata_Add_CVE (List_t *list, const char *text);
 
 /** Add a BugTraq ID to a metadata list.
  * @param list The metadata list.
  * @param text The BugTraq ID.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_BID (struct List *list, const char *text);
+SO_PUBLIC extern bool Metadata_Add_BID (List_t *list, const char *text);
 
 /** Add a OSVDB id to a metadata list.
  * @param list The metadata list.
  * @param text The OSVDB Id.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_OSVDB (struct List *list, const char *text);
+SO_PUBLIC extern bool Metadata_Add_OSVDB (List_t *list, const char *text);
 
 /** Add a HTTP request to a metadata list.
  * @param list The metadata list.
  * @param name The HTTP Request
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_HttpRequest (struct List *list, const char *name);
+SO_PUBLIC extern bool Metadata_Add_HttpRequest (List_t *list, const char *name);
 
 /** Add a HTTP Response to a metadata list.
  * @param list The metadata list.
  * @param name The HTTP Response
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_HttpResponse (struct List *list, const char *name);
+SO_PUBLIC extern bool Metadata_Add_HttpResponse (List_t *list, const char *name);
 
 /** Add an IPv4 source address to a metadata list.
  * @param list The metadata list.
  * @param addr The address.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_IPv4_Source (struct List *list, const uint8_t *addr);
+SO_PUBLIC extern bool Metadata_Add_IPv4_Source (List_t *list, const uint8_t *addr);
 
 /** Get an IPv4 source address from a metadata list.
  * @param list The metadata list.
  * @param addr A pointer to a uint8_t* to store the address in.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Get_IPv4_Source (struct List *list, const uint8_t **addr);
+SO_PUBLIC extern bool Metadata_Get_IPv4_Source (List_t *list, const uint8_t **addr);
 
 /** Add an IPv4 destination address to a metadata list.
  * @param list The metadata list.
  * @param addr The address.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_IPv4_Destination (struct List *list, const uint8_t *addr);
+SO_PUBLIC extern bool Metadata_Add_IPv4_Destination (List_t *list, const uint8_t *addr);
 
 /** Get an IPv4 destination address from a metadata list.
  * @param list The metadata list.
  * @param addr A pointer to a uint8_t* to store the address in.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Get_IPv4_Destination (struct List *list, const uint8_t **addr);
+SO_PUBLIC extern bool Metadata_Get_IPv4_Destination (List_t *list, const uint8_t **addr);
 
 /** Add an IPv6 source address to a metadata list.
  * @param list The metadata list.
  * @param addr The address.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_IPv6_Source (struct List *list, const uint8_t *addr);
+SO_PUBLIC extern bool Metadata_Add_IPv6_Source (List_t *list, const uint8_t *addr);
 
 /** Get an IPv6 source address from a metadata list.
  * @param list The metadata list.
  * @param addr A pointer to a uint8_t* to store the address in.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Get_IPv6_Source (struct List *list, const uint8_t **addr);
+SO_PUBLIC extern bool Metadata_Get_IPv6_Source (List_t *list, const uint8_t **addr);
 
 /** Add an IPv6 destination address to a metadata list.
  * @param list The metadata list.
  * @param addr The address.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_IPv6_Destination (struct List *list, const uint8_t *addr);
+SO_PUBLIC extern bool Metadata_Add_IPv6_Destination (List_t *list, const uint8_t *addr);
 
 /** Get an IPv6 destination address from a metadata list.
  * @param list The metadata list.
  * @param addr A pointer to a uint8_t* to store the address in.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Get_IPv6_Destination (struct List *list, const uint8_t **addr);
+SO_PUBLIC extern bool Metadata_Get_IPv6_Destination (List_t *list, const uint8_t **addr);
 
 /** Add a source port to a metadata list.
  * @param list The metadata list.
  * @param port The port.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_Port_Source (struct List *list, const uint16_t port);
+SO_PUBLIC extern bool Metadata_Add_Port_Source (List_t *list, const uint16_t port);
 
 /** Get a source port from a metadata list.
  * @param list The metadata list.
  * @param port A pointer to a uint16_t to store the port in.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Get_Port_Source (struct List *list, uint16_t *port);
+SO_PUBLIC extern bool Metadata_Get_Port_Source (List_t *list, uint16_t *port);
 
 /** Add a destination port to a metadata list.
  * @param list The metadata list.
  * @param port The port.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Add_Port_Destination (struct List *list, const uint16_t port);
+SO_PUBLIC extern bool Metadata_Add_Port_Destination (List_t *list, const uint16_t port);
 
 /** Get a destination port from a metadata list.
  * @param list The metadata list.
  * @param port A pointer to a uint16_t to store the port in.
  * @return True on success, false on error.
  */
-SO_PUBLIC extern bool Metadata_Get_Port_Destination (struct List *list, uint16_t *port);
+SO_PUBLIC extern bool Metadata_Get_Port_Destination (List_t *list, uint16_t *port);
 #ifdef __cplusplus
 }
 #endif

@@ -9,7 +9,7 @@
 #include "init.h"
 
 #include <string.h>
-static struct List * handlerList = NULL;
+static List_t * handlerList = NULL;
 static bool Message_Add_Directed_Headers(struct Message *message, const uuid_t source, const uuid_t dest);
 
 
@@ -56,7 +56,7 @@ Message_Destroy(struct Message *message)
 }
 
 struct MessageHeader *
-Message_HeaderList_Add(struct List * headers, const char *p_sName, const char *p_sValue ){
+Message_HeaderList_Add(List_t * headers, const char *p_sName, const char *p_sValue ){
     struct MessageHeader *l_pHeader;
     if ((l_pHeader = calloc(1, sizeof (struct MessageHeader))) == NULL)
     {
@@ -96,7 +96,7 @@ Message_Add_Header(struct Message *p_pMessage, const char *p_sName, const char *
 }
 
 
-SO_PUBLIC struct List *
+SO_PUBLIC List_t *
 Message_Header_List_Create(void)
 {
     return List_Create(LIST_MODE_GENERIC, 

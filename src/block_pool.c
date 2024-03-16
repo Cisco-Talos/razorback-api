@@ -23,7 +23,7 @@
 static void BlockPool_Delete(void *a);
 
 
-static struct List * sg_bpList;
+static List_t * sg_bpList;
 static bool sg_bInitDone=false;
 static size_t sg_size;
 static struct Mutex *sg_sizeMutex;

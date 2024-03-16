@@ -130,11 +130,11 @@ SO_PUBLIC extern char *UUID_Get_DescriptionByUUID (uuid_t p_uuid, int p_iType);
  */
 SO_PUBLIC extern char *UUID_Get_UUIDAsString (const char *p_sName, int p_iType);
 
-SO_PUBLIC extern struct List * UUID_Create_List (void);
-SO_PUBLIC extern bool UUID_Add_List_Entry(struct List *list, uuid_t uuid, const char *name, const char *desc);
+SO_PUBLIC extern List_t * UUID_Create_List (void);
+SO_PUBLIC extern bool UUID_Add_List_Entry(List_t *list, uuid_t uuid, const char *name, const char *desc);
 
-SO_PUBLIC extern struct List * UUID_Get_List(int type);
-SO_PUBLIC extern size_t UUIDList_BinarySize(struct List *list);
+SO_PUBLIC extern List_t * UUID_Get_List(int type);
+SO_PUBLIC extern size_t UUIDList_BinarySize(List_t *list);
 
 #ifdef __cplusplus
 }

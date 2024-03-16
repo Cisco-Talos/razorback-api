@@ -93,7 +93,7 @@ struct Block
     struct BlockId *pId;       	///< Block ID
     struct BlockId *pParentId;  ///< Parent Block ID
     struct Block *pParentBlock;	///< Parent Block
-    struct List *pMetaDataList; ///< Meta Data List
+    List_t *pMetaDataList; ///< Meta Data List
     struct BlockData data;		///< Block data
 };
 
@@ -139,7 +139,7 @@ struct Event
     struct Event *pParent;      	///< The parent event
     uuid_t uuidApplicationType;     ///< Application Type
     struct Block *pBlock;           ///< The data block
-    struct List *pMetaDataList; 	///< Meta Data List
+    List_t *pMetaDataList; 	///< Meta Data List
 };
 
 /** Judgment
@@ -152,7 +152,7 @@ struct Judgment
     struct EventId *pEventId;       ///< Event Id
     struct BlockId *pBlockId;       ///< Block Id
     uint8_t iPriority;              ///< Meh, Dodgy, YF, YRF
-    struct List *pMetaDataList; 	///< Meta Data List
+    List_t *pMetaDataList; 	///< Meta Data List
     uint32_t iGID;                  ///< The GID
     uint32_t iSID;                  ///< The SID
     uint32_t Set_SfFlags;           ///< The blocks Sourcefire flags
