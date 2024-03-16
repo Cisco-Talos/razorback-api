@@ -7,8 +7,6 @@
 #include <razorback/types.h>
 #include <razorback/queue.h>
 #include <razorback/message_formats.h>
-#include <razorback/lock.h>
-#include <razorback/thread.h>
 
 #ifdef __cplusplus
 extern "C" {

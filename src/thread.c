@@ -23,6 +23,25 @@ static void initThreading_win32(void);
 #include <pthread.h>
 #include <signal.h>
 
+
+struct _Thread
+{
+#ifdef _MSC_VER
+    HANDLE hThread;
+#endif //_MSC_VER
+    rzb_thread_t iThread;       			///< pthread Thread info.
+    struct Mutex * mMutex;  				///< mutex protecting this struct
+    bool bRunning;              			///< true if executing, false if not:  must be managed explicitly by thread function
+    void *pUserData;						///< Additional info for the thread
+    char *sName;            				///< The thread name
+    struct RazorbackContext *pContext; 		///< The Thread Context
+    void (*mainFunction) (Thread_t *); ///< Thread Main Function
+    bool bShutdown;         				///< Shutdown Flag
+    int refs;								///< Reference count
+    //void (*interrupt)(Thread_t *);		///< Cancellation handler for a blocking function.
+};
+
+
 static pthread_attr_t g_attr;
 static pthread_once_t g_once_control = PTHREAD_ONCE_INIT;
 
@@ -58,7 +77,7 @@ static void *
 Thread_MainWrapper (void *arg)
 #endif
 {
-    struct Thread *l_pThread = (struct Thread *) arg;
+    Thread_t *l_pThread = (Thread_t *) arg;
     List_Lock(sg_threadList);
     Thread_Lock (l_pThread);
 
@@ -88,11 +107,11 @@ Thread_MainWrapper (void *arg)
 #endif //_MSC_VER
 }
 
-SO_PUBLIC struct Thread *
-Thread_Launch (void (*fpFunction) (struct Thread *), void *userData,
+SO_PUBLIC Thread_t *
+Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
         char *name, struct RazorbackContext *context)
 {
-	struct Thread *thread;
+	Thread_t *thread;
 	
 	ASSERT (fpFunction != NULL);
 	if (fpFunction == NULL)
@@ -111,7 +130,7 @@ Thread_Launch (void (*fpFunction) (struct Thread *), void *userData,
         return NULL;
 
     // allocate memory for thread structure
-    thread = (struct Thread *)calloc (1, sizeof (struct Thread));
+    thread = (Thread_t *)calloc (1, sizeof (Thread_t));
     if (thread == NULL)
     {
         rzb_log (LOG_ERR,
@@ -157,7 +176,7 @@ Thread_Launch (void (*fpFunction) (struct Thread *), void *userData,
 }
 
 SO_PUBLIC void
-Thread_Destroy (struct Thread *thread)
+Thread_Destroy (Thread_t *thread)
 {
 	ASSERT(thread != NULL);
 	if (thread == NULL)
@@ -188,7 +207,7 @@ Thread_Destroy (struct Thread *thread)
 }
 
 SO_PUBLIC bool
-Thread_IsRunning (struct Thread *thread)
+Thread_IsRunning (Thread_t *thread)
 {
     bool l_bRunning;
 	ASSERT (thread != NULL);
@@ -205,7 +224,7 @@ Thread_IsRunning (struct Thread *thread)
 }
 
 SO_PUBLIC bool
-Thread_IsStopped (struct Thread *thread)
+Thread_IsStopped (Thread_t *thread)
 {
     bool l_bShutdown;
 
@@ -224,7 +243,7 @@ Thread_IsStopped (struct Thread *thread)
 
 
 SO_PUBLIC void
-Thread_Stop (struct Thread *thread)
+Thread_Stop (Thread_t *thread)
 {
     ASSERT (thread != NULL);
     if (thread == NULL)
@@ -238,7 +257,7 @@ Thread_Stop (struct Thread *thread)
 
 }
 SO_PUBLIC void
-Thread_Interrupt(struct Thread *thread)
+Thread_Interrupt(Thread_t *thread)
 {
     ASSERT (thread != NULL);
     if (thread == NULL)
@@ -257,7 +276,7 @@ Thread_Interrupt(struct Thread *thread)
 }
 
 SO_PUBLIC void 
-Thread_Join(struct Thread *thread)
+Thread_Join(Thread_t *thread)
 {
 	ASSERT(thread != NULL);
 	if (thread == NULL)
@@ -274,7 +293,7 @@ Thread_Join(struct Thread *thread)
 }
 
 SO_PUBLIC void
-Thread_StopAndJoin(struct Thread *thread)
+Thread_StopAndJoin(Thread_t *thread)
 {
    ASSERT (thread != NULL);
    if (thread == NULL)
@@ -285,7 +304,7 @@ Thread_StopAndJoin(struct Thread *thread)
 }
 
 SO_PUBLIC void
-Thread_InterruptAndJoin(struct Thread *thread)
+Thread_InterruptAndJoin(Thread_t *thread)
 {
     ASSERT (thread != NULL);
     if (thread == NULL)
@@ -298,7 +317,7 @@ Thread_InterruptAndJoin(struct Thread *thread)
 
 
 SO_PUBLIC struct RazorbackContext * 
-Thread_GetContext(struct Thread *thread)
+Thread_GetContext(Thread_t *thread)
 {
     struct RazorbackContext *l_pOldContext;
 
@@ -317,7 +336,7 @@ Thread_GetContext(struct Thread *thread)
 SO_PUBLIC struct RazorbackContext * 
 Thread_GetCurrentContext(void)
 {
-    struct Thread *thread;
+    Thread_t *thread;
     struct RazorbackContext *cont;
     thread = Thread_GetCurrent();
     if (thread == NULL)
@@ -331,7 +350,7 @@ Thread_GetCurrentContext(void)
 }
 
 SO_PUBLIC struct RazorbackContext * 
-Thread_ChangeContext(struct Thread *thread, struct RazorbackContext *context)
+Thread_ChangeContext(Thread_t *thread, struct RazorbackContext *context)
 {
     struct RazorbackContext *l_pOldContext;
 
@@ -359,12 +378,12 @@ Thread_GetCurrentId(void)
 #endif
 }
 
-SO_PUBLIC struct Thread *
+SO_PUBLIC Thread_t *
 Thread_GetCurrent(void)
 {
-    struct Thread *l_pRet = NULL;
+    Thread_t *l_pRet = NULL;
 	rzb_thread_t l_tCurrent = Thread_GetCurrentId();
-    l_pRet = (struct Thread *)List_Find(sg_threadList, &l_tCurrent);
+    l_pRet = (Thread_t *)List_Find(sg_threadList, &l_tCurrent);
     if (l_pRet == NULL)
         return NULL;
 
@@ -395,7 +414,7 @@ Thread_getCount (void)
 SO_PUBLIC int 
 Thread_KeyCmp(void *a, void *id)
 {
-    struct Thread * cA = (struct Thread *)a;
+    Thread_t * cA = (Thread_t *)a;
 	rzb_thread_t cId = *(rzb_thread_t *)id;
 
     if (cId == cA->iThread)
@@ -409,8 +428,8 @@ Thread_KeyCmp(void *a, void *id)
 SO_PUBLIC int 
 Thread_Cmp(void *a, void *b)
 {
-    struct Thread * cA = (struct Thread *)a;
-    struct Thread * cB = (struct Thread *)b;
+    Thread_t * cA = (Thread_t *)a;
+    Thread_t * cB = (Thread_t *)b;
     if (a==b)
         return 0;
     if (cA->iThread == cB->iThread)
@@ -424,14 +443,14 @@ Thread_Cmp(void *a, void *b)
 static void 
 Thread_Lock(void *a)
 {
-    struct Thread *t = (struct Thread *)a;
+    Thread_t *t = (Thread_t *)a;
     Mutex_Lock(t->mMutex);
 }
 
 static void 
 Thread_Unlock(void *a)
 {
-    struct Thread *t = (struct Thread *)a;
+    Thread_t *t = (Thread_t *)a;
     Mutex_Unlock(t->mMutex);
 }
 
@@ -471,7 +490,7 @@ static void handler(int sig)
 }
 
 SO_PUBLIC void
-Thread_Interrupt_pthread(struct Thread *thread)
+Thread_Interrupt_pthread(Thread_t *thread)
 {
     pthread_kill(thread->iThread, SIGUSR1);
 }

@@ -29,7 +29,7 @@
 #include "connected_entity_private.h"
 #include "inspection.h"
 
-static void Razorback_Output_Thread (struct Thread *thread);
+static void Razorback_Output_Thread (Thread_t *thread);
 static int Context_KeyCmp(void *a, void *b);
 static int Context_Cmp(void *a, void *b);
 
@@ -241,7 +241,7 @@ Razorback_Init_Collection_Context (uuid_t nuggetId,
 int
 Kill_Output_Thread(void *ut, void *ud)
 {
-    struct Thread *thread = ut;
+    Thread_t *thread = ut;
     Thread_InterruptAndJoin(thread);
     Thread_Destroy(thread);
     return LIST_EACH_OK;
@@ -286,7 +286,7 @@ static int
 ForEach_Context_Wrapper(struct RazorbackContext *context, void *data)
 {
     struct ContextHook *hook = data;
-    struct Thread * thread = Thread_GetCurrent();
+    Thread_t * thread = Thread_GetCurrent();
     struct RazorbackContext *prev;
     int ret;
     if (thread != NULL)
@@ -339,7 +339,7 @@ SO_PUBLIC bool
 Razorback_Output_Launch (struct RazorbackContext *context, struct RazorbackOutputHooks *hooks)
 {
     char *nugName, *threadName;
-    struct Thread *thread;
+    Thread_t *thread;
 
     nugName =
         UUID_Get_NameByUUID (context->uuidApplicationType,
@@ -363,10 +363,10 @@ Razorback_Output_Launch (struct RazorbackContext *context, struct RazorbackOutpu
 
 
 static void
-Razorback_Output_Thread (struct Thread *thread)
+Razorback_Output_Thread (Thread_t *thread)
 {
     struct Message *message;
-    struct RazorbackOutputHooks *hooks = (struct RazorbackOutputHooks*)thread->pUserData;
+    struct RazorbackOutputHooks *hooks = (struct RazorbackOutputHooks*) Thread_GetUserData(thread);
     char *name;
     const char *pat = NULL;
     

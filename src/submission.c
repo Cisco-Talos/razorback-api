@@ -24,10 +24,10 @@ struct ThreadPool *requestThreadPool= NULL;
 struct ThreadPool *responseThreadPool= NULL;
 struct ThreadPool *submissionThreadPool = NULL;
 
-void Submission_GlobalCache_RequestThread(struct Thread *p_pThread);
-void Submission_GlobalCache_ResponseThread(struct Thread *p_pThread);
+void Submission_GlobalCache_RequestThread(Thread_t *p_pThread);
+void Submission_GlobalCache_ResponseThread(Thread_t *p_pThread);
 int Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void *);
-void Submission_SubmitThread(struct Thread *p_pThread);
+void Submission_SubmitThread(Thread_t *p_pThread);
 
 static List_t *requestQueue = NULL;
 static List_t *submitQueue = NULL;
@@ -163,7 +163,7 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
 }
 
 void 
-Submission_GlobalCache_RequestThread(struct Thread *p_pThread)
+Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
 {
 	struct BlockPoolItem *item = NULL;
 	struct Queue *queue = NULL;
@@ -208,12 +208,12 @@ Submission_GlobalCache_RequestThread(struct Thread *p_pThread)
 int
 Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void * userData)
 {
-    struct Thread *l_pThread;
+    Thread_t *l_pThread;
     struct CacheResult *l_pRes;
 
     // Pull the data out the thread.
     l_pThread = Thread_GetCurrent();
-    l_pRes = (struct CacheResult *)l_pThread->pUserData;
+    l_pRes = (struct CacheResult *) Thread_GetUserData(l_pThread);
 
     if (BlockPool_GetStatus(p_pItem) == BLOCK_POOL_STATUS_CHECKING_GLOBAL_CACHE)
     {
@@ -248,7 +248,7 @@ Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void * use
 }
 
 void 
-Submission_GlobalCache_ResponseThread(struct Thread *p_pThread)
+Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
 {
     struct Message *message;
     struct MessageCacheResp *l_mcrMessage;
@@ -263,7 +263,7 @@ Submission_GlobalCache_ResponseThread(struct Thread *p_pThread)
         rzb_log(LOG_ERR, "%s: Failed to allocate thread args", __func__);
         return;
     }
-    p_pThread->pUserData = l_pRes;
+    Thread_SetUserData(p_pThread, l_pRes);
     while (!Thread_IsStopped(p_pThread))
     {
         if ((message = Queue_Get(queue)) == NULL)
@@ -277,14 +277,15 @@ Submission_GlobalCache_ResponseThread(struct Thread *p_pThread)
         // Destroy allocated items in thread local storage.
         message->destroy(message);
     }
-    free(p_pThread->pUserData);
-    p_pThread->pUserData = NULL;
+
+    Thread_SetUserData(p_pThread, NULL);
+    free(l_pRes);
     // TODO: BAD
     ResponseQueue_Terminate(sg_pContext->uuidNuggetId);
 }
 
 void
-Submission_SubmitThread(struct Thread *p_pThread)
+Submission_SubmitThread(Thread_t *p_pThread)
 {
 	struct Message *message;
     uint8_t storedLocality = 0;

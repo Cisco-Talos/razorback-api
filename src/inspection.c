@@ -19,7 +19,7 @@
 #include "connected_entity_private.h"
 #include "runtime_config.h"
 #include <errno.h>
-static void Inspection_Thread (struct Thread *p_pThread);
+static void Inspection_Thread (Thread_t *p_pThread);
 
 bool
 Inspection_Launch (struct RazorbackContext *p_pContext, uint32_t initThreads, uint32_t maxThreads)
@@ -37,7 +37,7 @@ Inspection_Launch (struct RazorbackContext *p_pContext, uint32_t initThreads, ui
 }
 
 static void
-Inspection_Thread (struct Thread *p_pThread)
+Inspection_Thread (Thread_t *p_pThread)
 {
     struct RazorbackContext *l_pContext;
     struct Message *message;
@@ -63,7 +63,7 @@ Inspection_Thread (struct Thread *p_pThread)
         return;
     }
     rzb_log(LOG_DEBUG, "%s: Inspection Thread Launched", __func__);
-    p_pThread->pUserData = l_pQueue;
+    Thread_SetUserData(p_pThread, l_pQueue);
     if (l_pContext->inspector.hooks->initThread != NULL)
     {
     	if (!l_pContext->inspector.hooks->initThread(&threadData))

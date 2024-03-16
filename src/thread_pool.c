@@ -42,11 +42,11 @@ TP_Destroy(void *a)
 }
 
 static void 
-ThreadPool_Main(struct Thread *thread)
+ThreadPool_Main(Thread_t *thread)
 {
-    struct ThreadPoolItem *worker = thread->pUserData;
+    struct ThreadPoolItem *worker = Thread_GetUserData(thread);
     struct ThreadPool *pool = worker->pool;
-    thread->pUserData = NULL;
+    Thread_SetUserData(thread,NULL);
 
     pool->mainFunction(thread);
 
@@ -58,7 +58,7 @@ ThreadPool_Create(int initialThreads,
         int maxThreads, 
         struct RazorbackContext *context, 
         const char *namePattern,
-        void (*mainFunction) (struct Thread *))
+        void (*mainFunction) (Thread_t *))
 {
     struct ThreadPool *pool;
 	int i;

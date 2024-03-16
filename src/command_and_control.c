@@ -24,7 +24,7 @@
 #include <string.h>
 
 static bool sg_bQueueInitialized = false;
-static struct Thread *sg_tThread;
+static Thread_t *sg_tThread;
 static struct Timer * sg_helloTimer;
 
 struct Mutex * sg_mPauseLock = NULL;
@@ -33,7 +33,7 @@ struct Mutex * processLock = NULL;
 static struct Queue *sg_writeQueue;
 static struct Queue *sg_readQueue;
 
-static void CommandAndControl_Thread (struct Thread *p_pThread);
+static void CommandAndControl_Thread (Thread_t *p_pThread);
 static int CommandAndControl_DispatchCommand (struct RazorbackContext *, void *);
 static bool CommandAndControl_Register (struct RazorbackContext *);
 static int CommandAndControl_SendHello (struct RazorbackContext *p_pContext, void *);
@@ -169,7 +169,7 @@ CommandAndControl_Shutdown(void)
 }
 
 static void 
-CommandAndControl_Thread (struct Thread *p_pThread)
+CommandAndControl_Thread (Thread_t *p_pThread)
 {
     // local variables for command processing
     struct RazorbackContext *context, *prevContext;
@@ -919,7 +919,7 @@ Default_processByeMessage (struct Message *message)
 }
 
 static void
-ReregistrationThread(struct Thread *thread)
+ReregistrationThread(Thread_t *thread)
 {
 	struct RazorbackContext *context;
 
@@ -947,7 +947,7 @@ static bool
 Default_processReRegMessage (struct Message *message)
 {
 	struct RazorbackContext *context;
-	struct Thread *thread;
+	Thread_t *thread;
 #ifdef CNC_DEBUG
     rzb_log (LOG_DEBUG, "%s: C&C Default Hook: Re-Register", __func__);
 #endif //CNC_DEBUG

@@ -9,6 +9,7 @@
 #include <razorback/types.h>
 #include <razorback/api.h>
 #include <razorback/list.h>
+#include <razorback/thread.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -19,7 +20,7 @@ struct ThreadPool;
  */
 struct ThreadPoolItem
 {
-    struct Thread *thread;		///< The worker thread.
+    Thread_t *thread;		///< The worker thread.
     int id;						///< The worker ID
     struct ThreadPool *pool;	///< The pool the worker belongs to.
 };
@@ -32,7 +33,7 @@ struct ThreadPool
     size_t limit;                           ///< Maximum number of threads
     int nextId;                             ///< Id of the next thread
     struct RazorbackContext *context;       ///< Context to spawn threads in
-    void (*mainFunction) (struct Thread *); ///< Main function for spawned threads
+    void (*mainFunction) (Thread_t *); ///< Main function for spawned threads
     const char *namePattern;                ///< Name pattern for threads
     List_t *list;						///< Worker list.
 };
@@ -46,7 +47,7 @@ struct ThreadPool
  * @return A new ThreadPool or NULL on error.
  */
 SO_PUBLIC extern struct ThreadPool *
-ThreadPool_Create(int initialThreads, int maxThreads, struct RazorbackContext *context, const char* namePattern, void (*mainFunction) (struct Thread *));
+ThreadPool_Create(int initialThreads, int maxThreads, struct RazorbackContext *context, const char* namePattern, void (*mainFunction) (Thread_t *));
 
 /** Launch a worker
  * @param pool The ThreadPool to spawn a worker in.
