@@ -11,7 +11,6 @@
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 #include <razorback/socket.h>
-#include <razorback/lock.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,8 +32,8 @@ struct Queue
     char *sName;                   ///< Queue name
     int iFlags;                    ///< Flags (read/write/etc)
     int mode;                      ///< Message processing mode (Binary/JSON)
-    struct Mutex *mReadMutex;      ///< Read Lock
-    struct Mutex *mWriteMutex;     ///< Write lock
+    Mutex_t *mReadMutex;      ///< Read Lock
+    Mutex_t *mWriteMutex;     ///< Write lock
     char *sHostname;               ///< Broker hostname
     uint32_t iPort;                ///< Broker port
     char *sUser;                   ///< Broker username

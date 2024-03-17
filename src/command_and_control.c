@@ -27,8 +27,8 @@ static bool sg_bQueueInitialized = false;
 static Thread_t *sg_tThread;
 static struct Timer * sg_helloTimer;
 
-struct Mutex * sg_mPauseLock = NULL;
-struct Mutex * processLock = NULL;
+Mutex_t * sg_mPauseLock = NULL;
+Mutex_t * processLock = NULL;
 
 static struct Queue *sg_writeQueue;
 static struct Queue *sg_readQueue;

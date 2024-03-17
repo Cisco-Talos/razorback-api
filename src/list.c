@@ -1,10 +1,11 @@
 #include "config.h"
+#include <razorback/types.h>
+#include <razorback/lock.h>
 #include <razorback/debug.h>
 #include <razorback/list.h>
 #include <razorback/log.h>
 
 #include <string.h>
-#include <razorback/thread.h>
 
 /** List node structure.
  */
@@ -39,8 +40,8 @@ struct _List
     void *(*clone)(void *);			///< Node data clone
     void (*nodeLock)(void *);		///< Node lock function
     void (*nodeUnlock)(void *);		///< Node unlock function
-    struct Semaphore *sem;			///< List event semaphore.
-    struct RWLock *lock;            ///< RW Lock
+    Semaphore_t *sem;			///< List event semaphore.
+    RWLock_t *lock;            ///< RW Lock
 };
 
 

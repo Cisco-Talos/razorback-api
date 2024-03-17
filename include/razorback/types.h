@@ -20,7 +20,14 @@
 #include <stdlib.h>
 #include <openssl/evp.h>
 
-#include <razorback/list.h>
+
+typedef struct _Mutex Mutex_t;
+typedef struct _RWLock RWLock_t;
+typedef struct _Semaphore Semaphore_t;
+
+typedef struct _List List_t;
+typedef struct _Thread Thread_t;
+
 
 #define UUID_STRING_LENGTH 37   ///< The size of a UUID String including the null
 
@@ -111,7 +118,7 @@ struct BlockPoolData
  */
 struct BlockPoolItem
 {
-    struct Mutex *mutex;                              	///< Item lock <- Why is it brown.
+    Mutex_t *mutex;                              	///< Item lock <- Why is it brown.
     uint32_t iStatus;                                   ///< Status Flags
     struct BlockPoolData *pDataHead;                    ///< Head Item
     struct BlockPoolData *pDataTail;                    ///< Tail Item

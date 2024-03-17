@@ -2,6 +2,8 @@
 
 #include "init.h"
 #include <curl/curl.h>
+#include <razorback/visibility.h>
+
 
 static bool initCurl() {
     if (curl_global_init(CURL_GLOBAL_ALL) != 0) {

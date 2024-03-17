@@ -6,8 +6,8 @@
 #include <razorback/hash.h>
 #include <razorback/event.h>
 #include <razorback/judgment.h>
-#include <razorback/thread.h>
 #include <razorback/uuids.h>
+#include <razorback/list.h>
 #include <razorback/string_list.h>
 
 #ifdef HAVE_SYS_ENDIAN_H

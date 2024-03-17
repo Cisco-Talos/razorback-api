@@ -4,6 +4,7 @@
 #include <razorback/log.h>
 #include <razorback/block.h>
 #include <razorback/ntlv.h>
+#include <razorback/list.h>
 
 #include <time.h>
 #include <string.h>

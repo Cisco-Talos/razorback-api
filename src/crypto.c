@@ -8,7 +8,7 @@
 #include <openssl/err.h>
 
 
-static struct Mutex **sslLocks = NULL;
+static Mutex_t **sslLocks = NULL;
 
 void 
 handle_error(const char *file, int lineno, const char *msg)
@@ -39,7 +39,7 @@ static bool Crypto_Initialize_OpenSSL(void)
     SSL_load_error_strings ();
 
     SSL_library_init();
-    if ((sslLocks = calloc(CRYPTO_num_locks(), sizeof(struct Mutex *))) == NULL)
+    if ((sslLocks = calloc(CRYPTO_num_locks(), sizeof(Mutex_t *))) == NULL)
         return false;
 
     for (i = 0;  i < CRYPTO_num_locks();  i++)

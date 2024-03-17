@@ -1,9 +1,11 @@
 #include "config.h"
 
 #include <razorback/debug.h>
+#include <razorback/types.h>
 #include <razorback/thread.h>
 #include <razorback/ntlv.h>
 #include <razorback/list.h>
+#include <razorback/lock.h>
 #include <razorback/log.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,7 +32,7 @@ struct _Thread
     HANDLE hThread;
 #endif //_MSC_VER
     rzb_thread_t iThread;       			///< pthread Thread info.
-    struct Mutex * mMutex;  				///< mutex protecting this struct
+    Mutex_t * mMutex;  				///< mutex protecting this struct
     bool bRunning;              			///< true if executing, false if not:  must be managed explicitly by thread function
     void *pUserData;						///< Additional info for the thread
     char *sName;            				///< The thread name
@@ -493,6 +495,42 @@ SO_PUBLIC void
 Thread_Interrupt_pthread(Thread_t *thread)
 {
     pthread_kill(thread->iThread, SIGUSR1);
+}
+
+SO_PUBLIC void
+Thread_SetUserData(Thread_t *thread, void *data)
+{
+    ASSERT(thread != NULL);
+    if (thread == NULL)
+        return;
+
+    Thread_Lock(thread);
+    thread->pUserData = data;
+    Thread_Unlock(thread);
+}
+
+SO_PUBLIC void *
+Thread_GetUserData(Thread_t *thread)
+{
+    void *data;
+    ASSERT(thread != NULL);
+    if (thread == NULL)
+        return NULL;
+
+    Thread_Lock(thread);
+    data = thread->pUserData;
+    Thread_Unlock(thread);
+    return data;
+}
+
+SO_PUBLIC char *
+Thread_GetName(Thread_t *thread)
+{
+    char *name;
+    Thread_Lock(thread);
+    name = thread->sName;
+    Thread_Unlock(thread);
+    return name;
 }
 
 #endif //_MSC_VER

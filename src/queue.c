@@ -4,6 +4,7 @@
 #include <razorback/log.h>
 #include <razorback/messages.h>
 #include <razorback/list.h>
+#include <razorback/lock.h>
 #include <stdio.h>
 #include <string.h>
 #ifdef _MSC_VER
@@ -17,6 +18,7 @@
 #include "runtime_config.h"
 #include "messages/core.h"
 #define MBUF_SIZE 1024
+
 struct StompMessage {
     char * sVerb;
     List_t *headers;

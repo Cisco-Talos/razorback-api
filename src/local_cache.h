@@ -45,7 +45,7 @@ typedef struct _CACHE
     unsigned entries;
     unsigned listSize[LT_NONE];
     double target;
-    struct Mutex * cachemutex;
+    Mutex_t * cachemutex;
     ENTRY *LRU[LT_NONE];
     ENTRY *MRU[LT_NONE];
     ENTRY *entrylist;

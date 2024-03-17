@@ -5,9 +5,9 @@
 #include <razorback/ntlv.h>
 #include <razorback/log.h>
 #include <razorback/uuids.h>
+#include <razorback/list.h>
 
 #include <string.h>
-#include <stdio.h>
 
 
 SO_PUBLIC struct Block *

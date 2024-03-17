@@ -5,6 +5,7 @@
 #define RAZORBACK_FILE_H
 
 #include <razorback/types.h>
+#include <razorback/visibility.h>
 
 #ifdef __cplusplus
 extern "C" {

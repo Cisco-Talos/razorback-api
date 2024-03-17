@@ -5,10 +5,8 @@
 #include <razorback/log.h>
 #include <razorback/hash.h>
 #include <razorback/uuids.h>
-#include <razorback/ntlv.h>
-#include <razorback/metadata.h>
-#include <razorback/block_id.h>
 #include <razorback/event.h>
+#include <razorback/lock.h>
 #include <sys/stat.h>
 
 #include "block_pool_private.h"
@@ -26,7 +24,7 @@ static void BlockPool_Delete(void *a);
 static List_t * sg_bpList;
 static bool sg_bInitDone=false;
 static size_t sg_size;
-static struct Mutex *sg_sizeMutex;
+static Mutex_t *sg_sizeMutex;
 bool
 BlockPool_Init(struct RazorbackContext *context)
 {

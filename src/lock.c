@@ -1,17 +1,66 @@
 #include "config.h"
+#include <razorback/types.h>
 #include <razorback/debug.h>
 #include <razorback/lock.h>
 #include <razorback/log.h>
-#include <razorback/thread.h>
 
-static bool Mutex_Init(struct Mutex *);
-static bool RWLock_Init(struct RWLock *);
+#ifdef _MSC_VER
+#else //_MSC_VER
+#include <pthread.h>
+#include <semaphore.h>
+#endif //_MSC_VER
 
-SO_PUBLIC struct Mutex * 
+
+/** Mutex Control Structure
+ */
+struct _Mutex
+{
+#ifdef _MSC_VER
+    HANDLE recursiveLock;			///< Recursive lock handle (win32)
+	CRITICAL_SECTION cs;			///< None recursive lock handle (win32)
+#else
+    pthread_mutex_t lock;			///< PThreads lock structure.
+    pthread_mutexattr_t attrs;		///< PThreads lock attributes.
+#endif
+    int mode;						///< Lock mode
+};
+
+/** RWLock Control Structure
+ */
+struct _RWLock
+{
+#ifdef _MSC_VER
+    HANDLE recursiveLock;			///< Recursive lock handle (win32)
+	CRITICAL_SECTION cs;			///< None recursive lock handle (win32)
+#else
+    pthread_rwlock_t lock;			///< PThreads lock structure.
+    pthread_rwlockattr_t attrs;		///< PThreads lock attributes.
+#endif
+    int mode;						///< Lock mode
+};
+
+
+
+/** Semaphore Control Structure
+ */
+struct _Semaphore
+{
+#ifdef _MSC_VER
+    HANDLE sem;	///< Semaphore handle (win32)
+#else
+    sem_t sem;	///< PThreads semaphore
+#endif
+};
+
+
+static bool Mutex_Init(Mutex_t *);
+static bool RWLock_Init(RWLock_t *);
+
+SO_PUBLIC Mutex_t *
 Mutex_Create(int mode)
 {
-    struct Mutex *ret;
-    if ((ret = (struct Mutex *)calloc(1,sizeof(struct Mutex))) == NULL)
+    Mutex_t *ret;
+    if ((ret = (Mutex_t *)calloc(1,sizeof(Mutex_t))) == NULL)
         return NULL;
     ret->mode = mode;
     if (!Mutex_Init(ret))
@@ -23,7 +72,7 @@ Mutex_Create(int mode)
 }
 
 SO_PUBLIC bool 
-Mutex_Lock(struct Mutex *mutex)
+Mutex_Lock(Mutex_t *mutex)
 {
     ASSERT(mutex != NULL);
     if (mutex == NULL)
@@ -49,7 +98,7 @@ Mutex_Lock(struct Mutex *mutex)
 }
 
 SO_PUBLIC bool 
-Mutex_Unlock(struct Mutex *mutex)
+Mutex_Unlock(Mutex_t *mutex)
 {
     ASSERT(mutex != NULL);
     if (mutex == NULL) 
@@ -75,7 +124,7 @@ Mutex_Unlock(struct Mutex *mutex)
 }
 
 SO_PUBLIC void 
-Mutex_Destroy(struct Mutex *mutex)
+Mutex_Destroy(Mutex_t *mutex)
 {
     ASSERT(mutex != NULL);
     if (mutex == NULL)
@@ -101,11 +150,11 @@ Mutex_Destroy(struct Mutex *mutex)
 }
 
 
-SO_PUBLIC struct RWLock *
+SO_PUBLIC RWLock_t *
 RWLock_Create()
 {
-    struct RWLock *ret;
-    if ((ret = calloc(1,sizeof(struct RWLock))) == NULL)
+    RWLock_t *ret;
+    if ((ret = calloc(1,sizeof(RWLock_t))) == NULL)
         return NULL;
 
     if (!RWLock_Init(ret))
@@ -117,7 +166,7 @@ RWLock_Create()
 }
 
 SO_PUBLIC bool
-RWLock_ReadLock(struct RWLock *rwlock)
+RWLock_ReadLock(RWLock_t *rwlock)
 {
     ASSERT(rwlock != NULL);
     if (rwlock == NULL)
@@ -142,7 +191,7 @@ RWLock_ReadLock(struct RWLock *rwlock)
     return true;
 }
 SO_PUBLIC bool
-RWLock_WriteLock(struct RWLock *rwlock)
+RWLock_WriteLock(RWLock_t *rwlock)
 {
     ASSERT(rwlock != NULL);
     if (rwlock == NULL)
@@ -168,7 +217,7 @@ RWLock_WriteLock(struct RWLock *rwlock)
 }
 
 SO_PUBLIC bool
-RWLock_Unlock(struct RWLock *rwlock)
+RWLock_Unlock(RWLock_t *rwlock)
 {
     ASSERT(rwlock != NULL);
     if (rwlock == NULL)
@@ -194,7 +243,7 @@ RWLock_Unlock(struct RWLock *rwlock)
 }
 
 SO_PUBLIC void
-RWLock_Destroy(struct RWLock *rwlock)
+RWLock_Destroy(RWLock_t *rwlock)
 {
     ASSERT(rwlock != NULL);
     if (rwlock == NULL)
@@ -220,11 +269,11 @@ RWLock_Destroy(struct RWLock *rwlock)
 }
 
 
-SO_PUBLIC struct Semaphore * 
+SO_PUBLIC Semaphore_t *
 Semaphore_Create(bool shared, unsigned int value)
 {
-    struct Semaphore *ret;
-    if (( ret = (struct Semaphore *)calloc(1,sizeof(struct Semaphore))) == NULL)
+    Semaphore_t *ret;
+    if (( ret = (Semaphore_t *)calloc(1,sizeof(Semaphore_t))) == NULL)
         return NULL;
 #ifdef _MSC_VER
 	ret->sem = CreateSemaphore(NULL,0,LONG_MAX,NULL);
@@ -241,7 +290,7 @@ Semaphore_Create(bool shared, unsigned int value)
 }
 
 SO_PUBLIC bool 
-Semaphore_Post(struct Semaphore *sem)
+Semaphore_Post(Semaphore_t *sem)
 {
     ASSERT(sem != NULL);
     if (sem == NULL)
@@ -256,7 +305,7 @@ Semaphore_Post(struct Semaphore *sem)
 }
 
 SO_PUBLIC bool 
-Semaphore_TimedWait(struct Semaphore *sem)
+Semaphore_TimedWait(Semaphore_t *sem)
 {
     ASSERT(sem != NULL);
     if (sem == NULL)
@@ -272,7 +321,7 @@ Semaphore_TimedWait(struct Semaphore *sem)
 }
 
 SO_PUBLIC bool 
-Semaphore_Wait(struct Semaphore *sem)
+Semaphore_Wait(Semaphore_t *sem)
 {
     ASSERT(sem != NULL);
     if (sem == NULL)
@@ -287,7 +336,7 @@ Semaphore_Wait(struct Semaphore *sem)
 }
 
 SO_PUBLIC void 
-Semaphore_Destroy(struct Semaphore *sem)
+Semaphore_Destroy(Semaphore_t *sem)
 {
     ASSERT(sem != NULL);
     if (sem == NULL)
@@ -303,7 +352,7 @@ Semaphore_Destroy(struct Semaphore *sem)
 
 
 #ifdef _MSC_VER
-static bool Mutex_Init(struct Mutex *mutex)
+static bool Mutex_Init(Mutex_t *mutex)
 {
     ASSERT(mutex != NULL);
     if (mutex == NULL) 
@@ -329,7 +378,7 @@ static bool Mutex_Init(struct Mutex *mutex)
     return true;
 }
 #else //_MSC_VER
-static bool Mutex_Init(struct Mutex *mutex)
+static bool Mutex_Init(Mutex_t *mutex)
 {
     ASSERT(mutex != NULL);
     if (mutex == NULL)
@@ -351,7 +400,7 @@ static bool Mutex_Init(struct Mutex *mutex)
     return true;
 }
 
-static bool RWLock_Init(struct RWLock *rwlock)
+static bool RWLock_Init(RWLock_t *rwlock)
 {
     ASSERT(rwlock != NULL);
     if (rwlock == NULL)

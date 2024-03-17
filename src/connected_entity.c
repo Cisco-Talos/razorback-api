@@ -6,6 +6,7 @@
 #include <razorback/thread.h>
 #include <razorback/timer.h>
 #include <razorback/uuids.h>
+#include <razorback/list.h>
 
 #include <signal.h>
 #include <errno.h>

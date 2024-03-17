@@ -6,6 +6,7 @@
 #include <razorback/block.h>
 #include <razorback/event.h>
 #include <razorback/json_buffer.h>
+#include <razorback/list.h>
 
 
 #include "messages/core.h"

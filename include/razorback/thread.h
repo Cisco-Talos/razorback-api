@@ -22,7 +22,6 @@ extern "C" {
 /** Thread
  * Purpose:	hold the information about a thread
  */
-typedef struct _Thread Thread_t;
 
 /** Create a new thread
  * @param *function The function the thread will execute
@@ -106,6 +105,8 @@ SO_PUBLIC extern int Thread_Cmp(void *a, void *b);
 
 SO_PUBLIC extern void Thread_SetUserData(Thread_t *thread, void *data);
 SO_PUBLIC extern void *Thread_GetUserData(Thread_t *thread);
+
+SO_PUBLIC extern char *Thread_GetName(Thread_t *thread);
 
 #ifdef __cplusplus
 }

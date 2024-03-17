@@ -81,7 +81,7 @@ struct RazorbackContext
     uint32_t iFlags;										///< Context Flags
     uint8_t locality;										///< Nugget Locality
     struct RazorbackCommandAndControlHooks *pCommandHooks;	///< Command And Control Hooks
-    struct Semaphore *regSem;								///< Registration semaphore
+    Semaphore_t *regSem;								///< Registration semaphore
     bool regOk;												///< Registration status
 	void *userData;											///< Context User Data
 

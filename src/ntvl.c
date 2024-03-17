@@ -1,6 +1,7 @@
 #include "config.h"
 
 #include <razorback/debug.h>
+#include <razorback/list.h>
 #include <razorback/ntlv.h>
 #include <razorback/log.h>
 #include <stdlib.h>

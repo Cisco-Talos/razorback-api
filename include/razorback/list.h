@@ -10,6 +10,7 @@
 #include <stdbool.h>
 #include <stdatomic.h>
 #endif //_MSC_VER
+#include <razorback/types.h>
 #include <razorback/visibility.h>
 
 #ifdef __cplusplus
@@ -33,7 +34,6 @@ extern "C" {
 #define LIST_EACH_END       3   ///< Node successfully processed, end to loop
 /// @}
 
-typedef struct _List List_t;
 
 
 /** Create a new List.
