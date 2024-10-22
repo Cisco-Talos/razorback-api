@@ -122,14 +122,16 @@ Block_MetaData_Add_FileName(struct Block *block, const char * fileName)
 {
     uuid_t uuidName;
     uuid_t uuidType;
-    UUID_Get_UUID(NTLV_NAME_FILENAME, UUID_TYPE_NTLV_NAME, uuidName);
-    UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuidType);
-    if (uuidName == NULL || uuidType == NULL) 
+    if (
+        UUID_Get_UUID(NTLV_NAME_FILENAME, UUID_TYPE_NTLV_NAME, uuidName) &&
+        UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuidType) ) {
+        return Block_MetaData_Add(block, uuidName, uuidType, (uint8_t *)fileName, strlen(fileName));
+    }
+    else
     {
         rzb_log(LOG_ERR, "%s: Failed to lookup uuids", __func__);
         return false;
     }
 
-    return Block_MetaData_Add(block, uuidName, uuidType, (uint8_t *)fileName, strlen(fileName));
 }
 
