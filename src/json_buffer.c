@@ -683,7 +683,7 @@ SO_PUBLIC bool JsonBuffer_Put_Hash (json_object * parent, const char * name,
 
 SO_PUBLIC bool JsonBuffer_Get_Hash (json_object * parent, const char *name, struct Hash **p_pHash)
 {
-    struct Hash *hash;
+    struct Hash *hash = NULL;
     json_object *object, *object2;
     const char *type, *data;
 #ifdef _MSC_VER
@@ -727,7 +727,7 @@ SO_PUBLIC bool JsonBuffer_Get_Hash (json_object * parent, const char *name, stru
     else if (strcmp(type, "SHA512") == 0)
         hash = Hash_Create_From_String(HASH_TYPE_SHA512, data);
 
-    if (hash== NULL) {
+    if (hash == NULL) {
         return false;
     }
     *p_pHash = hash;
