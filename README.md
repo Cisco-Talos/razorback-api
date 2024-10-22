@@ -11,7 +11,7 @@
 
 ## Installation Instructions
 
-We recomend running Razorback on Ubuntu LTS.
+We recommend running Razorback on Ubuntu LTS.
 
 ### Quick Install
 
