@@ -151,6 +151,8 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     }
     free(filename);
     free(dir);
+    filename = NULL;
+    dir = NULL;
 
 
 	if ((fd = open(path, O_RDONLY, 0)) != -1)
@@ -164,9 +166,12 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     if (fd == -1)
     {
         rzb_perror ("StoreDataAsFile: Could not open file for writing: %s");
-        free (filename);
+        free (path);
         return TRANSFER_FAIL_LOCAL;
     }
+    free (path);
+    path = NULL;
+
     dataItem = item->pDataHead;
     while (dataItem != NULL)
     {
@@ -177,7 +182,6 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
                 if (writeWrap(fd,data,len) == 0)
                 {
                     rzb_log (LOG_ERR, "%s: Write failed.", __func__);
-                    free (filename);
                     close (fd);
                     return TRANSFER_FAIL_LOCAL;
                 }
@@ -190,7 +194,6 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
             if ((writeWrap (fd, dataItem->data.pointer, dataItem->iLength)) == 0)
             {
                 rzb_log (LOG_ERR, "%s: Write failed.", __func__);
-                free (filename);
                 close (fd);
                 return TRANSFER_FAIL_LOCAL;
             }
@@ -199,8 +202,6 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     }
 
     close (fd);
-
-    free (path);
 
     return TRANSFER_OK;
 
