@@ -13,10 +13,8 @@
 #include <string.h>
 
 static void AlertChild_Destroy (struct Message *message);
-static bool AlertChild_Deserialize_Json(struct Message *message);
-static bool AlertChild_Deserialize(struct Message *message, int mode);
-static bool AlertChild_Serialize_Json(struct Message *message);
-static bool AlertChild_Serialize(struct Message *message, int mode);
+static bool AlertChild_Deserialize(struct Message *message);
+static bool AlertChild_Serialize(struct Message *message);
 
 static struct MessageHandler handler = {
     MESSAGE_TYPE_ALERT_CHILD,
@@ -97,13 +95,15 @@ AlertChild_Destroy (struct Message *message)
 }
 
 static bool
-AlertChild_Deserialize_Json(struct Message *message)
+AlertChild_Deserialize(struct Message *message)
 {
     struct MessageAlertChild *alert;
     json_object *msg;
-
     ASSERT(message != NULL);
-    if (message == NULL)
+    if ( message == NULL )
+        return false;
+
+    if ((message->message = calloc(1,sizeof(struct MessageAlertChild))) == NULL)
         return false;
 
     if ((msg = json_tokener_parse((char *)message->serialized)) == NULL )
@@ -161,40 +161,21 @@ AlertChild_Deserialize_Json(struct Message *message)
     return true;
 }
 
-static bool
-AlertChild_Deserialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    if ((message->message = calloc(1,sizeof(struct MessageAlertChild))) == NULL)
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_JSON:
-        return AlertChild_Deserialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
-}
 
 
 static bool
-AlertChild_Serialize_Json(struct Message *message)
+AlertChild_Serialize(struct Message *message)
 {
     struct MessageAlertChild *alert;
     json_object *msg;
     const char * wire;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if ( message == NULL )
         return false;
 
     alert = message->message;
+    ASSERT(alert != NULL);
 
     if ((msg = json_object_new_object()) == NULL)
         return false;
@@ -256,23 +237,4 @@ AlertChild_Serialize_Json(struct Message *message)
     json_object_put(msg);
 
     return true;
-}
-
-
-static bool
-AlertChild_Serialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_JSON:
-        return AlertChild_Serialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
 }

@@ -8,17 +8,12 @@
 
 
 #include "messages/core.h"
-#include "binary_buffer.h"
 
 #include <string.h>
 
 static void CacheResp_Destroy (struct Message *message);
-static bool CacheResp_Deserialize_Binary(struct Message *message);
-static bool CacheResp_Deserialize_Json(struct Message *message);
-static bool CacheResp_Deserialize(struct Message *message, int mode);
-static bool CacheResp_Serialize_Binary(struct Message *message);
-static bool CacheResp_Serialize_Json(struct Message *message);
-static bool CacheResp_Serialize(struct Message *message, int mode);
+static bool CacheResp_Deserialize(struct Message *message);
+static bool CacheResp_Serialize(struct Message *message);
 
 static struct MessageHandler handler = {
     MESSAGE_TYPE_RESP,
@@ -85,56 +80,9 @@ CacheResp_Destroy (struct Message *message)
     Message_Destroy(message);
 }
 
-static bool
-CacheResp_Deserialize_Binary(struct Message *message)
-{
-    struct BinaryBuffer *buffer;
-    struct MessageCacheResp *submit;
-
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-    
-    if ((buffer = BinaryBuffer_CreateFromMessage(message)) == NULL)
-        return false;
-    
-    submit = message->message;
-
-    if (!BinaryBuffer_Get_BlockId (buffer, &submit->pId))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of BinaryBuffer_Get_BlockId", __func__);
-        return false;
-    }
-
-    if (!BinaryBuffer_Get_uint32_t (buffer, &submit->iSfFlags))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of BinaryBuffer_Get_uint32_t", __func__);
-        return false;
-    }
-    if (!BinaryBuffer_Get_uint32_t (buffer, &submit->iEntFlags))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-    
-                "%s: failed due to failure of BinaryBuffer_Get_uint32_t", __func__);
-        return false;
-    }
-
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy (buffer);
-
-    return true;
-}
 
 static bool
-CacheResp_Deserialize_Json(struct Message *message)
+CacheResp_Deserialize(struct Message *message)
 {
     struct MessageCacheResp *submit;
     json_object *msg;
@@ -143,7 +91,10 @@ CacheResp_Deserialize_Json(struct Message *message)
     if (message == NULL)
         return false;
 
-   if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageCacheResp))) == NULL)
+        return false;
+
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
         return false;
 
     submit = message->message;
@@ -175,78 +126,9 @@ CacheResp_Deserialize_Json(struct Message *message)
     return true;
 }
 
-static bool
-CacheResp_Deserialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    if ((message->message = calloc(1,sizeof(struct MessageCacheResp))) == NULL)
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return CacheResp_Deserialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return CacheResp_Deserialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
-}
-
 
 static bool
-CacheResp_Serialize_Binary(struct Message *message)
-{
-    struct MessageCacheResp *submit;
-    struct BinaryBuffer *buffer;
-
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-
-    submit = message->message;
-
-    message->length = BlockId_BinaryLength (submit->pId) +
-                  (sizeof(uint32_t)*2);
-
-    if ((buffer = BinaryBuffer_Create(message->length)) == NULL)
-        return false;
-
-    if (!BinaryBuffer_Put_BlockId (buffer, submit->pId))
-    {
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of BinaryBuffer_Put_BlockId", __func__);
-        return false;
-    }
-    if (!BinaryBuffer_Put_uint32_t (buffer, submit->iSfFlags))
-    {
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of BinaryBuffer_Put_uint32_t", __func__);
-        return false;
-    }
-    if (!BinaryBuffer_Put_uint32_t (buffer, submit->iEntFlags))
-    {
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of BinaryBuffer_Put_uint32_t", __func__);
-        return false;
-    }
-
-    message->serialized = buffer->pBuffer;
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy(buffer);
-    return true;
-}
-
-static bool
-CacheResp_Serialize_Json(struct Message *message)
+CacheResp_Serialize(struct Message *message)
 {
     struct MessageCacheResp *submit;
     json_object *msg;
@@ -290,24 +172,4 @@ CacheResp_Serialize_Json(struct Message *message)
     json_object_put(msg);
 
     return true;
-}
-
-static bool
-CacheResp_Serialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return CacheResp_Serialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return CacheResp_Serialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
 }

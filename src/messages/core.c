@@ -268,22 +268,13 @@ Message_Create_Broadcast(uint32_t type, uint32_t version,
 }
 
 SO_PUBLIC bool
-Message_Serialize_Empty(struct Message *message, int mode)
+Message_Serialize_Empty(struct Message *message)
 {
     ASSERT(message != NULL);
     if ( message == NULL )
         return false;
 
 
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-    case MESSAGE_MODE_JSON:
-        break;
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid serialization mode", __func__);
-        return false;
-    }
     if ((message->serialized = calloc(2, sizeof(char))) == NULL)
         return false;
 
@@ -295,22 +286,13 @@ Message_Serialize_Empty(struct Message *message, int mode)
 }
 
 SO_PUBLIC bool
-Message_Deserialize_Empty(struct Message *message, int mode)
+Message_Deserialize_Empty(struct Message *message)
 {
     ASSERT(message != NULL);
     if ( message == NULL )
         return false;
 
 
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-    case MESSAGE_MODE_JSON:
-        return true;
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid serialization mode", __func__);
-        return false;
-    }
     return false;
 }
 

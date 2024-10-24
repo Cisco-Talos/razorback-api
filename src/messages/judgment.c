@@ -7,17 +7,12 @@
 #include <razorback/json_buffer.h>
 
 #include "messages/core.h"
-#include "binary_buffer.h"
 
 #include <string.h>
 
 static void JudgmentSubmission_Destroy (struct Message *message);
-static bool JudgmentSubmission_Deserialize_Binary(struct Message *message);
-static bool JudgmentSubmission_Deserialize_Json(struct Message *message);
-static bool JudgmentSubmission_Deserialize(struct Message *message, int mode);
-static bool JudgmentSubmission_Serialize_Binary(struct Message *message);
-static bool JudgmentSubmission_Serialize_Json(struct Message *message);
-static bool JudgmentSubmission_Serialize(struct Message *message, int mode);
+static bool JudgmentSubmission_Deserialize(struct Message *message);
+static bool JudgmentSubmission_Serialize(struct Message *message);
 
 static struct MessageHandler handler = {
     MESSAGE_TYPE_JUDGMENT,
@@ -77,40 +72,7 @@ JudgmentSubmission_Destroy (struct Message
 }
 
 static bool
-JudgmentSubmission_Deserialize_Binary(struct Message *message)
-{
-    struct BinaryBuffer *buffer;
-    struct MessageJudgmentSubmission *submit;
-
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-    
-    if ((buffer = BinaryBuffer_CreateFromMessage(message)) == NULL)
-        return false;
-    
-    submit = message->message;
-
-    if (!BinaryBuffer_Get_uint8_t (buffer, &submit->iReason))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Get_Judgment (buffer, &submit->pJudgment))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy (buffer);
-
-    return true;
-}
-
-static bool
-JudgmentSubmission_Deserialize_Json(struct Message *message)
+JudgmentSubmission_Deserialize(struct Message *message)
 {
     struct MessageJudgmentSubmission *submit;
     json_object *msg;
@@ -118,7 +80,10 @@ JudgmentSubmission_Deserialize_Json(struct Message *message)
     ASSERT(message != NULL);
     if (message == NULL)
         return false;
-    
+
+    if ((message->message = calloc(1,sizeof(struct MessageJudgmentSubmission))) == NULL)
+        return false;
+
     if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
         return false;
     
@@ -140,66 +105,7 @@ JudgmentSubmission_Deserialize_Json(struct Message *message)
 }
 
 static bool
-JudgmentSubmission_Deserialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    if ((message->message = calloc(1,sizeof(struct MessageJudgmentSubmission))) == NULL)
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return JudgmentSubmission_Deserialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return JudgmentSubmission_Deserialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
-}
-
-
-static bool
-JudgmentSubmission_Serialize_Binary(struct Message *message)
-{
-    struct MessageJudgmentSubmission *submit;
-    struct BinaryBuffer *buffer;
-
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-
-    submit = message->message;
-
-    message->length = (uint32_t) sizeof (submit->iReason) +
-            Judgment_BinaryLength(submit->pJudgment);
-
-    if ((buffer = BinaryBuffer_Create(message->length)) == NULL)
-        return false;
-
-    if (!BinaryBuffer_Put_uint8_t (buffer, submit->iReason))
-    {
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Put_Judgment (buffer, submit->pJudgment))
-    {
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-
-    message->serialized = buffer->pBuffer;
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy(buffer);
-    return true;
-}
-
-static bool
-JudgmentSubmission_Serialize_Json(struct Message *message)
+JudgmentSubmission_Serialize(struct Message *message)
 {
     struct MessageJudgmentSubmission *submit;
     json_object *msg;
@@ -237,26 +143,3 @@ JudgmentSubmission_Serialize_Json(struct Message *message)
 
     return true;
 }
-
-
-
-static bool
-JudgmentSubmission_Serialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return JudgmentSubmission_Serialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return JudgmentSubmission_Serialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
-}
-

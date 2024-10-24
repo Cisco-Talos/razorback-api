@@ -14,10 +14,8 @@
 #include <string.h>
 
 static void OutputInspection_Destroy (struct Message *message);
-static bool OutputInspection_Deserialize_Json(struct Message *message);
-static bool OutputInspection_Deserialize(struct Message *message, int mode);
-static bool OutputInspection_Serialize_Json(struct Message *message);
-static bool OutputInspection_Serialize(struct Message *message, int mode);
+static bool OutputInspection_Deserialize(struct Message *message);
+static bool OutputInspection_Serialize(struct Message *message);
 
 static struct MessageHandler handler = {
     MESSAGE_TYPE_OUTPUT_INSPECTION,
@@ -93,13 +91,16 @@ OutputInspection_Destroy (struct Message *message)
 }
 
 static bool
-OutputInspection_Deserialize_Json(struct Message *message)
+OutputInspection_Deserialize(struct Message *message)
 {
     struct MessageOutputInspection *event;
     json_object *msg;
 
     ASSERT(message != NULL);
     if (message == NULL)
+        return false;
+
+    if ((message->message = calloc(1,sizeof(struct MessageOutputInspection))) == NULL)
         return false;
 
     if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
@@ -148,29 +149,7 @@ OutputInspection_Deserialize_Json(struct Message *message)
 }
 
 static bool
-OutputInspection_Deserialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    if ((message->message = calloc(1,sizeof(struct MessageOutputInspection))) == NULL)
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_JSON:
-        return OutputInspection_Deserialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
-}
-
-
-static bool
-OutputInspection_Serialize_Json(struct Message *message)
+OutputInspection_Serialize(struct Message *message)
 {
     struct MessageOutputInspection *event;
     json_object *msg;
@@ -227,23 +206,4 @@ OutputInspection_Serialize_Json(struct Message *message)
     json_object_put(msg);
 
     return true;
-}
-
-
-static bool
-OutputInspection_Serialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_JSON:
-        return OutputInspection_Serialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
 }

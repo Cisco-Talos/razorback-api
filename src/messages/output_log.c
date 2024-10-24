@@ -13,10 +13,8 @@
 #include <string.h>
 
 static void OutputLog_Destroy (struct Message *message);
-static bool OutputLog_Deserialize_Json(struct Message *message);
-static bool OutputLog_Deserialize(struct Message *message, int mode);
-static bool OutputLog_Serialize_Json(struct Message *message);
-static bool OutputLog_Serialize(struct Message *message, int mode);
+static bool OutputLog_Deserialize(struct Message *message);
+static bool OutputLog_Serialize(struct Message *message);
 
 static struct MessageHandler handler = {
     MESSAGE_TYPE_OUTPUT_LOG,
@@ -87,13 +85,16 @@ OutputLog_Destroy (struct Message *message)
 }
 
 static bool
-OutputLog_Deserialize_Json(struct Message *message)
+OutputLog_Deserialize(struct Message *message)
 {
     struct MessageOutputLog *log;
     json_object *msg;
 
     ASSERT(message != NULL);
     if (message == NULL)
+        return false;
+
+    if ((message->message = calloc(1,sizeof(struct MessageOutputLog))) == NULL)
         return false;
 
     if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
@@ -140,29 +141,7 @@ OutputLog_Deserialize_Json(struct Message *message)
 }
 
 static bool
-OutputLog_Deserialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    if ((message->message = calloc(1,sizeof(struct MessageOutputLog))) == NULL)
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_JSON:
-        return OutputLog_Deserialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
-}
-
-
-static bool
-OutputLog_Serialize_Json(struct Message *message)
+OutputLog_Serialize(struct Message *message)
 {
     struct MessageOutputLog *log;
     json_object *msg;
@@ -222,23 +201,4 @@ OutputLog_Serialize_Json(struct Message *message)
     json_object_put(msg);
 
     return true;
-}
-
-
-static bool
-OutputLog_Serialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_JSON:
-        return OutputLog_Serialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
 }

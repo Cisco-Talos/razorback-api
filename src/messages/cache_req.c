@@ -7,17 +7,12 @@
 #include <razorback/json_buffer.h>
 
 #include "messages/core.h"
-#include "binary_buffer.h"
 
 #include <string.h>
 
 static void CacheReq_Destroy (struct Message *message);
-static bool CacheReq_Deserialize_Binary(struct Message *message);
-static bool CacheReq_Deserialize_Json(struct Message *message);
-static bool CacheReq_Deserialize(struct Message *message, int mode);
-static bool CacheReq_Serialize_Binary(struct Message *message);
-static bool CacheReq_Serialize_Json(struct Message *message);
-static bool CacheReq_Serialize(struct Message *message, int mode);
+static bool CacheReq_Deserialize(struct Message *message);
+static bool CacheReq_Serialize(struct Message *message);
 
 static struct MessageHandler handler = {
     MESSAGE_TYPE_REQ,
@@ -84,53 +79,18 @@ CacheReq_Destroy (struct Message *message)
 }
 
 static bool
-CacheReq_Deserialize_Binary(struct Message *message)
-{
-    struct BinaryBuffer *buffer;
-    struct MessageCacheReq *submit;
-
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-    
-    if ((buffer = BinaryBuffer_CreateFromMessage(message)) == NULL)
-        return false;
-    
-    submit = message->message;
-
-    if (!BinaryBuffer_Get_UUID (buffer, submit->uuidRequestor))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of BinaryBuffer_Get_UUID", __func__);
-        return false;
-    }
-    if (!BinaryBuffer_Get_BlockId (buffer, &submit->pId))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of BinaryBuffer_GetBlockId", __func__);
-        return false;
-    }
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy (buffer);
-
-    return true;
-}
-
-static bool
-CacheReq_Deserialize_Json(struct Message *message)
+CacheReq_Deserialize(struct Message *message)
 {
     struct MessageCacheReq *submit;
     json_object *msg;
 
-
     ASSERT(message != NULL);
     if (message == NULL)
         return false;
-    
+
+    if ((message->message = calloc(1,sizeof(struct MessageCacheReq))) == NULL)
+        return false;
+
     if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
         return false;
  
@@ -155,72 +115,9 @@ CacheReq_Deserialize_Json(struct Message *message)
     return true;
 }
 
-static bool
-CacheReq_Deserialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    if ((message->message = calloc(1,sizeof(struct MessageCacheReq))) == NULL)
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return CacheReq_Deserialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return CacheReq_Deserialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
-}
-
 
 static bool
-CacheReq_Serialize_Binary(struct Message *message)
-{
-    struct MessageCacheReq *submit;
-    struct BinaryBuffer *buffer;
-
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-
-    submit = message->message;
-
-    message->length = (uint32_t) sizeof (submit->uuidRequestor) +
-                  BlockId_BinaryLength (submit->pId);
-
-    if ((buffer = BinaryBuffer_Create(message->length)) == NULL)
-        return false;
-
-    if (!BinaryBuffer_Put_UUID (buffer, submit->uuidRequestor))
-    {
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of BinaryBuffer_Put_UUID", __func__);
-        return false;
-    }
-
-    if (!BinaryBuffer_Put_BlockId (buffer, submit->pId))
-    {
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of BinaryBuffer_Put_BlockId", __func__);
-        return false;
-    }
-
-    message->serialized = buffer->pBuffer;
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy(buffer);
-    return true;
-}
-
-static bool
-CacheReq_Serialize_Json(struct Message *message)
+CacheReq_Serialize(struct Message *message)
 {
     struct MessageCacheReq *submit;
     json_object *msg;
@@ -261,24 +158,4 @@ CacheReq_Serialize_Json(struct Message *message)
     json_object_put(msg);
 
     return true;
-}
-
-static bool
-CacheReq_Serialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return CacheReq_Serialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return CacheReq_Serialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
 }

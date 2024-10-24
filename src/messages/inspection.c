@@ -10,17 +10,12 @@
 
 
 #include "messages/core.h"
-#include "binary_buffer.h"
 
 #include <string.h>
 
 static void InspectionSubmission_Destroy (struct Message *message);
-static bool InspectionSubmission_Deserialize_Binary(struct Message *message);
-static bool InspectionSubmission_Deserialize_Json(struct Message *message);
-static bool InspectionSubmission_Deserialize(struct Message *message, int mode);
-static bool InspectionSubmission_Serialize_Binary(struct Message *message);
-static bool InspectionSubmission_Serialize_Json(struct Message *message);
-static bool InspectionSubmission_Serialize(struct Message *message, int mode);
+static bool InspectionSubmission_Deserialize(struct Message *message);
+static bool InspectionSubmission_Serialize(struct Message *message);
 
 static struct MessageHandler handler = {
     MESSAGE_TYPE_INSPECTION,
@@ -118,73 +113,7 @@ InspectionSubmission_Destroy (struct Message
 }
 
 static bool
-InspectionSubmission_Deserialize_Binary(struct Message *message)
-{
-    struct BinaryBuffer *buffer;
-    struct MessageInspectionSubmission *submit;
-	uint32_t i;
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-    
-    if ((buffer = BinaryBuffer_CreateFromMessage(message)) == NULL)
-        return false;
-    
-    submit = (struct MessageInspectionSubmission *)message->message;
-
-    if (!BinaryBuffer_Get_uint32_t (buffer, &submit->iReason))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Get_EventId (buffer, &submit->eventId))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Get_NTLVList (buffer, &submit->pEventMetadata))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    
-    if (!BinaryBuffer_Get_Block (buffer, &submit->pBlock))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Get_uint32_t (buffer, &submit->localityCount))
-    {
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    if (submit->localityCount > 0)
-        if ((submit->localityList = calloc(submit->localityCount, sizeof(uint8_t))) == NULL)
-        {
-            BinaryBuffer_Destroy (buffer);
-            return false;
-        }
-
-    for (i = 0; i < submit->localityCount; i++)
-    {
-        if (!BinaryBuffer_Get_uint8_t (buffer, &(submit->localityList[i])))
-        {
-            BinaryBuffer_Destroy (buffer);
-            return false;
-        }
-    }
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy (buffer);
-
-    return true;
-}
-
-static bool
-InspectionSubmission_Deserialize_Json(struct Message *message)
+InspectionSubmission_Deserialize(struct Message *message)
 {
     struct MessageInspectionSubmission *submit;
     json_object *msg;
@@ -192,6 +121,10 @@ InspectionSubmission_Deserialize_Json(struct Message *message)
     ASSERT(message != NULL);
     if (message == NULL)
         return false;
+
+    if ((message->message = calloc(1,sizeof(struct MessageInspectionSubmission))) == NULL)
+        return false;
+
     
     if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
         return false;
@@ -229,95 +162,7 @@ InspectionSubmission_Deserialize_Json(struct Message *message)
 }
 
 static bool
-InspectionSubmission_Deserialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    if ((message->message = calloc(1,sizeof(struct MessageInspectionSubmission))) == NULL)
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return InspectionSubmission_Deserialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return InspectionSubmission_Deserialize_Json(message);
-        break;
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
-}
-
-
-static bool
-InspectionSubmission_Serialize_Binary(struct Message *message)
-{
-    struct MessageInspectionSubmission *submit;
-    struct BinaryBuffer *buffer;
-	uint32_t i;
-
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-
-    submit = (struct MessageInspectionSubmission *)message->message;
-
-    message->length = Block_BinaryLength (submit->pBlock) +
-            NTLVList_Size (submit->pEventMetadata) +
-            sizeof(struct EventId) + //Source nugget ID
-            (uint32_t) sizeof (submit->iReason) +
-            sizeof(uint32_t) + submit->localityCount;
-
-
-    if ((buffer = BinaryBuffer_Create(message->length)) == NULL)
-        return false;
-
-    if (!BinaryBuffer_Put_uint32_t (buffer, submit->iReason))
-    {
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Put_EventId (buffer, submit->eventId))
-    {
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Put_NTLVList (buffer, submit->pEventMetadata))
-    {
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-
-    if (!BinaryBuffer_Put_Block (buffer, submit->pBlock))
-    {
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Put_uint32_t (buffer, submit->localityCount))
-    {
-        BinaryBuffer_Destroy (buffer);
-        return false;
-    }
-    for (i = 0; i < submit->localityCount; i++)
-    {
-        if (!BinaryBuffer_Put_uint8_t (buffer, submit->localityList[i]))
-        {
-            BinaryBuffer_Destroy (buffer);
-            return false;
-        }
-    }
-    message->serialized = buffer->pBuffer;
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy(buffer);
-    return true;
-}
-
-static bool
-InspectionSubmission_Serialize_Json(struct Message *message)
+InspectionSubmission_Serialize(struct Message *message)
 {
     struct MessageInspectionSubmission *submit;
     json_object *msg;
@@ -370,24 +215,4 @@ InspectionSubmission_Serialize_Json(struct Message *message)
     strcpy((char *)message->serialized, wire); 
     json_object_put(msg);
     return true;
-}
-
-static bool
-InspectionSubmission_Serialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return InspectionSubmission_Serialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return InspectionSubmission_Serialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
 }
