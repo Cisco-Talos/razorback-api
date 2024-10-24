@@ -31,7 +31,7 @@ struct ThreadPoolItem
 struct ThreadPool
 {
     size_t limit;                           ///< Maximum number of threads
-    int nextId;                             ///< Id of the next thread
+    atomic_int nextId;                             ///< Id of the next thread
     struct RazorbackContext *context;       ///< Context to spawn threads in
     void (*mainFunction) (Thread_t *); ///< Main function for spawned threads
     const char *namePattern;                ///< Name pattern for threads
