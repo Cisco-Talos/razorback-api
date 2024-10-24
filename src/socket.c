@@ -103,10 +103,13 @@ SocketAddress_Initialize (struct Socket *sock,
     aiHints.ai_flags = AI_PASSIVE | AI_NUMERICSERV;
 
 	aiHints.ai_protocol = IPPROTO_TCP;
-        
-    if ((ret = getaddrinfo
-        ((const char *) address, portAsString,
-         &aiHints, &sock->pAddressInfo)) != 0)
+    ret = getaddrinfo(
+            (const char *) address,
+            portAsString,
+            &aiHints,
+            &sock->pAddressInfo);
+
+    if (ret != 0)
     {
 
 #ifdef _MSC_VER
