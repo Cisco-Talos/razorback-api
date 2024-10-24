@@ -7,17 +7,12 @@
 
 #include "messages/core.h"
 #include "messages/cnc/core.h"
-#include "binary_buffer.h"
 
 #include <string.h>
 
-static bool Error_Deserialize_Json(struct Message *message);
-static bool Error_Deserialize_Binary(struct Message *message);
-static bool Error_Deserialize(struct Message *message, int mode);
+static bool Error_Deserialize(struct Message *message);
 static void Error_Destroy (struct Message *message);
-static bool Error_Serialize_Json(struct Message *message);
-static bool Error_Serialize_Binary(struct Message *message);
-static bool Error_Serialize(struct Message *message, int mode);
+static bool Error_Serialize(struct Message *message);
 
 static struct MessageHandler reg_handler = {
     MESSAGE_TYPE_REG_ERR,
@@ -87,7 +82,7 @@ Error_Destroy (struct Message *msg)
 }
 
 bool
-Error_Deserialize_Json(struct Message *message)
+Error_Deserialize(struct Message *message)
 {
     json_object *msg;
     struct MessageError *error;
@@ -95,7 +90,10 @@ Error_Deserialize_Json(struct Message *message)
     ASSERT(message != NULL);
     if (message == NULL)
         return false;
-    
+
+    if ((message->message = calloc(1,sizeof(struct MessageError))) == NULL)
+        return false;
+
     if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
         return false;
     
@@ -105,66 +103,16 @@ Error_Deserialize_Json(struct Message *message)
     {
         json_object_put(msg);
         rzb_log (LOG_ERR,
-                 "%s: ( TERM ) failed due to failure of BinaryBuffer_Get_String", __func__);
+                 "%s: ( TERM ) failed due to failure of JsonBuffer_Get_String", __func__);
         return false;
     }
     json_object_put(msg);
     return true;
 }
 
-bool
-Error_Deserialize_Binary(struct Message *message)
-{
-    struct BinaryBuffer *buffer;
-    struct MessageError *error;
-    
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-    
-    if ((buffer = BinaryBuffer_CreateFromMessage(message)) == NULL)
-        return false;
-    
-    error = message->message;
-
-    if ((error->sMessage = BinaryBuffer_Get_String (buffer)) == NULL)
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-                 "%s: ( TERM ) failed due to failure of BinaryBuffer_Get_String", __func__);
-        return false;
-    }
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy (buffer);
-    return true;
-}
 
 static bool
-Error_Deserialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    if ((message->message = calloc(1,sizeof(struct MessageError))) == NULL)
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return Error_Deserialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return Error_Deserialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
-}
-
-static bool
-Error_Serialize_Json(struct Message *message)
+Error_Serialize(struct Message *message)
 {
     struct MessageError *error;
     json_object *msg;
@@ -184,7 +132,7 @@ Error_Serialize_Json(struct Message *message)
     {
         json_object_put(msg);
         rzb_log (LOG_ERR,
-                 "%s: ( TERM ) failed due to failure of BinaryBuffer_Put_String", __func__);
+                 "%s: ( TERM ) failed due to failure of JsonBuffer_Put_String", __func__);
         return false;
     }
 
@@ -201,59 +149,4 @@ Error_Serialize_Json(struct Message *message)
 
 
     return true;
-}
-
-static bool
-Error_Serialize_Binary(struct Message *message)
-{
-    struct MessageError *error;
-    struct BinaryBuffer *buffer;
-
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-
-    error = message->message;
-
-    message->length = strlen((const char *)error->sMessage) +1;
-
-    if ((buffer = BinaryBuffer_Create(message->length)) == NULL)
-        return false;
-
-    if (!BinaryBuffer_Put_String
-        (buffer, error->sMessage))
-    {
-        BinaryBuffer_Destroy (buffer);
-        rzb_log (LOG_ERR,
-                 "%s: ( TERM ) failed due to failure of BinaryBuffer_Put_String", __func__);
-        return false;
-    }
-
-
-
-    message->serialized = buffer->pBuffer;
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy(buffer);
-    return true;
-}
-
-
-static bool
-Error_Serialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return Error_Serialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return Error_Serialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
 }

@@ -11,17 +11,12 @@
 #include "messages/core.h"
 #include "messages/cnc/core.h"
 
-#include "binary_buffer.h"
 
 #include <string.h>
 
-static bool ConfigUpdate_Deserialize_Json(struct Message *message);
-static bool ConfigUpdate_Deserialize_Binary(struct Message *message);
-static bool ConfigUpdate_Deserialize(struct Message *message, int mode);
+static bool ConfigUpdate_Deserialize(struct Message *message);
 static void ConfigUpdate_Destroy (struct Message *message);
-static bool ConfigUpdate_Serialize_Json(struct Message *message);
-static bool ConfigUpdate_Serialize_Binary(struct Message *message);
-static bool ConfigUpdate_Serialize(struct Message *message, int mode);
+static bool ConfigUpdate_Serialize(struct Message *message);
 
 static struct MessageHandler handler = {
     MESSAGE_TYPE_CONFIG_UPDATE,
@@ -89,46 +84,7 @@ ConfigUpdate_Destroy (struct Message *msg)
 }
 
 static bool
-ConfigUpdate_Deserialize_Binary(struct Message *message)
-{
-    struct BinaryBuffer *buffer;
-    struct MessageConfigurationUpdate *configUpdate;
-
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-    
-    if ((buffer = BinaryBuffer_CreateFromMessage(message)) == NULL)
-        return false;
-    
-    configUpdate = message->message;
-    if (!BinaryBuffer_Get_UUIDList(buffer, &configUpdate->ntlvTypes))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy(buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Get_UUIDList(buffer, &configUpdate->ntlvNames))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy(buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Get_UUIDList(buffer, &configUpdate->dataTypes))
-    {
-        buffer->pBuffer = NULL;
-        BinaryBuffer_Destroy(buffer);
-        return false;
-    }
-
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy (buffer);
-
-    return true;
-}
-
-static bool
-ConfigUpdate_Deserialize_Json(struct Message *message)
+ConfigUpdate_Deserialize(struct Message *message)
 {
     struct MessageConfigurationUpdate *configUpdate;
     json_object *msg;
@@ -136,7 +92,10 @@ ConfigUpdate_Deserialize_Json(struct Message *message)
     ASSERT(message != NULL);
     if (message == NULL)
         return false;
-    
+
+    if ((message->message = calloc(1,sizeof(struct MessageConfigurationUpdate))) == NULL)
+        return false;
+
     if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
         return false;
     
@@ -164,72 +123,7 @@ ConfigUpdate_Deserialize_Json(struct Message *message)
 }
 
 static bool
-ConfigUpdate_Deserialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    if ((message->message = calloc(1,sizeof(struct MessageConfigurationUpdate))) == NULL)
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return ConfigUpdate_Deserialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return ConfigUpdate_Deserialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
-}
-
-static bool
-ConfigUpdate_Serialize_Binary(struct Message *message)
-{
-    struct MessageConfigurationUpdate *configUpdate;
-    struct BinaryBuffer *buffer;
-
-    ASSERT(message != NULL);
-    if (message == NULL)
-        return false;
-
-    configUpdate = message->message;
-
-    message->length = (sizeof(uint32_t) * 6 )+
-        UUIDList_BinarySize(configUpdate->ntlvTypes) +
-        UUIDList_BinarySize(configUpdate->ntlvNames) +
-        UUIDList_BinarySize(configUpdate->dataTypes);
-
-    if ((buffer = BinaryBuffer_Create(message->length)) == NULL)
-        return false;
-
-    if (!BinaryBuffer_Put_UUIDList(buffer, configUpdate->ntlvTypes))
-    {
-        BinaryBuffer_Destroy(buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Put_UUIDList(buffer, configUpdate->ntlvNames))
-    {
-        BinaryBuffer_Destroy(buffer);
-        return false;
-    }
-    if (!BinaryBuffer_Put_UUIDList(buffer, configUpdate->dataTypes))
-    {
-        BinaryBuffer_Destroy(buffer);
-        return false;
-    }
-
-    message->serialized = buffer->pBuffer;
-    buffer->pBuffer = NULL;
-    BinaryBuffer_Destroy(buffer);
-    return true;
-}
-
-static bool
-ConfigUpdate_Serialize_Json(struct Message *message)
+ConfigUpdate_Serialize(struct Message *message)
 {
     struct MessageConfigurationUpdate *configUpdate;
     const char * wire;
@@ -272,24 +166,4 @@ ConfigUpdate_Serialize_Json(struct Message *message)
     json_object_put(msg);
 
     return true;
-}
-
-static bool
-ConfigUpdate_Serialize(struct Message *message, int mode)
-{
-    ASSERT(message != NULL);
-    if ( message == NULL )
-        return false;
-
-    switch (mode)
-    {
-    case MESSAGE_MODE_BIN:
-        return ConfigUpdate_Serialize_Binary(message);
-    case MESSAGE_MODE_JSON:
-        return ConfigUpdate_Serialize_Json(message);
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid deserialization mode", __func__);
-        return false;
-    }
-    return false;
 }
