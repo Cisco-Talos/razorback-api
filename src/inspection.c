@@ -119,6 +119,7 @@ Inspection_Thread (Thread_t *p_pThread)
                 rzb_log(LOG_ERR, "%s: Marking dispatcher unusable", __func__);
                 ConnectedEntityList_MarkDispatcherUnusable(dispatcher->uuidNuggetId);
             }
+            ConnectedEntity_Destroy(dispatcher);
             if (transfered == TRANSFER_OK)
                 break;
             else
