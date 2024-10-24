@@ -7,7 +7,6 @@
 #include <razorback/log.h>
 #include <razorback/api.h>
 #include <errno.h>
-#include "binary_buffer.h"
 
 /** Globals
 */
@@ -17,7 +16,7 @@ static bool sg_bResponseInitialized = false;
 static void
 ResponseQueue_GetQueueName (uuid_t p_pCollectorId, char * p_sQueueName)
 {
-    Queue_GetQueueName ("/topic/RESPONSE", p_pCollectorId,
+    Queue_GetQueueName ("/queue/RESPONSE", p_pCollectorId,
                         p_sQueueName);
 }
 
@@ -46,7 +45,7 @@ ResponseQueue_Initialize (uuid_t p_pCollectorId, int p_iFlags)
         return l_pQueue;
 
     // initialize the queue
-    if ((l_pQueue = Queue_Create (l_sQueueName, p_iFlags, Razorback_Get_Message_Mode())) == NULL)
+    if ((l_pQueue = Queue_Create (l_sQueueName, p_iFlags)) == NULL)
     {
         rzb_log (LOG_ERR,
                  "%s: failed due to failure of Queue_Initialize", __func__);

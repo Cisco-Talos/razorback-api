@@ -31,7 +31,6 @@ struct Queue
     struct Socket *pWriteSocket;   ///< Write socket
     char *sName;                   ///< Queue name
     int iFlags;                    ///< Flags (read/write/etc)
-    int mode;                      ///< Message processing mode (Binary/JSON)
     Mutex_t *mReadMutex;      ///< Read Lock
     Mutex_t *mWriteMutex;     ///< Write lock
     char *sHostname;               ///< Broker hostname
@@ -50,16 +49,14 @@ struct Queue
  * This method connects to the message broker provided in the API configuration file.
  * @param *p_sQueueName the name of the queue
  * @param *p_iFlags Flags for the connection (read/write mode, etc)
- * @param mode Message processing mode (BINARY/JSON/etc)
  * @return a pointer to a new Queue Struct or NULL on error.
  */
 SO_PUBLIC extern struct Queue *Queue_Create (const char * p_sQueueName,
-                                       int p_iFlags, int mode);
+                                       int p_iFlags);
 /** Initializes the queue
  * This method allows connections to other external message brokers if required.
  * @param *p_sQueueName the name of the queue
  * @param *p_iFlags Flags for the connection (read/write mode, etc)
- * @param mode Message processing mode (BINARY/JSON/etc)
  * @param *p_sHost Host name of the broker
  * @param p_iPort Port number to connect to
  * @param *p_sUser User name to connect to the broker with
@@ -70,7 +67,6 @@ SO_PUBLIC extern struct Queue *Queue_Create (const char * p_sQueueName,
 SO_PUBLIC extern struct Queue *Queue_Create_With_Host (
     const char * p_sQueueName,
     int p_iFlags,
-    int mode,
     const char * p_sHost,
     uint32_t p_iPort,
     const char * p_sUser,

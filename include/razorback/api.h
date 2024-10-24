@@ -180,10 +180,6 @@ SO_PUBLIC extern bool Razorback_Render_Verdict (struct Judgment *p_pJudgment);
 SO_PUBLIC extern bool
 Razorback_Output_Launch (struct RazorbackContext *context, struct RazorbackOutputHooks *hooks);
 
-/** Get the configured messaging mode.
- * @return Message mode.
- */
-SO_PUBLIC extern int Razorback_Get_Message_Mode();
 
 /** Get the transfer server protocol
  * @return The password.

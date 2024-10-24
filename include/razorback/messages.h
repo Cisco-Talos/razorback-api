@@ -95,10 +95,10 @@ extern "C" {
  */
 struct MessageHandler
 {
-    uint32_t type;											///< Message type code
-    bool (*serialize)(struct Message *msg, int mode);		///< Serialization function pointer
-    bool (*deserialize)(struct Message *msg, int mode);		///< Deserialization function pointer
-    void (*destroy)(struct Message *msg);					///< Destructor function pointer
+    uint32_t type;                            ///< Message type code
+    bool (*serialize)(struct Message *msg);   ///< Serialization function pointer
+    bool (*deserialize)(struct Message *msg); ///< Deserialization function pointer
+    void (*destroy)(struct Message *msg);     ///< Destructor function pointer
 };
 
 /** Create a list for storing message headers
@@ -133,14 +133,14 @@ SO_PUBLIC extern bool Message_Get_Nuggets(struct Message *message, uuid_t source
  * @param mode Messaging mode.
  * @return true on success, false on failure.
  */
-SO_PUBLIC extern bool Message_Deserialize_Empty(struct Message *message, int mode);
+SO_PUBLIC extern bool Message_Deserialize_Empty(struct Message *message);
 
 /** Deserialize an empty message
  * @param message The message
  * @param mode Messaging mode.
  * @return true on success, false on failure.
  */
-SO_PUBLIC extern bool Message_Serialize_Empty(struct Message *message, int mode);
+SO_PUBLIC extern bool Message_Serialize_Empty(struct Message *message);
 
 /** Create a message with directed message headers on a topic.
  * @param type Message type.

@@ -540,12 +540,11 @@ Queue_Reconnect(struct Queue *queue)
     return Queue_Connect(queue);
 }
 SO_PUBLIC struct Queue *
-Queue_Create (const char * p_sQueueName, int p_iFlags, int mode)
+Queue_Create (const char * p_sQueueName, int p_iFlags)
 {
     return Queue_Create_With_Host(
         p_sQueueName,
         p_iFlags,
-        mode,
         Config_getMqHost(),
         Config_getMqPort(),
         Config_getMqUser(),
@@ -555,7 +554,7 @@ Queue_Create (const char * p_sQueueName, int p_iFlags, int mode)
 }
 
 SO_PUBLIC struct Queue *
-Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags, int mode,
+Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags,
                         const char * p_sHost,
                         uint32_t p_iPort,
                         const char * p_sUser,
@@ -599,7 +598,6 @@ Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags, int mode,
         Queue_Terminate(l_pQueue);
         return NULL;
     }
-    l_pQueue->mode = mode;
     return l_pQueue;
 }
 
@@ -739,7 +737,7 @@ Queue_Get (struct Queue *queue)
                 free(ret);
                 return NULL;
             }
-            ret->deserialize(ret, queue->mode);
+            ret->deserialize(ret);
         }
 
         return ret;
@@ -781,7 +779,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
     // Don't serialize the message more than once.
     if (message->serialized == NULL)
     {
-        if (!message->serialize(message, queue->mode))
+        if (!message->serialize(message))
         {
             rzb_log(LOG_ERR, "%s: Failed to serialize message", __func__);
             Mutex_Unlock (queue->mWriteMutex);

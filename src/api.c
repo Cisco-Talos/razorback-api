@@ -147,7 +147,7 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
         return NULL;
     }
 	
-    if ((context->inspector.judgmentQueue = Queue_Create(JUDGMENT_QUEUE, QUEUE_FLAG_SEND, Razorback_Get_Message_Mode())) == NULL)
+    if ((context->inspector.judgmentQueue = Queue_Create(JUDGMENT_QUEUE, QUEUE_FLAG_SEND)) == NULL)
     {
         Razorback_Remove_Context(context);
         return false;
@@ -387,7 +387,7 @@ Razorback_Output_Thread (Thread_t *thread)
     }
     if (asprintf(&name, pat, hooks->pattern) == -1)
         return;
-    if ((hooks->queue = Queue_Create (name, QUEUE_FLAG_RECV, MESSAGE_MODE_JSON)) == NULL)
+    if ((hooks->queue = Queue_Create (name, QUEUE_FLAG_RECV)) == NULL)
     {
         rzb_log (LOG_ERR, "%s: Failed to connect to MQ - Inspector Queue",
                  __func__);

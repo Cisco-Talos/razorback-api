@@ -16,8 +16,8 @@ struct Message
     List_t *headers;						///< Message headers list
     void *message;								///< Message structure
     uint8_t *serialized;						///< Serialized message string
-    bool (*serialize)(struct Message *, int);	///< Pointer to message serialization function
-    bool (*deserialize)(struct Message *, int);	///< Pointer to message deserialization function
+    bool (*serialize)(struct Message *);	///< Pointer to message serialization function
+    bool (*deserialize)(struct Message *);	///< Pointer to message deserialization function
     void (*destroy)(struct Message *);			///< Pointer to message destructor
 };
 

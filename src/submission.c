@@ -172,7 +172,7 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
     struct timespec l_tsTimeOut;
     l_tsTimeOut.tv_sec=1;
 #endif
-    if ((queue = Queue_Create(REQUEST_QUEUE, QUEUE_FLAG_SEND, Razorback_Get_Message_Mode())) == NULL)
+    if ((queue = Queue_Create(REQUEST_QUEUE, QUEUE_FLAG_SEND)) == NULL)
         return;
 
     while (!Thread_IsStopped(p_pThread))
@@ -273,6 +273,7 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
         l_pRes->pId = l_mcrMessage->pId;
         l_pRes->iSfFlags = l_mcrMessage->iSfFlags;
         l_pRes->iEntFlags = l_mcrMessage->iEntFlags;
+        rzb_log(LOG_DEBUG, "%s: Got flags SF: 0x%08x, ENT: 0x%08x", __func__, l_pRes->iSfFlags, l_pRes->iEntFlags);
         BlockPool_ForEachItem(Submission_GlobalCache_ResponseHandler, NULL);
         // Destroy allocated items in thread local storage.
         message->destroy(message);
@@ -300,7 +301,7 @@ Submission_SubmitThread(Thread_t *p_pThread)
     struct timespec l_tsTimeOut;
     l_tsTimeOut.tv_sec=1;
 #endif
-    if ((queue = Queue_Create(INPUT_QUEUE, QUEUE_FLAG_SEND, Razorback_Get_Message_Mode())) == NULL)
+    if ((queue = Queue_Create(INPUT_QUEUE, QUEUE_FLAG_SEND)) == NULL)
         return;
 
     while (!Thread_IsStopped(p_pThread))

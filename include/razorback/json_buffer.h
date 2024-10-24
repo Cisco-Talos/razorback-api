@@ -1,5 +1,4 @@
 /** JSON Buffer Implimentation 
- * @file binary_buffer.h
  */
 #ifndef RAZORBACK_JSON_BUFFER_H
 #define RAZORBACK_JSON_BUFFER_H

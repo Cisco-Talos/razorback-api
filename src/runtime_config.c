@@ -16,7 +16,6 @@ static conf_int_t sg_iThreadLimit;
 
 // Configured HASH Type.
 static conf_int_t sg_iHashType;
-static conf_int_t sg_iMessageFormat;
 
 // Maximum Block Submission Size
 static conf_int_t sg_iMaxBlockSize;
@@ -268,12 +267,6 @@ Config_getTransferMode(void)
     return sg_sTransferMode;
 }
 
-SO_PUBLIC int
-Razorback_Get_Message_Mode()
-{
-    return sg_iMessageFormat;
-}
-
 SO_PUBLIC char *
 Razorback_Get_Transfer_Password()
 {
@@ -284,14 +277,11 @@ static RZBConfCallBack hashCallback = {
     &parseHashType
 };
 
-static bool parseMessageFormat (const char *, conf_int_t *);
 static bool parseLogDest (const char *, conf_int_t *);
 static bool parseLogLevel (const char *, conf_int_t *);
 static bool parseLogFacility (const char *, conf_int_t *);
 
-static RZBConfCallBack messageFormatBack = {
-    &parseMessageFormat
-};
+
 static RZBConfCallBack destCallBack = {
     &parseLogDest
 };
@@ -320,8 +310,6 @@ static RZBConfKey_t global_config[] = {
         &sg_iHashType, &hashCallback},
     {"Global.HelloTime", RZB_CONF_KEY_TYPE_INT, &sg_iHelloTime, NULL},
     {"Global.DeadTime", RZB_CONF_KEY_TYPE_INT, &sg_iDeadTime, NULL},
-    {"Global.MessageFormat", RZB_CONF_KEY_TYPE_PARSED_STRING, 
-        &sg_iMessageFormat, &messageFormatBack },
     {"Global.TransferPassword", RZB_CONF_KEY_TYPE_STRING, &sg_sTransferPassword, NULL},
     {"Global.TransferMode", RZB_CONF_KEY_TYPE_STRING, &sg_sTransferMode, NULL},
 
@@ -352,11 +340,11 @@ static RZBConfKey_t global_config[] = {
     {"Inspection.Threads.Initial", RZB_CONF_KEY_TYPE_INT, &sg_inspThreadsInit, NULL},
     {"Inspection.Threads.Max", RZB_CONF_KEY_TYPE_INT, &sg_inspThreadsMax, NULL},
 
-    {"Submission.GlobalCache.Submission.Threads.Initial", RZB_CONF_KEY_TYPE_INT, &sg_subGcReqThreadsInit, NULL},
-    {"Submission.GlocalCache.Submission.Threads.Max", RZB_CONF_KEY_TYPE_INT, &sg_subGcReqThreadsMax, NULL},
+    {"Submission.GlobalCache.Request.Threads.Initial", RZB_CONF_KEY_TYPE_INT, &sg_subGcReqThreadsInit, NULL},
+    {"Submission.GlobalCache.Request.Threads.Max", RZB_CONF_KEY_TYPE_INT, &sg_subGcReqThreadsMax, NULL},
 
     {"Submission.GlobalCache.Response.Threads.Initial", RZB_CONF_KEY_TYPE_INT, &sg_subGcRespThreadsInit, NULL},
-    {"Submission.GlocalCache.Response.Threads.Max", RZB_CONF_KEY_TYPE_INT, &sg_subGcRespThreadsMax, NULL},
+    {"Submission.GlobalCache.Response.Threads.Max", RZB_CONF_KEY_TYPE_INT, &sg_subGcRespThreadsMax, NULL},
 
 	{"Submission.Transfer.Threads.Initial", RZB_CONF_KEY_TYPE_INT, &sg_subTransferThreadsInit, NULL},
     {"Submission.Transfer.Threads.Max", RZB_CONF_KEY_TYPE_INT, &sg_subTransferThreadsMax, NULL},
@@ -414,22 +402,6 @@ parseHashType (const char *string, conf_int_t * val)
 
 }
 
-
-static bool
-parseMessageFormat (const char *string, conf_int_t * val)
-{
-    if (!strncasecmp (string, "binary", 6))
-    {
-        *val = MESSAGE_MODE_BIN;
-        return true;
-    }
-    else if (!strncasecmp (string, "json", 4))
-    {
-        *val = MESSAGE_MODE_JSON;
-        return true;
-    }
-    return false;
-}
 
 static bool
 parseLogDest (const char *string, conf_int_t * val)
