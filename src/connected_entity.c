@@ -94,23 +94,23 @@ ConnectedEntityList_Stop (void)
 static struct ConnectedEntity *
 ConnectedEntityList_GetEntity (struct Message *message)
 {
+    // TODO - Needs to return the entity in the locked state
     struct MessageHello *hello = message->message;
     struct ConnectedEntity *ret = NULL;
     struct ConnectedEntityKey key;
     uuid_t source,dest,dispatcher;
     Message_Get_Nuggets(message, source,dest);
-    List_Lock (sg_pEntityList);
     key.searchKeys = SEARCH_KEY_NUGGET_ID;
     key.nuggetId = source;
     key.appType = NULL;
     key.nuggetType = NULL;
     ret = List_Find(sg_pEntityList, &key);
+    // This will return a the node locked
     if (ret == NULL)
     {
         if ((ret =
              calloc (1, sizeof (struct ConnectedEntity))) == NULL)
         {
-            List_Unlock(sg_pEntityList);
             return NULL;
         }
 
@@ -124,7 +124,6 @@ ConnectedEntityList_GetEntity (struct Message *message)
             if ((ret->dispatcher = calloc(1,sizeof(struct DispatcherEntity))) == NULL)
             {
                 free(ret);
-                List_Unlock(sg_pEntityList);
                 return NULL;
             }
             ret->dispatcher->priority = hello->priority;
@@ -136,13 +135,12 @@ ConnectedEntityList_GetEntity (struct Message *message)
             {
                 free(ret->dispatcher);
                 free(ret);
-                List_Unlock(sg_pEntityList);
                 return NULL;
             }
         }
+        // Lock node before putting it in the list
         List_Push(sg_pEntityList, ret);
     }
-    List_Unlock (sg_pEntityList);
     return ret;
 }
 
@@ -156,13 +154,11 @@ ConnectedEntityList_Update (struct Message *message)
     ASSERT (sg_pEntityList != NULL);
     ASSERT (message != NULL);
     ASSERT (message->type == MESSAGE_TYPE_HELLO);
-    List_Lock(sg_pEntityList);
 
     if ((entity = ConnectedEntityList_GetEntity (message)) == NULL)
     {
         rzb_log (LOG_ERR,
                  "%s: Failed due to failure of _GetEntry()", __func__);
-        List_Unlock(sg_pEntityList);
         return false;
     }
 
@@ -173,7 +169,7 @@ ConnectedEntityList_Update (struct Message *message)
         entity->dispatcher->flags = hello->flags;
         entity->dispatcher->priority = hello->priority;
     }
-    List_Unlock(sg_pEntityList);
+    // Drop the entity lock
     return true;
 }
 
@@ -235,11 +231,7 @@ ConnectedEntityList_Prune (void *userData)
 {
     ASSERT (sg_pEntityList != NULL);
 
-    List_Lock(sg_pEntityList);
-    List_Lock(sg_pHookList);
     List_ForEach(sg_pEntityList, ConnectedEntityList_PruneEntity, NULL);
-    List_Unlock(sg_pEntityList);
-    List_Unlock(sg_pHookList);
 }
 
 SO_PUBLIC bool
@@ -297,16 +289,14 @@ ConnectedEntityList_GetDedicatedDispatcher(void)
     memset(&key, 0, sizeof(struct ConnectedEntityKey));
     key.searchKeys= SEARCH_KEY_DD;
 
-    List_Lock(sg_pEntityList);
     node = List_Find(sg_pEntityList, &key);
     if (node == NULL)
     {
-        List_Unlock(sg_pEntityList);
         return NULL;
     }
     ret = ConnectedEntity_Clone(node);
-    List_Unlock(sg_pEntityList);
 
+    // Note ret will be locked, need to unlock it
     return ret;
 }
 static int 
@@ -316,8 +306,10 @@ ConnectedEntityList_CollectDispatchers(void *item, void *userData)
     List_t *list = userData;
     uuid_t uuid;
     UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, uuid);
-    if ((uuid_compare(uuid, entity->uuidNuggetType) == 0))
+    if ((uuid_compare(uuid, entity->uuidNuggetType) == 0)) {
+        // Todo - need to clone the dispatcher here
         List_Push(list, entity);
+    }
 
     return LIST_EACH_OK;
 }
@@ -348,14 +340,12 @@ ConnectedEntityList_GetDispatcher(void)
     if (dispatchers == NULL)
         return NULL;
 
-    List_Lock(sg_pEntityList);
     List_ForEach(sg_pEntityList, ConnectedEntityList_CollectDispatchers, dispatchers);
     // There should be a better way to do this without reaching into the list.
     dispatcherCount = List_Length(dispatchers);
     if (dispatcherCount == 0)
     {
         List_Destroy(dispatchers);
-        List_Unlock(sg_pEntityList);
         rzb_log(LOG_ERR, "%s: No dispatchers", __func__);
         return NULL;
     }
@@ -384,7 +374,6 @@ ConnectedEntityList_GetDispatcher(void)
 getdispdone:
     ret = ConnectedEntity_Clone(entity);
     List_Destroy(dispatchers);
-    List_Unlock(sg_pEntityList);
     if (ret == NULL)
         rzb_log(LOG_ERR, "%s: Failed to clone dispatcher", __func__);
 
@@ -395,16 +384,16 @@ static int
 ConnectedEntityList_CollectHighDispatcher(void *item, void *userData)
 {
     struct ConnectedEntity *entity = item;
-    struct DispatcherEntity **cur = userData;
+    struct ConnectedEntity **cur = userData;
 
     uuid_t uuid;
     UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, uuid);
     if ((uuid_compare(uuid, entity->uuidNuggetType) == 0))
     {
         if (*cur == NULL)
-            *cur = entity->dispatcher;
-        else if ((*cur)->priority < entity->dispatcher->priority)
-            *cur = entity->dispatcher;
+            *cur = entity;
+        else if ((*cur)->dispatcher->priority < entity->dispatcher->priority)
+            *cur = entity;
     }
 
     return LIST_EACH_OK;
@@ -416,12 +405,10 @@ ConnectedEntityList_GetDispatcher_HighestPriority()
 {
     struct ConnectedEntity *ret = NULL;
     
-    List_Lock(sg_pEntityList);
     List_ForEach(sg_pEntityList, ConnectedEntityList_CollectHighDispatcher, &ret);
     if (ret != NULL)
         ret = ConnectedEntity_Clone(ret);
 
-    List_Unlock(sg_pEntityList);
     return ret;
 }
 
@@ -459,9 +446,7 @@ ConnectedEntityList_SlaveInLocality(uint8_t locality)
 	search.locality = locality;
 	search.found = false;
 
-    List_Lock(sg_pEntityList);
     List_ForEach(sg_pEntityList, ConnectedEntityList_CollectSlaveInLocality, &search);
-    List_Unlock(sg_pEntityList);
 	return search.found;
 }
 
@@ -470,7 +455,6 @@ ConnectedEntityList_MarkDispatcherUnusable(uuid_t nuggetId)
 {
     struct ConnectedEntity *dispatcher;
     struct ConnectedEntityKey key;
-    List_Lock (sg_pEntityList);
     key.searchKeys = SEARCH_KEY_NUGGET_ID;
     key.nuggetId = nuggetId;
     key.appType = NULL;
@@ -478,11 +462,9 @@ ConnectedEntityList_MarkDispatcherUnusable(uuid_t nuggetId)
     dispatcher = List_Find(sg_pEntityList, &key);
     if (dispatcher == NULL)
     {
-        List_Unlock(sg_pEntityList);
         return false;
     }
     dispatcher->dispatcher->usable = false;
-    List_Unlock(sg_pEntityList);
     return true;
 }
 

@@ -56,21 +56,17 @@ BlockPool_CreateItem (struct RazorbackContext *context)
     if (context == NULL)
         return NULL;
 
-    List_Lock(sg_bpList);
-
     // Enforce pool size limits.
     if ( (Config_getBlockPoolMaxItems() > 0 ) &&
     		(List_Length(sg_bpList) >= Config_getBlockPoolMaxItems()))
     {
     	rzb_log(LOG_ERR, "%s: Block pool item limit exceeded");
-    	List_Unlock(sg_bpList);
     	return NULL;
     }
 
     if ((item = calloc(1, sizeof(struct BlockPoolItem))) == NULL)
     {
         rzb_log(LOG_ERR, "%s: Failed to allocate new item", __func__);
-        List_Unlock(sg_bpList);
         return NULL;
     }
 
@@ -78,7 +74,6 @@ BlockPool_CreateItem (struct RazorbackContext *context)
     {
         rzb_log(LOG_ERR, "%s: Failed to allocate new event", __func__);
         free(item);
-        List_Unlock(sg_bpList);
         return NULL;
     }
 
@@ -86,7 +81,6 @@ BlockPool_CreateItem (struct RazorbackContext *context)
     {
         Event_Destroy(item->pEvent);
         free(item);
-        List_Unlock(sg_bpList);
         return NULL;
     }
 
@@ -96,7 +90,6 @@ BlockPool_CreateItem (struct RazorbackContext *context)
     uuid_copy(item->pEvent->uuidApplicationType, context->uuidApplicationType);
 
     List_Push(sg_bpList, item);
-    List_Unlock(sg_bpList);
     return item;
 }
 
@@ -233,7 +226,7 @@ BlockPool_AddData (struct BlockPoolItem *item, uint8_t * data,
     				Config_getBlockPoolMaxSize()))
     {
 		rzb_log(LOG_ERR, "%s: Block pool global size limit exceeded", __func__);
-		List_Unlock(sg_bpList);
+        Mutex_Unlock(sg_sizeMutex);
         return false;
     }
 	sg_size +=length;
