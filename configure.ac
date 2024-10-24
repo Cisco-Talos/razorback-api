@@ -41,6 +41,12 @@ AC_ARG_ENABLE([magic_debug], [AS_HELP_STRING([--enable-magic-debug],[Enable magi
 if test "x$enable_magic_debug" = "xyes"; then
     AC_DEFINE([MIME_MAGIC_DEBUG], 1, [Magic Debug Mode])
 fi
+
+AC_ARG_ENABLE([list_debug], [AS_HELP_STRING([--enable-list-debug],[Enable list debug])], [enable_list_debug=$enableval], [enable_list_debug="no"])
+if test "x$enable_list_debug" = "xyes"; then
+    AC_DEFINE([LIST_DEBUG], 1, [List Debug Mode])
+fi
+
 #m4_include([libssh/configure.m4])
 
 AC_CHECK_HEADERS([sys/endian.h], [], [SYS_ENDIAN_HEADER="no"]) 
