@@ -61,7 +61,6 @@ ThreadPool_Create(int initialThreads,
         void (*mainFunction) (Thread_t *))
 {
     struct ThreadPool *pool;
-	int i;
     if ((pool = (struct ThreadPool *)calloc(1,sizeof(struct ThreadPool))) == NULL)
         return NULL;
     if ((pool->list = List_Create( LIST_MODE_GENERIC,
@@ -76,13 +75,13 @@ ThreadPool_Create(int initialThreads,
         return NULL;
     }
 
+    List_SetLimit(pool->list, maxThreads);
     pool->limit = maxThreads;
     pool->context = context;
     pool->mainFunction = mainFunction;
     pool->namePattern = namePattern;
 
-    for (i = 0; i < initialThreads; i++)
-        ThreadPool_LaunchWorker(pool);
+    ThreadPool_LaunchWorkers(pool, initialThreads);
 
     return pool;
 }
@@ -93,30 +92,27 @@ ThreadPool_LaunchWorker(struct ThreadPool *pool)
 {
     struct ThreadPoolItem *item;
     char* name;
-    List_Lock(pool->list);
-    if (List_Length(pool->list) >= pool->limit)
-    {
-        List_Unlock(pool->list);
-        return false;
-    }
+
 
     if (( item = (struct ThreadPoolItem *)calloc(1,sizeof(struct ThreadPoolItem))) == NULL)
     {
-        List_Unlock(pool->list);
         return false;
     }
     item->id = pool->nextId++;
     item->pool = pool;
 
     if (asprintf(&name, pool->namePattern, item->id) == -1)
-    {   
-        List_Unlock(pool->list);
+    {
         free(item);
         return false;
     }
+    if (!List_Push(pool->list, item)) {
+        free(item);
+        free(name);
+        return false;
+    }
+
     item->thread = Thread_Launch(ThreadPool_Main, item, name, pool->context);
-    List_Push(pool->list, item);
-    List_Unlock(pool->list);
     return true;
 }
 
@@ -124,17 +120,13 @@ SO_PUBLIC bool
 ThreadPool_LaunchWorkers(struct ThreadPool *pool, int count)
 {
 	int i=0;
-    List_Lock(pool->list);
-	
     for (i = 0; i < count; i++)
     {
         if (!ThreadPool_LaunchWorker(pool))
         {
-            List_Unlock(pool->list);
             return false;
         }
     }
-    List_Unlock(pool->list);
     return true;
 }
 

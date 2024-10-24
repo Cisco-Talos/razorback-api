@@ -64,6 +64,7 @@ initThreading (void)
             NULL, NULL, 
             Thread_Lock, 
             Thread_Unlock);
+    List_SetLimit(sg_threadList, Config_getThreadLimit());
 #ifdef _MSC_VER
     initThreading_win32();
 #else
@@ -80,23 +81,16 @@ Thread_MainWrapper (void *arg)
 #endif
 {
     Thread_t *l_pThread = (Thread_t *) arg;
-    List_Lock(sg_threadList);
+
     Thread_Lock (l_pThread);
-
     l_pThread->bRunning = true;
-
     Thread_Unlock (l_pThread);
-    List_Unlock(sg_threadList);
 
     l_pThread->mainFunction (l_pThread);
 
-    List_Lock(sg_threadList);
     Thread_Lock (l_pThread);
-
     l_pThread->bRunning = false;
-
     Thread_Unlock (l_pThread);
-    List_Unlock(sg_threadList);
 
     // Don't destroy the thread structure, it may still be referenced
     // We should probably ref count this struct
@@ -127,9 +121,6 @@ Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
     pthread_once (&g_once_control, initThreading);
 #endif //_MSC_VER
 
-    // Racy 
-    if (List_Length(sg_threadList) == Config_getThreadLimit ())
-        return NULL;
 
     // allocate memory for thread structure
     thread = (Thread_t *)calloc (1, sizeof (Thread_t));
@@ -157,6 +148,12 @@ Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
         return NULL;
     }
 
+    if (!List_Push(sg_threadList, thread)) {
+        Mutex_Destroy(thread->mMutex);
+        free(thread);
+        return NULL;
+    }
+
 #ifdef _MSC_VER
 	thread->hThread = CreateThread(NULL, 0, Thread_MainWrapper, thread, 0, &thread->iThread);
 #else //_MSC_VER
@@ -164,6 +161,7 @@ Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
     if (pthread_create
         (&thread->iThread, &g_attr, Thread_MainWrapper, thread) != 0)
     {
+        Mutex_Destroy(thread->mMutex);
         free (thread);
         rzb_log (LOG_ERR,
                  "%s: Failed to launch thread in Thread_Launch due to pthread_create error (%i)", __func__,
@@ -171,7 +169,6 @@ Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
         return NULL;
     }
 #endif //_MSC_VER
-    List_Push(sg_threadList, thread);
 
     // done
     return thread;
@@ -184,7 +181,6 @@ Thread_Destroy (Thread_t *thread)
 	if (thread == NULL)
 		return;
 
-    List_Lock(sg_threadList);
     Thread_Lock(thread);
 
     // Reference count should not drop below 1 as the list holds a ref.
@@ -194,14 +190,12 @@ Thread_Destroy (Thread_t *thread)
     {
         thread->refs--;
         Thread_Unlock(thread);
-        List_Unlock(sg_threadList);
         return;
     }
 
     List_Remove(sg_threadList, thread);
     // destroy running mutex
     Thread_Unlock(thread);
-    List_Unlock(sg_threadList);
 
     Mutex_Destroy (thread->mMutex);
     

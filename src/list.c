@@ -33,6 +33,7 @@ struct _List
     struct ListNode * head;         ///< Head node
     struct ListNode * tail;	        ///< Tail node
     atomic_size_t length;           ///< Number of items in the list
+    size_t limit;                   ///< Maximum number of items in the list
     int mode;						///< Operation mode
     int (*cmp)(void *, void *);		///< Node comparator
     int (*keyCmp)(void *, void *);	///< Node key comparator
@@ -103,9 +104,21 @@ static int List_FindKeyCmp(void * item, void *d) {
     if (data->list->keyCmp(item, data->id) == 0)
     {
         data->ret = item;
+        // TODO - Check the node lock function and call it if set
         return LIST_EACH_END;
     }
     return LIST_EACH_OK;
+}
+
+SO_PUBLIC void
+List_SetLimit(List_t *list, size_t limit)
+{
+    ASSERT(list != NULL);
+    if (list == NULL)
+        return;
+    RWLock_WriteLock(list->lock);
+    list->limit = limit;
+    RWLock_Unlock(list->lock);
 }
 
 SO_PUBLIC void * 
@@ -145,6 +158,12 @@ List_Push(List_t *list, void *item)
 
 
     RWLock_WriteLock(list->lock);
+    if (list->limit > 0 && list->length >= list->limit)
+    {
+        RWLock_Unlock(list->lock);
+        free(node);
+        return false;
+    }
     switch (list->mode)
     {
     case LIST_MODE_GENERIC:
@@ -239,7 +258,9 @@ List_ForEach(List_t *list, int (*op)(void *, void *), void *userData)
                 last = true;
                 break;
             case LIST_EACH_REMOVE:
+#ifdef LIST_DEBUG
                 rzb_log(LOG_DEBUG, "%s: Delete requested marking node for deletion: %p", __func__, cur);
+#endif
                 del = true;
                 cur->del = true;
                 break;
@@ -253,14 +274,18 @@ List_ForEach(List_t *list, int (*op)(void *, void *), void *userData)
     RWLock_Unlock(list->lock);
 
     if (del) {
+#ifdef LIST_DEBUG
         rzb_log(LOG_DEBUG, "%s: Item deletion requested in loop pruning list", __func__);
+#endif
         RWLock_WriteLock(list->lock);
         cur = list->head;
         while (cur != NULL) {
             if (cur->del) {
                 delNode = cur;
                 cur = delNode->next;
-                rzb_log(LOG_ERR, "%s: Removing deleted node from list %p", __func__, delNode);
+#ifdef LIST_DEBUG
+                rzb_log(LOG_DEBUG, "%s: Removing deleted node from list %p", __func__, delNode);A
+#endif
                 List_RemoveNode(list, delNode);
                 if (list->destroy)
                     list->destroy(delNode->item);
@@ -375,25 +400,6 @@ List_Length(List_t *list)
         return 0;
 
     return list->length;
-}
-
-SO_PUBLIC void
-List_Lock(List_t *list)
-{
-    ASSERT(list != NULL);
-    if (list == NULL)
-        return;
-    RWLock_WriteLock(list->lock);
-}
-
-SO_PUBLIC void
-List_Unlock(List_t *list)
-{
-    ASSERT(list != NULL);
-    if (list == NULL)
-        return;
-
-    RWLock_Unlock(list->lock);
 }
 
 SO_PUBLIC void

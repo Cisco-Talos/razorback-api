@@ -158,86 +158,64 @@ initUuids (void)
 SO_PUBLIC bool
 UUID_Get_UUID (const char *p_sName, int p_iType, uuid_t r_uuid)
 {
-    List_t *list;
     struct UUIDListNode *l_pListNode;
 
-    list = UUID_Get_List(p_iType);
-    List_Lock(list);
     if ((l_pListNode = UUID_getNodeByName (p_sName, p_iType)) == NULL)
     {
-        List_Unlock(list);
         return false;
     }
     uuid_copy(r_uuid, l_pListNode->uuid);
-    List_Unlock(list);
     return true;
 }
 
 SO_PUBLIC char *
 UUID_Get_Description (const char *p_sName, int p_iType)
 {
-    List_t *list;
     struct UUIDListNode *l_pListNode;
     char * ret;
-    list = UUID_Get_List(p_iType);
-    List_Lock(list);
+
     if ((l_pListNode = UUID_getNodeByName (p_sName, p_iType)) == NULL)
     {
-        List_Unlock(list);
         return NULL;
     }
     if (asprintf(&ret, "%s", l_pListNode->sDescription) == -1 )
     {
-        List_Unlock(list);
         return NULL;
     }
-    List_Unlock(list);
     return ret;
 }
 
 SO_PUBLIC char *
 UUID_Get_DescriptionByUUID (uuid_t p_uuid, int p_iType)
 {
-    List_t *list;
     struct UUIDListNode *l_pListNode;
     char * ret;
-    list = UUID_Get_List(p_iType);
-    List_Lock(list);
 
     if ((l_pListNode = UUID_getNodeByUUID (p_uuid, p_iType)) == NULL)
     {
-        List_Unlock(list);
         return NULL;
     }
     if (asprintf(&ret, "%s", l_pListNode->sDescription) == -1 )
     {
-        List_Unlock(list);
         return NULL;
     }
-    List_Unlock(list);
     return ret;
 }
 
 SO_PUBLIC char *
 UUID_Get_NameByUUID (uuid_t p_uuid, int p_iType)
 {
-    List_t *list;
     struct UUIDListNode *l_pListNode;
     char * ret;
-    list = UUID_Get_List(p_iType);
-    List_Lock(list);
 
     if ((l_pListNode = UUID_getNodeByUUID (p_uuid, p_iType)) == NULL)
     {
-        List_Unlock(list);
         return NULL;
     }
     if (asprintf(&ret, "%s", l_pListNode->sName) == -1 )
     {
-        List_Unlock(list);
         return NULL;
     }
-    List_Unlock(list);
     return ret;
 }
 
@@ -245,25 +223,19 @@ UUID_Get_NameByUUID (uuid_t p_uuid, int p_iType)
 SO_PUBLIC char *
 UUID_Get_UUIDAsString (const char *p_sName, int p_iType)
 {
-    List_t *list;
     struct UUIDListNode *l_pListNode;
     char *l_sTemp;
 
-    list = UUID_Get_List(p_iType);
-    List_Lock(list);
 
     if ((l_pListNode = UUID_getNodeByName (p_sName, p_iType)) == NULL)
     {
-        List_Unlock(list);
         return NULL;
     }
     if ((l_sTemp = calloc (UUID_STRING_LENGTH, sizeof (char))) == NULL)
     {
-        List_Unlock(list);
         return NULL;
     }
     uuid_unparse (l_pListNode->uuid, l_sTemp);
-    List_Unlock(list);
     return l_sTemp;
 }
 

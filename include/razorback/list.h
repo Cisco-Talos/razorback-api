@@ -79,6 +79,7 @@ SO_PUBLIC extern bool List_Remove(List_t *list, void *item);
  * @param list The List to search.
  * @param id The node key.
  * @return A pointer to the item if found, NULL if not.
+ * @note This function will return the node in the locked state, caller is responsible for calling unlock.
  */
 SO_PUBLIC extern void * List_Find(List_t *list, void *id);
 
@@ -100,17 +101,13 @@ SO_PUBLIC extern size_t List_Length(List_t *list);
  * @param list The List to clear.
  */
 SO_PUBLIC extern void List_Clear(List_t *list);
-/** Lock a list.
- * @param list The List to lock.
- * @return true on success, false on error
- */
-SO_PUBLIC extern void List_Lock(List_t *list);
 
-/** Unlock a list.
- * @param list The List to unlock.
+/** Set the max size for a list.
+ * @param list The List to set the limit on.
+ * @param limit The maximum number of items to allow in the list.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern void List_Unlock(List_t *list);
+SO_PUBLIC extern void List_SetLimit(List_t *list, size_t limit);
 
 /** Destroy a List
  * @param list The List to destroy.
