@@ -2,7 +2,6 @@ lib_LTLIBRARIES = librazorback_api.la
 
 noinst_HEADERS = \
 api_internal.h \
-binary_buffer.h \
 block_pool_private.h \
 command_and_control.h \
 connected_entity_private.h \
@@ -19,7 +18,6 @@ transfer/core.h
 
 librazorback_api_la_SOURCES = \
 api.c \
-binary_buffer.c \
 block.c \
 block_pool.c \
 block_id.c \
