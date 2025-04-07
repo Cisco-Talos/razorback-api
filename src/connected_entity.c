@@ -372,7 +372,11 @@ ConnectedEntityList_GetDispatcher(void)
 
 
 getdispdone:
-    ret = ConnectedEntity_Clone(entity);
+    if (entity == NULL) {
+        rzb_log(LOG_ERR, "%s: Failed to find any usable dispatchers", __func__);
+    } else {
+        ret = ConnectedEntity_Clone(entity);
+    }
     List_Destroy(dispatchers);
     if (ret == NULL)
         rzb_log(LOG_ERR, "%s: Failed to clone dispatcher", __func__);
