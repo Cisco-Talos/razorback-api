@@ -293,7 +293,7 @@ Message_Deserialize_Empty(struct Message *message)
         return false;
 
 
-    return false;
+    return true;
 }
 
 SO_PUBLIC bool 
