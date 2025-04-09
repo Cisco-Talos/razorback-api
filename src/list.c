@@ -183,6 +183,21 @@ List_Push(List_t *list, void *item)
     return true;
 }
 
+static struct ListNode *
+List_Do_Pop(List_t *list)
+{
+    switch (list->mode)
+    {
+        case LIST_MODE_GENERIC:
+        case LIST_MODE_QUEUE:
+            return List_Queue_Pop(list);
+        case LIST_MODE_STACK:
+            return List_Stack_Pop(list);
+    }
+    return NULL;
+
+}
+
 SO_PUBLIC void *
 List_Pop(List_t *list)
 {
@@ -196,16 +211,7 @@ List_Pop(List_t *list)
     	Semaphore_Wait(list->sem);
 
     RWLock_WriteLock(list->lock);
-    switch (list->mode)
-    {
-    case LIST_MODE_GENERIC:
-    case LIST_MODE_QUEUE:
-        node = List_Queue_Pop(list);
-        break;
-    case LIST_MODE_STACK:
-        node = List_Stack_Pop(list);
-        break;
-    }
+    node = List_Do_Pop(list);
     RWLock_Unlock(list->lock);
 
     if (node != NULL) {
@@ -377,18 +383,19 @@ List_RemoveNode(List_t *list, struct ListNode *node)
 SO_PUBLIC void
 List_Clear(List_t *list)
 {
-    void *item;
+    struct ListNode *item;
     ASSERT(list != NULL);
     if (list == NULL)
         return;
 
-    item = List_Pop(list);
+    item = List_Do_Pop(list);
     while ( item != NULL )
     {
         if (list->destroy != NULL) {
-            list->destroy(item);
+            list->destroy(item->item);
         }
-        item = List_Pop(list);
+        free(item);
+        item = List_Do_Pop(list);
     }
 }
 
