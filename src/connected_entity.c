@@ -319,12 +319,12 @@ struct ConnectedEntity *
 ConnectedEntityList_GetDispatcher(void)
 {
     List_t *dispatchers = NULL;
-    uint32_t dispatcherCount;
+    uint32_t dispatcherCount = 0;
     uint8_t locality = Config_getLocalityId();
     conf_int_t *localities = Config_getLocalityBackupOrder();
     conf_int_t localityCount = Config_getLocalityBackupCount();
-    struct ConnectedEntity *entity;
-    struct ConnectedEntity *ret;
+    struct ConnectedEntity *entity = NULL;
+    struct ConnectedEntity *ret = NULL;
 	conf_int_t i;
 	struct ConnectedEntityKey searchKey;
 
