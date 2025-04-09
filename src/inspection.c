@@ -92,12 +92,14 @@ Inspection_Thread (Thread_t *p_pThread)
         {
             rzb_log (LOG_ERR, "%s: Failed dispatch message due to NULL block",
                      __func__);
+            message->destroy(message);
             continue;
         }
         if (l_misMessage->pBlock->pId->pHash == NULL)
         {
             rzb_log (LOG_ERR, "%s: Failed dispatch message due to NULL Hash",
                      __func__);
+            message->destroy(message);
             continue;
         }
         l_pBlock = l_misMessage->pBlock;
@@ -129,17 +131,20 @@ Inspection_Thread (Thread_t *p_pThread)
         if (transfered != TRANSFER_OK)
         {
             rzb_log(LOG_ERR, "%s: Failed to transfer block giving up", __func__);
+            message->destroy(message);
             continue;
         }
 
         if (l_pBlock->data.pointer == NULL || l_pBlock->data.fileName == NULL)
         {
             rzb_log (LOG_ERR, "%s: No data block",__func__);
-           continue;
+            message->destroy(message);
+            continue;
         }
         if ((l_pEventId = EventId_Clone(l_misMessage->eventId)) == NULL)
         {
             rzb_log (LOG_ERR, "%s: Failed create new event id", __func__);
+            message->destroy(message);
             continue;
         }
         
@@ -148,6 +153,7 @@ Inspection_Thread (Thread_t *p_pThread)
         if ((l_pClonedBlock = Block_Clone (l_pBlock)) == NULL)
         {
             rzb_log (LOG_ERR, "%s: Failed create new block", __func__);
+            message->destroy(message);
             continue;
         }
 
