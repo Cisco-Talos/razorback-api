@@ -8,7 +8,7 @@
 #include <razorback/event.h>
 #include <razorback/judgment.h>
 #include <razorback/string_list.h>
-
+#include <razorback/log.h>
 #include <razorback/json_buffer.h>
 #ifdef _MSC_VER
 #include <WinSock2.h>
@@ -52,64 +52,27 @@ SO_PUBLIC bool JsonBuffer_Put_bool (json_object * parent,
 SO_PUBLIC bool JsonBuffer_Put_uint8_t (json_object * parent,
                                     const char *name, uint8_t p_iValue)
 {
-    json_object *new;
-    ASSERT( parent != NULL);
-    ASSERT(name != NULL);
-    if (parent == NULL)
-        return false;
-    if (name == NULL)
-        return false;
-
-    if ((new = json_object_new_int(p_iValue)) == NULL)
-        return false;
-
-    json_object_object_add(parent, name, new);
-    return true;
+    return JsonBuffer_Put_uint64_t(parent,name,p_iValue);
 }
+
 SO_PUBLIC bool JsonBuffer_Put_uint16_t (json_object * parent, const char * name, uint16_t p_iValue)
 {
-    json_object *new;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
-        return false;
-    if (name == NULL)
-        return false;
-
-    if ((new = json_object_new_int(p_iValue)) == NULL)
-        return false;
-
-    json_object_object_add(parent, name, new);
-
-    return true;
+    return JsonBuffer_Put_uint64_t(parent,name,p_iValue);
 }
 
 SO_PUBLIC bool JsonBuffer_Put_uint32_t (json_object * parent, const char * name, uint32_t p_iValue)
 {
-    json_object *new;
-    char *str;
+
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
-        return false;
-    if (name == NULL)
-        return false;
-    // Larger numbers dont fit in the API so send them as strings
-    if (asprintf(&str, "%u", p_iValue) == -1)
-        return false;
-
-    if ((new = json_object_new_string(str)) == NULL)
-        return false;
-
-    json_object_object_add(parent, name, new);
-    free(str);
-    return true;
+    return JsonBuffer_Put_uint64_t(parent,name,p_iValue);
 }
 
 SO_PUBLIC bool JsonBuffer_Put_uint64_t (json_object * parent, const char * name, uint64_t p_iValue)
 {
     json_object *new;
-    char *str;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
     if (parent == NULL)
@@ -117,15 +80,12 @@ SO_PUBLIC bool JsonBuffer_Put_uint64_t (json_object * parent, const char * name,
     if (name == NULL)
         return false;
 
-    // Larger numbers dont fit in the API so send them as strings
-    if (asprintf(&str, NUM_FMT, p_iValue) == -1)
-        return false;
 
-    if ((new = json_object_new_string(str)) == NULL)
+
+    if ((new = json_object_new_uint64(p_iValue)) == NULL)
         return false;
 
     json_object_object_add(parent, name, new);
-    free(str);
     return true;
 }
 
@@ -1156,78 +1116,91 @@ SO_PUBLIC bool JsonBuffer_Get_Judgment (json_object * parent, const char * name,
 
     if (!JsonBuffer_Get_UUID(parent, "Nugget_ID", judgment->uuidNuggetId))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Nugget_ID", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint64_t(parent, "Seconds", &judgment->iSeconds))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Seconds", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint64_t(parent, "Nano_Seconds", &judgment->iNanoSecs))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Nano_Seconds", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_EventId(parent, "Event_ID", &judgment->pEventId))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Event_ID", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_BlockId(parent, "Block_ID", &judgment->pBlockId))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Block_ID", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
      
     if (!JsonBuffer_Get_uint8_t(parent, "Priority", &judgment->iPriority))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Priority", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_NTLVList(parent, "Metadata", &judgment->pMetaDataList))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Metadata", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "GID", &judgment->iGID))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get GID", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "SID", &judgment->iSID))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get SID", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "Set_SF_Flags", &judgment->Set_SfFlags))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Set_SF_Flags", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "Set_Ent_Flags", &judgment->Set_EntFlags))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Set_Ent_Flags", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "Unset_SF_Flags", &judgment->Unset_SfFlags))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Unset_SF_Flags", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "Unset_Ent_Flags", &judgment->Unset_EntFlags))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Unset_Ent_Flags", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
@@ -1236,6 +1209,7 @@ SO_PUBLIC bool JsonBuffer_Get_Judgment (json_object * parent, const char * name,
     {
         if ((judgment->sMessage = (uint8_t *)JsonBuffer_Get_String(parent, "Message")) == NULL)
         {
+            rzb_log(LOG_ERR, "%s: Failed to get Message", __func__);
             Judgment_Destroy(judgment);
             return false;
         }
