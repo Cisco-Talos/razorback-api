@@ -337,7 +337,7 @@ Submission_SubmitThread(Thread_t *p_pThread)
                 if (dispatcher == NULL)
                 {
                     rzb_log(LOG_ERR, "%s: Failed to find usable dispatcher", __func__);
-                    transfered = false;
+                    transfered = TRANSFER_FAIL_LOCAL;
                     transferTries++;
                     break;
                 }
