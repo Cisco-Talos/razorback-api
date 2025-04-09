@@ -44,13 +44,15 @@ Hello_Deserialize(struct Message *message)
     if (message == NULL)
         return false;
 
-    if ((message->message = calloc(1,sizeof(struct MessageHello))) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageHello))) == NULL) {
+        rzb_log(LOG_ERR, "%s: Failed to allocate memory for MessageHello", __func__);
         return false;
+    }
 
-    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
+        rzb_log(LOG_ERR, "%s: failed to parse json: %s", __func__, message->serialized);
         return false;
-
-
+    }
 
 
     hello = message->message;
