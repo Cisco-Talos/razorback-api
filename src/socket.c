@@ -484,7 +484,7 @@ Socket_Tx (const struct Socket *sock, size_t size,
 				errno = EINTR;
 #endif
             if (errno != EINTR && errno != EAGAIN) 
-                rzb_perror ("Socket_Rx failed due to failure of read call: %s");
+                rzb_perror ("Socket_Tx failed due to failure of read call: %s");
 
             return -1;
         }
