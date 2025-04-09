@@ -210,14 +210,14 @@ Queue_Send_Header(void *vHeader, void *vSocket)
     struct Socket *socket = vSocket;
     char *line = NULL;
 #ifdef STOMP_DEBUG
-        rzb_log(LOG_DEBUG, "%s: (%p) Message Header: %s:%s", __func__, header->pMessage, header->sName, header->sValue);
+        rzb_log(LOG_DEBUG, "%s: (%p) Message Header: '%s:%s'", __func__, header->pMessage, header->sName, header->sValue);
 #endif
     if (asprintf(&line, "%s:%s\n", header->sName, header->sValue) == -1)
     {
         rzb_log(LOG_ERR, "%s: Failed to alloc header", __func__);
         return LIST_EACH_ERROR;
     }
-    //printf("%s", line);
+//    printf("'%s'\n", line);
     if (Socket_Tx(socket, strlen(line), (uint8_t *)line) != (ssize_t)strlen(line))
     {
         rzb_log(LOG_ERR, "%s: Failed to send header", __func__);
@@ -423,7 +423,8 @@ Queue_BeginReading (struct Queue *p_pQ)
     if (!(
             StompMessage_Add_Header(l_pMessage, "destination", p_pQ->sName) &&
             StompMessage_Add_Header(l_pMessage, "ack", "client-individual")  &&
-            StompMessage_Add_Header(l_pMessage, "id", p_pQ->sSubscriptionId)
+            StompMessage_Add_Header(l_pMessage, "id", p_pQ->sSubscriptionId) &&
+            StompMessage_Add_Header(l_pMessage, "prefetch-count", "10")
         ))
     {
         rzb_log(LOG_ERR, "%s: Failed to add destination headers", __func__);
@@ -737,7 +738,11 @@ Queue_Get (struct Queue *queue)
                 free(ret);
                 return NULL;
             }
-            ret->deserialize(ret);
+            if(!ret->deserialize(ret)) {
+                rzb_log(LOG_ERR, "%s: Message deserialize failed: type %u body %s", __func__, ret->type, ret->serialized);
+                ret->destroy(ret);
+                return NULL;
+            }
         }
 
         return ret;
