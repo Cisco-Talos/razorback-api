@@ -163,7 +163,7 @@ CacheResp_Serialize(struct Message *message)
     }
     wire = json_object_to_json_string(msg);
     message->length=strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(char))) == NULL)
+    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
     {
         json_object_put(msg);
         return false;

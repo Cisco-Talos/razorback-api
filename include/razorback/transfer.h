@@ -34,5 +34,8 @@ SO_PUBLIC extern enum TransferStatus Transfer_File_Fetch(struct Block *block, st
 SO_PUBLIC extern enum TransferStatus Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher);
 SO_PUBLIC extern enum TransferStatus Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher);
 
+SO_PUBLIC extern enum TransferStatus Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher);
+SO_PUBLIC extern enum TransferStatus Transfer_HTTP_Fetch(struct Block *block, struct ConnectedEntity *dispatcher);
+
 SO_PUBLIC extern bool Transfer_Prepare_File(struct Block *block, char *file, bool temp);
 #endif //RAZORBACK_TRANSFER_H

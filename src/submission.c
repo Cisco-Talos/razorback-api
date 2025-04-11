@@ -144,7 +144,9 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
     }
 	if (result == R_FOUND) {
         rzb_log(LOG_INFO, "%s: Local Cache Hit - SF: 0x%08x, ENT: 0x%08x", __func__, sfflags, entflags); 
-        BlockPool_DestroyItemDataList(p_pItem); // We don't need the data any more.
+        BlockPool_DestroyItemDataList(p_pItem->pDataHead); // We don't need the data any more.
+        p_pItem->pDataHead = NULL;
+        p_pItem->pDataTail = NULL;
         BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_SUBMIT_DATA);
         BlockPool_SetFlags(p_pItem, p_iFlags | BLOCK_POOL_FLAG_EVENT_ONLY);
         List_Push(submitQueue, p_pItem);
@@ -392,7 +394,9 @@ Submission_SubmitThread(Thread_t *p_pThread)
         {
             BlockPool_SetStatus(item, BLOCK_POOL_STATUS_FINALIZED);
             BlockPool_SetFlags(item, 0);
-            BlockPool_DestroyItemDataList(item);
+            BlockPool_DestroyItemDataList(item->pDataHead);
+            item->pDataHead = NULL;
+            item->pDataTail = NULL;
             BlockPool_Item_Unlock(item);
             continue;
         }

@@ -15,7 +15,7 @@ void BlockPool_Item_Unlock(void *a);
 void BlockPool_SetStatus(struct BlockPoolItem *p_pItem, uint32_t p_iStatus);
 uint32_t BlockPool_GetStatus(struct BlockPoolItem *p_pItem);
 void BlockPool_SetFlags(struct BlockPoolItem *p_pItem, uint32_t p_iFlags);
-void BlockPool_DestroyItemDataList(struct BlockPoolItem *p_pItem);
+void BlockPool_DestroyItemDataList(struct BlockPoolData *p_pItem);
 #ifdef __cplusplus
 }
 #endif

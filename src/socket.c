@@ -213,12 +213,15 @@ Socket_Listen_Unix (const char *path)
 
     if ((sock = (struct Socket *)calloc (1, sizeof (struct Socket))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate new socket", __func__);
+        rzb_log(LOG_ERR, "%s: Failed to allocate new socket", __func__);\
+        free(server);
         return NULL;
     }
     if ((sock->pAddressInfo = (struct addrinfo *)calloc(1,sizeof(struct addrinfo))) == NULL)
     {
         rzb_log(LOG_ERR, "%s: Failed to allocate new address info", __func__);
+        Socket_Destroy(sock);
+        free(server);
         return false;
     }
 

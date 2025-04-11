@@ -41,6 +41,15 @@ extern "C" {
  */
 SO_PUBLIC extern struct BlockPoolItem *BlockPool_CreateItem (struct RazorbackContext *p_pContext);
 
+/** Get the number of items in the block pool
+ * @return the number of items in the block pool.
+ */
+SO_PUBLIC extern size_t BlockPool_GetItemCount();
+ /** Get the memory allocated to the block pool
+ * @return the size of the memory allocated to the block pool.
+ */
+SO_PUBLIC extern size_t BlockPool_GetSize();
+
 /** Add data to a item in the block pool
  * @param *p_pItem the item to add data to.
  * @param *p_sName the data type name

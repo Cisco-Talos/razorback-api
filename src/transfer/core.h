@@ -22,6 +22,7 @@ void Transfer_Free(struct Block *block, struct ConnectedEntity *dispatcher);
 // Init functions
 bool File_Init(void);
 bool SSH_Init(void);
+bool HTTP_Init(void);
 #ifdef __cplusplus
 }
 #endif

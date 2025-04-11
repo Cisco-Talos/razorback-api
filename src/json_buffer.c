@@ -10,6 +10,7 @@
 #include <razorback/string_list.h>
 #include <razorback/log.h>
 #include <razorback/json_buffer.h>
+#include <razorback/nugget.h>
 #ifdef _MSC_VER
 #include <WinSock2.h>
 #include <Ws2tcpip.h>
@@ -96,6 +97,7 @@ SO_PUBLIC bool JsonBuffer_Put_ByteArray (json_object * parent, const char *name,
     BIO *bmem, *b64;
     BUF_MEM *bptr;
     char *buff;
+    bool ret;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
     if (parent == NULL)
@@ -118,10 +120,11 @@ SO_PUBLIC bool JsonBuffer_Put_ByteArray (json_object * parent, const char *name,
 
     BIO_free_all(b64);
 
-    if (!JsonBuffer_Put_String(parent, name, buff))
-        return false;
+    ret = JsonBuffer_Put_String(parent, name, buff);
+
     free(buff);
-    return true;
+
+    return ret;
 }
 
 SO_PUBLIC bool JsonBuffer_Put_String (json_object * parent, const char * name,
@@ -222,32 +225,14 @@ SO_PUBLIC bool JsonBuffer_Get_uint16_t (json_object * parent, const char * name,
 SO_PUBLIC bool JsonBuffer_Get_uint32_t (json_object * parent, const char *name,
                                      uint32_t * p_pValue)
 {
-    const char *tmp;
-    uint32_t val;
-    json_object *object;
+    uint64_t val;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (!JsonBuffer_Get_uint64_t(parent, name, &val))
         return false;
-    if (name == NULL)
-        return false;
-    if ((object = json_object_object_get(parent, name))  == NULL)
-        return false;
-    json_type type = json_object_get_type(object);
-    if (type == json_type_string) {
-        tmp = json_object_get_string(object);
-        if(sscanf(tmp,"%u", &val) != 1) {
-            return false;
-        }
-    } else if (type == json_type_int) {
-        errno = 0;
-        // Potential for overflow in down cast
-        val = (uint32_t)json_object_get_uint64(object);
-        if (errno != 0) {
-            return false;
-        }
-    }
-    *p_pValue = val;
+
+    // TODO Bounds checking
+    *p_pValue = (uint32_t)val;
     return true;
 }
 
@@ -278,6 +263,10 @@ SO_PUBLIC bool JsonBuffer_Get_uint64_t (json_object * parent, const char *name,
         if (errno != 0) {
             return false;
         }
+    } else {
+        // Not a string or int
+        rzb_log(LOG_ERR, "%s: Invalid json object type for %s", __func__, name);
+        return false;
     }
 
     *p_pValue = val;
@@ -327,7 +316,7 @@ SO_PUBLIC bool JsonBuffer_Get_ByteArray (json_object * parent, const char * name
         return false;
     input = (char *)json_object_get_string(object);
     length = strlen(input);
-    if ((output = calloc(length, sizeof(char))) == NULL)
+    if ((output = calloc(length, sizeof(uint8_t))) == NULL)
         return false;
     
     b64 = BIO_new (BIO_f_base64());
@@ -378,7 +367,7 @@ SO_PUBLIC bool JsonBuffer_Put_UUID (json_object * parent, const char * name, uui
 
     json_object_object_add(parent, name, new);
     uuid_unparse(p_uuid, uuid);
-    parent = new;
+
     if (!JsonBuffer_Put_String(new, "id", uuid))
         return false;
     // TODO: Add other UUID attributes
@@ -408,44 +397,44 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
     if (json_object_object_get(parent, "Bin_Value") != NULL)
         JsonBuffer_Get_ByteArray(parent, "Bin_Value", &size, &byteData);
 
-    if (( str == NULL) && (byteData == NULL))
+
+    if (str != NULL) {
+        UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuid);
+        if (uuid_compare(type, uuid) == 0)
+            NTLVList_Add(list, name, type, strlen(str) + 1, (uint8_t * )
+        str);
+
+        UUID_Get_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, uuid);
+        if (uuid_compare(type, uuid) == 0) {
+            sscanf(str, "%hu", &port);
+            NTLVList_Add(list, name, type, 2, (uint8_t * ) & port);
+        }
+
+        UUID_Get_UUID(NTLV_TYPE_IPPROTO, UUID_TYPE_NTLV_TYPE, uuid);
+        if (uuid_compare(type, uuid) == 0) {
+            sscanf(str, "%hhu", &proto);
+            NTLVList_Add(list, name, type, 1, (uint8_t * ) & proto);
+        }
+
+        UUID_Get_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
+        if (uuid_compare(type, uuid) == 0) {
+            if ((byteData = calloc(4, sizeof(uint8_t))) == NULL)
+                return false;
+            inet_pton(AF_INET, str, byteData);
+            NTLVList_Add(list, name, type, 4, byteData);
+        }
+
+        UUID_Get_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
+        if (uuid_compare(type, uuid) == 0) {
+            if ((str = calloc(16, sizeof(char))) == NULL)
+                return false;
+            inet_pton(AF_INET6, str, byteData);
+            NTLVList_Add(list, name, type, 16, byteData);
+        }
+    } else if (byteData != NULL) {
+        NTLVList_Add(list, name, type, size, byteData);
+    } else {
         return false;
-
-    UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuid);
-    if (uuid_compare(type, uuid) == 0)
-        NTLVList_Add(list, name, type, strlen(str)+1, (uint8_t*)str);
-    
-    UUID_Get_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, uuid);
-    if (uuid_compare(type, uuid) == 0)
-    {
-        sscanf(str, "%hu", &port);
-        NTLVList_Add(list, name, type, 2, (uint8_t*)&port);
-    }
-    UUID_Get_UUID(NTLV_TYPE_IPPROTO, UUID_TYPE_NTLV_TYPE, uuid);
-    if (uuid_compare(type, uuid) == 0)
-    {
-        sscanf(str, "%hhu", &proto);
-        NTLVList_Add(list, name, type, 1, (uint8_t*)&proto);
-    }
-
-    UUID_Get_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
-    if (uuid_compare(type, uuid) == 0)
-    {
-        if ((byteData = calloc(4, sizeof(char))) == NULL)
-            return false;
-        inet_pton(AF_INET, str, byteData);
-        NTLVList_Add(list, name, type, 4, byteData);
-
-    }
-
-    UUID_Get_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
-    if (uuid_compare(type, uuid) == 0)
-    {
-        if ((str = calloc(16, sizeof(char))) == NULL)
-            return false;
-        inet_pton(AF_INET6, str, byteData);
-        NTLVList_Add(list, name, type, 16, byteData);
-
     }
 
 
@@ -491,6 +480,7 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
             return LIST_EACH_ERROR;
 
         doFree = true;
+        goto type_processed;
     }
     UUID_Get_UUID(NTLV_TYPE_IPPROTO, UUID_TYPE_NTLV_TYPE, uuid);
     if (uuid_compare(uuid, p_pItem->uuidType) == 0)
@@ -501,6 +491,7 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
             return LIST_EACH_ERROR;
 
         doFree = true;
+        goto type_processed;
     }
     UUID_Get_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
     if (uuid_compare(uuid, p_pItem->uuidType) == 0)
@@ -509,26 +500,31 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
             return LIST_EACH_ERROR;
         doFree=true;
         inet_ntop(AF_INET, p_pItem->pData, str, INET_ADDRSTRLEN);
+        goto type_processed;
     }
 
     UUID_Get_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
     if (uuid_compare(uuid, p_pItem->uuidType) == 0)
     {
-        if ((str = calloc(1, INET_ADDRSTRLEN)) == NULL)
+        if ((str = calloc(1, INET_ADDRSTRLEN)) == NULL) {
             return LIST_EACH_ERROR;
+        }
         doFree=true;
         inet_ntop(AF_INET6, p_pItem->pData, str, INET6_ADDRSTRLEN);
+        goto type_processed;
     }
 
-
+type_processed:
     if (str == NULL)
     {
         if (!JsonBuffer_Put_ByteArray(object, "Bin_Value", p_pItem->iLength, p_pItem->pData))
             return LIST_EACH_ERROR;
     }
     else
-        if (!JsonBuffer_Put_String(object, "String_Value", str))
+        if (!JsonBuffer_Put_String(object, "String_Value", str)) {
+            free(str);
             return LIST_EACH_ERROR;
+        }
 
     if (doFree)
         free(str);
@@ -901,8 +897,10 @@ SO_PUBLIC bool JsonBuffer_Get_Event (json_object * parent, const char * name,
     parent = object;
     if ((event = calloc(1, sizeof(struct Event))) == NULL)
         return false;
-    if (!JsonBuffer_Get_EventId(parent, "Id", &event->pId))
+    if (!JsonBuffer_Get_EventId(parent, "Id", &event->pId)) {
+        Event_Destroy(event);
         return false;
+    }
 
     if (json_object_object_get(parent, "Parent_Id") != NULL)
     {
@@ -1280,21 +1278,25 @@ SO_PUBLIC bool JsonBuffer_Get_Nugget (json_object * parent, const char * name,
 
     if (!JsonBuffer_Get_UUID(parent, "Nugget_ID", nugget->uuidNuggetId))
     {
+        Nugget_Destroy(nugget);
         return false;
     }
 
     if (!JsonBuffer_Get_UUID(parent, "App_Type", nugget->uuidApplicationType))
     {
+        Nugget_Destroy(nugget);
         return false;
     }
     if (!JsonBuffer_Get_UUID(parent, "Nugget_Type", nugget->uuidNuggetType))
     {
+        Nugget_Destroy(nugget);
         return false;
     }
     if (json_object_object_get(parent, "Name") != NULL)
     {
         if ((nugget->sName = JsonBuffer_Get_String(parent, "Name")) == NULL)
         {
+            Nugget_Destroy(nugget);
             return false;
         }
     }
@@ -1302,6 +1304,7 @@ SO_PUBLIC bool JsonBuffer_Get_Nugget (json_object * parent, const char * name,
     {
         if ((nugget->sLocation = JsonBuffer_Get_String(parent, "Location")) == NULL)
         {
+            Nugget_Destroy(nugget);
             return false;
         }
     }
@@ -1310,6 +1313,7 @@ SO_PUBLIC bool JsonBuffer_Get_Nugget (json_object * parent, const char * name,
     {
         if ((nugget->sContact = JsonBuffer_Get_String(parent, "Contact")) == NULL)
         {
+            Nugget_Destroy(nugget);
             return false;
         }
     }
@@ -1353,7 +1357,7 @@ JsonBuffer_Put_UUIDList (json_object * parent, const char * name,
     if ((object = json_object_new_array()) == NULL)
         return false;
     json_object_object_add(parent, name, object);
-    parent = object;
+
     List_ForEach(list, JsonBuffer_Put_UUIDList_Add, object);
     return true;
 }
@@ -1430,7 +1434,7 @@ JsonBuffer_Put_StringList (json_object * parent, const char * name,
     if ((object = json_object_new_array()) == NULL)
         return false;
     json_object_object_add(parent, name, object);
-    parent = object;
+
     List_ForEach(list, JsonBuffer_Put_StringList_Add, object);
     return true;
 }

@@ -73,6 +73,8 @@ Transfer_Init(void)
         return false;
     if (!SSH_Init())
         return false;
+    if (!HTTP_Init())
+        return false;
 
     if (strcmp(mode, "traditional") == 0) {
         rzb_log(LOG_INFO, "%s: File transfers taking place in traditional mode", __func__);

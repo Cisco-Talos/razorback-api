@@ -306,12 +306,6 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 	
 	ASSERT (block != NULL);
 
-    if ((tmp_string = calloc(1,MAX_PATH)) == NULL)
-	{
-		rzb_log(LOG_ERR, "%s: Failed to allocate path", __func__);
-        return TRANSFER_FAIL_LOCAL;
-	}
-
     ctx = Thread_GetContext(Thread_GetCurrent());
     if (ctx == NULL)
     {
@@ -361,7 +355,12 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         rzb_log(LOG_ERR, "%s: Could not open file for reading: %s", __func__, ssh_get_error(session->ssh));
         return TRANSFER_FAIL_DISPATCHER;
     }
-    
+
+    if ((tmp_string = calloc(1,MAX_PATH)) == NULL)
+    {
+        rzb_log(LOG_ERR, "%s: Failed to allocate path", __func__);
+        return TRANSFER_FAIL_LOCAL;
+    }
     tmp_string[0] = 0;
 #ifdef _MSC_VER
 	GetTempPathA(MAX_PATH, lpTempPathBuffer);
@@ -372,6 +371,7 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 #endif
     {
 		rzb_log(LOG_ERR, "%s: Cannot create temporary file name: %s, error: %s", __func__, tmp_string, strerror(errno));
+		free(tmp_string);
         return TRANSFER_FAIL_LOCAL;
     }
 	//rzb_log(LOG_DEBUG, "%s: Thread ID: %d FileName: %s:", __func__, Thread_GetCurrent()->iThread, tmp_string);
@@ -379,6 +379,7 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     if ((out_file = fopen (tmp_string, "w")) == NULL)
     {
         rzb_log(LOG_ERR, "%s: Cannot create temporary file: %s, error: %s", __func__, tmp_string, strerror(errno));
+        free(tmp_string);
         return TRANSFER_FAIL_LOCAL;
     }
     
@@ -391,6 +392,7 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
             sftp_close(fd);
 			fclose(out_file);
 			remove(tmp_string);
+			free(tmp_string);
             return TRANSFER_FAIL_DISPATCHER;
         }
         if (got == 0)
@@ -404,6 +406,7 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         sftp_close (fd);
         fclose(out_file);
         remove(tmp_string);
+        free(tmp_string);
         return TRANSFER_FAIL_DISPATCHER;
     }
     sftp_close (fd);

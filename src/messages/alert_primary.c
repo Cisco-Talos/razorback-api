@@ -70,7 +70,9 @@ MessageAlertPrimary_Initialize (
     message->nugget = nugget;
     message->gid = judgment->iGID;
     message->sid = judgment->iSID;
-    message->message = (char *)judgment->sMessage;
+    if (judgment->sMessage)
+        message->message = (char *)judgment->sMessage;
+
     message->seconds = judgment->iSeconds;
     message->nanosecs = judgment->iNanoSecs;
     message->priority = judgment->iPriority;
@@ -151,11 +153,10 @@ AlertPrimary_Deserialize(struct Message *message)
         json_object_put(msg);
         return false;
     }
-    if ((alert->message = JsonBuffer_Get_String(msg, "Message")) == NULL)
-    {
-        json_object_put(msg);
-        return false;
-    }
+
+    // Some alerts dont have messages
+    alert->message = JsonBuffer_Get_String(msg, "Message");
+
     if (!JsonBuffer_Get_uint8_t(msg, "Priority", &alert->priority))
     {
         json_object_put(msg);
@@ -243,10 +244,11 @@ AlertPrimary_Serialize(struct Message *message)
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Put_String(msg, "Message", alert->message))
-    {
-        json_object_put(msg);
-        return false;
+    if (alert->message != NULL) {
+            if (!JsonBuffer_Put_String(msg, "Message", alert->message))     {
+                json_object_put(msg);
+                return false;
+            }
     }
     if (!JsonBuffer_Put_uint8_t(msg, "Priority", alert->priority))
     {
@@ -302,7 +304,7 @@ AlertPrimary_Serialize(struct Message *message)
 
     wire = json_object_to_json_string(msg);
     message->length=strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(char))) == NULL)
+    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
     {
         json_object_put(msg);
         return false;

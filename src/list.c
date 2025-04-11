@@ -48,8 +48,8 @@ struct _List
 
 static void List_RemoveNode(List_t *list, struct ListNode *node);
 
-static void List_Stack_Push(List_t *list, struct ListNode *node);
-static void List_Queue_Push(List_t *list, struct ListNode *node);
+static bool List_Stack_Push(List_t *list, struct ListNode *node);
+static bool List_Queue_Push(List_t *list, struct ListNode *node);
 
 static struct ListNode * List_Stack_Pop(List_t *list);
 static struct ListNode * List_Queue_Pop(List_t *list);
@@ -148,6 +148,7 @@ SO_PUBLIC bool
 List_Push(List_t *list, void *item)
 {
     struct ListNode *node;
+    bool insert_result = false;
     ASSERT(list != NULL);
     if (list == NULL)
         return false;
@@ -168,15 +169,21 @@ List_Push(List_t *list, void *item)
     {
     case LIST_MODE_GENERIC:
     case LIST_MODE_QUEUE:
-        List_Queue_Push(list, node);
+        insert_result = List_Queue_Push(list, node);
         break;
     case LIST_MODE_STACK:
-        List_Stack_Push(list, node);
+        insert_result = List_Stack_Push(list, node);
         break;
     }
+    if (!insert_result)
+    {
+        free(node);
+        RWLock_Unlock(list->lock);
+        return false;
+    }
+
     list->length++;
     RWLock_Unlock(list->lock);
-
 
     if (list->sem != NULL)
 		Semaphore_Post(list->sem);
@@ -458,6 +465,7 @@ List_Clone (List_t *source)
 
     if (!List_ForEach(source, List_Clone_Node, dest))
     {
+        List_Destroy(dest);
         return NULL;
     }
     return dest;
@@ -492,13 +500,13 @@ List_Transfer (List_t *dest, List_t *source)
 
 
 
-static void 
+static bool
 List_Stack_Push(List_t *list, struct ListNode *node)
 {
     ASSERT(list != NULL);
     ASSERT(node != NULL);
     if (list == NULL)
-        return;
+        return false;
 
     if (list->head == NULL)
     {
@@ -511,14 +519,15 @@ List_Stack_Push(List_t *list, struct ListNode *node)
         list->head->prev = node;
         list->head = node;
     }
+    return true;
 }
-static void 
+static bool
 List_Queue_Push(List_t *list, struct ListNode *node)
 {
     ASSERT(list != NULL);
     ASSERT(node != NULL);
     if (list == NULL || node == NULL)
-        return;
+        return false;
 
     if (list->tail == NULL)
     {
@@ -531,6 +540,7 @@ List_Queue_Push(List_t *list, struct ListNode *node)
         list->tail->next = node;
         list->tail = node;
     }
+    return true;
 }
 
 static struct ListNode *
@@ -563,6 +573,12 @@ ListNode * List_Queue_Pop(List_t *list)
         return NULL;
 
     ret = list->tail;
+    // Clang scan-build complains about this line
+    // but there is no bug. The analyzer is confused
+    // by the fact that we are removing the node
+    // from the list and it thinks that the tail
+    // pointer is dangling.  The tail pointer is
+    // updated in List_RemoveNode.
     List_RemoveNode(list, ret);
 
     return ret;

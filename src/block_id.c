@@ -62,6 +62,7 @@ BlockId_Create (void)
     // intialize the hash
     if ((id->pHash = Hash_Create()) == NULL)
     {
+        BlockId_Destroy(id);
         rzb_log (LOG_ERR, "%s: failed due to lack of memory: Hash_Create", __func__);
         return NULL;
     }
@@ -94,6 +95,7 @@ BlockId_Clone (const struct BlockId *p_pSource)
 
     if ((dest->pHash = Hash_Clone (p_pSource->pHash)) == NULL)
     {
+        BlockId_Destroy(dest);
         rzb_log (LOG_ERR, "%s: failed due to failure of Hash_Clone", __func__);
         return NULL;
     }

@@ -93,6 +93,18 @@ BlockPool_CreateItem (struct RazorbackContext *context)
     return item;
 }
 
+SO_PUBLIC size_t
+BlockPool_GetSize(void)
+{
+    return sg_size;
+}
+
+SO_PUBLIC size_t
+BlockPool_GetItemCount(void)
+{
+    return List_Length(sg_bpList);
+}
+
 SO_PUBLIC bool 
 BlockPool_SetItemDataType(struct BlockPoolItem *item, char * name)
 {
@@ -126,21 +138,20 @@ BlockPool_AddData_FromFile(struct BlockPoolItem *item, char *fileName, bool temp
         rzb_log(LOG_ERR, "%s: failed to allocate data time", __func__);
         return false;
     }
+    dataBlock->iFlags = BLOCK_POOL_DATA_FLAG_FILE;
     dataBlock->data.fileName = strdup(fileName);
     dataBlock->data.tempFile = tempFile;
     if ((dataBlock->data.file = fopen(fileName, "r")) == NULL)
     {
 		rzb_perror("WTF: %s");
         rzb_log(LOG_ERR, "%s: failed to open file: %s", __func__, fileName);
-		free(dataBlock->data.fileName);
-		free(dataBlock);
+        BlockPool_DestroyItemDataList(dataBlock);
         return false;
     }
     if (fstat (fileno (dataBlock->data.file), &sb) == -1)
     {
         rzb_log(LOG_ERR, "%s: failed to stat file: %s", __func__, fileName);
-		free(dataBlock->data.fileName);
-		free(dataBlock);
+        BlockPool_DestroyItemDataList(dataBlock);
         return false;
     }
 
@@ -150,6 +161,7 @@ BlockPool_AddData_FromFile(struct BlockPoolItem *item, char *fileName, bool temp
     				Config_getBlockPoolMaxSize()))
     {
 		rzb_log(LOG_ERR, "%s: Block pool global size limit exceeded", __func__);
+        BlockPool_DestroyItemDataList(dataBlock);
 		Mutex_Unlock(sg_sizeMutex);
         return false;
     }
@@ -165,6 +177,7 @@ BlockPool_AddData_FromFile(struct BlockPoolItem *item, char *fileName, bool temp
 		Mutex_Lock(sg_sizeMutex);
 		sg_size -=sb.st_size;
 		Mutex_Unlock(sg_sizeMutex);
+        BlockPool_DestroyItemDataList(dataBlock);
         return false;
     }
 
@@ -173,17 +186,16 @@ BlockPool_AddData_FromFile(struct BlockPoolItem *item, char *fileName, bool temp
     				Config_getBlockPoolMaxItemSize()))
     {
 		rzb_log(LOG_ERR, "%s: Block pool item size limit exceeded", __func__);
-		free(dataBlock->data.fileName);
-		free(dataBlock);
         BlockPool_Item_Unlock(item);
 		Mutex_Lock(sg_sizeMutex);
 		sg_size -=sb.st_size;
 		Mutex_Unlock(sg_sizeMutex);
+        BlockPool_DestroyItemDataList(dataBlock);
         return false;
     }
     item->pEvent->pBlock->pId->iLength += sb.st_size;
     dataBlock->iLength = sb.st_size;
-    dataBlock->iFlags = BLOCK_POOL_DATA_FLAG_FILE;
+
     Hash_Update_File(item->pEvent->pBlock->pId->pHash, dataBlock->data.file);
 
     if (item->pDataHead == NULL)
@@ -318,13 +330,14 @@ BlockPool_GetHash (struct BlockPoolItem *p_pItem) {
 }
 
 void
-BlockPool_DestroyItemDataList(struct BlockPoolItem *p_pItem) 
+BlockPool_DestroyItemDataList(struct BlockPoolData *p_pData)
 {
-    struct BlockPoolData *l_pData;
-    while (p_pItem->pDataHead != NULL)
+    struct BlockPoolData *l_pData = p_pData;
+    struct BlockPoolData *l_pDataNext;
+    while (l_pData != NULL)
     {
-        l_pData = p_pItem->pDataHead;
-        p_pItem->pDataHead = p_pItem->pDataHead->pNext;
+        l_pDataNext = l_pData->pNext;
+
         switch (l_pData->iFlags)
         {
         case BLOCK_POOL_DATA_FLAG_FILE:
@@ -351,6 +364,7 @@ BlockPool_DestroyItemDataList(struct BlockPoolItem *p_pItem)
 		sg_size -=l_pData->iLength;
 		Mutex_Unlock(sg_sizeMutex);
         free(l_pData);
+        l_pData = l_pDataNext;
     }
 }
 
@@ -361,7 +375,7 @@ BlockPool_DestroyItemData(struct BlockPoolItem *p_pItem)
     if (p_pItem->pEvent != NULL)
         Event_Destroy(p_pItem->pEvent);
 
-    BlockPool_DestroyItemDataList(p_pItem);
+    BlockPool_DestroyItemDataList(p_pItem->pDataHead);
     Mutex_Destroy(p_pItem->mutex);
     free(p_pItem);
 }

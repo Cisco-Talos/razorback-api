@@ -65,7 +65,6 @@ Queue_Read_Message(struct Socket *socket)
     if ((message = (struct StompMessage *)calloc (1, sizeof (struct StompMessage))) == NULL)
     {
         rzb_log(LOG_ERR, "%s: Failed to allocate message struct", __func__);
-        free(buffer);
         return NULL;
     }
     message->headers= Message_Header_List_Create();
@@ -377,12 +376,14 @@ Queue_Connect_Socket( const char * address,
     {
         rzb_log(LOG_ERR, "%s: Failed to read connection response", __func__);
         Socket_Close(socket);
-        return false;
+        return NULL;
     }
     if (strcasecmp(message->sVerb, "CONNECTED") != 0)
     {
         rzb_log (LOG_ERR,
                  "%s: failed due to failure of strncasecmp ( CONNECTED )", __func__);
+        Queue_Destroy_Stomp_Message(message);
+        Socket_Close(socket);
         return NULL;
     }
 

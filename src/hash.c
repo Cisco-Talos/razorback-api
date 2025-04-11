@@ -42,7 +42,7 @@ Hash_ToText (const struct Hash *p_pHash)
 	ASSERT (p_pHash != NULL);
     ASSERT (p_pHash->iFlags & HASH_FLAG_FINAL);
 
-    if ((l_sString = (char *)calloc((p_pHash->iSize * 2) + 1, sizeof(char *))) == NULL)
+    if ((l_sString = (char *)calloc((p_pHash->iSize * 2) + 1, sizeof(char))) == NULL)
     {
         rzb_log(LOG_ERR, "%s: Failed to allocate new string", __func__);
         return NULL;
@@ -233,15 +233,17 @@ Hash_Clone (const struct Hash *p_pSource)
 	
 	ASSERT (p_pSource != NULL);
 
-    if ((l_pDestination = (struct Hash *)calloc(1, sizeof (struct Hash))) == NULL)
-    {
-        return NULL;
-    }
     if ((p_pSource->iFlags & HASH_FLAG_FINAL) != HASH_FLAG_FINAL)
     {
         rzb_log(LOG_ERR, "%s: Can not copy a non finalized hash", __func__);
         return NULL;
     }
+
+    if ((l_pDestination = (struct Hash *)calloc(1, sizeof (struct Hash))) == NULL)
+    {
+        return NULL;
+    }
+
     l_pDestination->iType = p_pSource->iType;
     l_pDestination->iSize = p_pSource->iSize;
     l_pDestination->iFlags = HASH_FLAG_FINAL;
@@ -249,6 +251,7 @@ Hash_Clone (const struct Hash *p_pSource)
     if ((l_pDestination->pData = (uint8_t *)malloc(p_pSource->iSize)) == NULL) 
     {
         rzb_log(LOG_ERR, "%s: Failed to allocation new data: %i bytes", __func__, p_pSource->iSize);
+        Hash_Destroy(l_pDestination);
         return NULL;
     }
 

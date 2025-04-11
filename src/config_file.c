@@ -227,6 +227,7 @@ readMyConfig (const char *configDir, const char *configFile,
     if (!testFile (configfile))
     {
         free (configfile);
+        free(file);
         return false;
     }
     if (config_read_file (&file->config, configfile) != CONFIG_TRUE)
@@ -537,6 +538,7 @@ parseArray(config_setting_t *config, RZBConfKey_t *block)
             if (uuid_parse (tmp, (uuids[i])) == -1)
             {
                 rzb_log (LOG_ERR, "%s: Failed to parse UUID: %s", __func__, tmp);
+                free(data);
                 return false;
             }
         }
@@ -557,6 +559,7 @@ parseArray(config_setting_t *config, RZBConfKey_t *block)
             else
             {
                 rzb_log (LOG_ERR, "%s: Failed to parse bool: %s", __func__, tmp);
+                free(data);
                 return false;
             }
         }
@@ -909,8 +912,10 @@ parseList(config_setting_t *config, RZBConfKey_t *block)
             {
                 config_setting_lookup_string(item, cur->key, &tmp);
                 intItem= (conf_int_t*)itemData;
-                if (!((RZBConfCallBack *)cur->callback)->parseString (tmp, intItem))
+                if (!((RZBConfCallBack *)cur->callback)->parseString (tmp, intItem)) {
+                    free(data);
                     return false;
+                }
                 itemData +=sizeof(conf_int_t);
             }
             else if (cur->type == RZB_CONF_KEY_TYPE_UUID)
@@ -920,6 +925,7 @@ parseList(config_setting_t *config, RZBConfKey_t *block)
                 if (uuid_parse (tmp, *uuidItem) == -1)
                 {
                     rzb_log (LOG_ERR, "%s: Failed to parse UUID: %s", __func__, tmp);
+                    free(data);
                     return false;
                 }
 
@@ -936,6 +942,7 @@ parseList(config_setting_t *config, RZBConfKey_t *block)
                 else
                 {
                     rzb_log (LOG_ERR, "%s: Failed to parse bool: %s", __func__, tmp);
+                    free(data);
                     return false;
                 }
                 itemData += sizeof(bool);

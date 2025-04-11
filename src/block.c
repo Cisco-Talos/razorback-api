@@ -63,7 +63,6 @@ Block_Clone (const struct Block *p_pSource)
     if ((l_pDestination = calloc(1, sizeof (struct Block))) == NULL)
     {
         rzb_log(LOG_ERR, "%s: Failed to allocate new block", __func__);
-        Block_Destroy (l_pDestination);
         return NULL;
     }
     if ((l_pDestination->pId = BlockId_Clone (p_pSource->pId)) == NULL)

@@ -31,8 +31,10 @@ Message_Create(uint32_t type, uint32_t version, size_t msgSize)
     message->version = version;
     if (msgSize > 0)
     {
-        if ((message->message = calloc(1,msgSize)) == NULL)
+        if ((message->message = calloc(1,msgSize)) == NULL) {
+            free(message);
             return NULL;
+        }
     }
     message->headers = Message_Header_List_Create();
     return message;
@@ -275,7 +277,7 @@ Message_Serialize_Empty(struct Message *message)
         return false;
 
 
-    if ((message->serialized = calloc(2, sizeof(char))) == NULL)
+    if ((message->serialized = calloc(2, sizeof(uint8_t))) == NULL)
         return false;
 
     message->serialized[0]=' ';
