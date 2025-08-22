@@ -85,6 +85,27 @@ Message_HeaderList_Add(List_t * headers, const char *p_sName, const char *p_sVal
     return l_pHeader;
 }
 
+void * MessageHeader_Clone(void *o) {
+    struct MessageHeader *orig = (struct MessageHeader *)o;
+    struct MessageHeader *clone;
+    if ((clone = calloc(1, sizeof(struct MessageHeader))) == NULL) {
+        rzb_log(LOG_ERR, "%s: Failed to alloc new header clone", __func__);
+        return NULL;
+    }
+    if ((clone->sName = strdup(orig->sName)) == NULL) {
+        rzb_log(LOG_ERR, "%s: Failed to alloc new header name clone", __func__);
+        free(clone);
+        return NULL;
+    }
+    if ((clone->sValue = strdup(orig->sValue)) == NULL) {
+        rzb_log(LOG_ERR, "%s: Failed to alloc new header value clone", __func__);
+        free(clone->sName);
+        free(clone);
+        return NULL;
+    }
+    return clone;
+}
+
 SO_PUBLIC bool
 Message_Add_Header(struct Message *p_pMessage, const char *p_sName, const char *p_sValue)
 {
@@ -105,7 +126,7 @@ Message_Header_List_Create(void)
             MessageHeader_Cmp,
             MessageHeader_KeyCmp,
             MessageHeader_Delete,
-            NULL, NULL, NULL);
+            MessageHeader_Clone, NULL, NULL);
 }
 
 static int 
