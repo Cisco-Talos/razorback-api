@@ -801,7 +801,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
         return false;
     }
     List_Destroy(stompMessage->headers);
-    stompMessage->headers = message->headers;
+    stompMessage->headers = List_Clone(message->headers);
     stompMessage->pBody = message->serialized;
     stompMessage->bodyLength = message->length;
 #ifdef _MSC_VER
@@ -814,7 +814,6 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
     if (asprintf(&messageId, STOMP_MID_FMT, (uintmax_t)curTime) == -1)
     {
         stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        stompMessage->headers = NULL;
         Queue_Destroy_Stomp_Message(stompMessage);
         Mutex_Unlock (queue->mWriteMutex);
         return false;
@@ -823,7 +822,6 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
     if (asprintf(&messageLen, STOMP_LEN_FMT, stompMessage->bodyLength) == -1)
     {
         stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        stompMessage->headers = NULL;
         Queue_Destroy_Stomp_Message(stompMessage);
         Mutex_Unlock (queue->mWriteMutex);
         return false;
@@ -831,7 +829,6 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
     if (asprintf(&messageType, "%u", message->type) == -1)
     {
         stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        stompMessage->headers = NULL;
         Queue_Destroy_Stomp_Message(stompMessage);
         Mutex_Unlock (queue->mWriteMutex);
         return false;
@@ -839,22 +836,20 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
     if (asprintf(&messageVer, "%u", message->version) == -1)
     {
         stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        stompMessage->headers = NULL;
         Queue_Destroy_Stomp_Message(stompMessage);
         Mutex_Unlock (queue->mWriteMutex);
         return false;
     }
 
-    if (!StompMessage_Add_Header(stompMessage, "receipt", messageId) ||
-            !StompMessage_Add_Header(stompMessage, "destination", dest) ||
-            !StompMessage_Add_Header(stompMessage, "amq-msg-type", "bytes") ||
-            !StompMessage_Add_Header(stompMessage, "content-length", messageLen) ||
-            !StompMessage_Add_Header(stompMessage, "rzb-msg-type", messageType) ||
-            !StompMessage_Add_Header(stompMessage, "rzb-msg-ver", messageVer))
+    if (!(StompMessage_Add_Header(stompMessage, "receipt", messageId) &&
+            StompMessage_Add_Header(stompMessage, "destination", dest) &&
+            StompMessage_Add_Header(stompMessage, "amq-msg-type", "bytes") &&
+            StompMessage_Add_Header(stompMessage, "content-length", messageLen) &&
+            StompMessage_Add_Header(stompMessage, "rzb-msg-type", messageType) &&
+            StompMessage_Add_Header(stompMessage, "rzb-msg-ver", messageVer)))
     {
         rzb_log(LOG_ERR, "%s: Failed to add ack message-id headers", __func__);
         stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        stompMessage->headers = NULL;
         Queue_Destroy_Stomp_Message(stompMessage);
         Mutex_Unlock (queue->mWriteMutex);
         return false;
@@ -873,13 +868,11 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
         }
         rzb_log(LOG_ERR, "%s: Failed to send message", __func__);
         stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        stompMessage->headers = NULL;
         Queue_Destroy_Stomp_Message(stompMessage);
         Mutex_Unlock (queue->mWriteMutex);
         return false;
     }
 
-    stompMessage->headers = NULL;
     stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
     Queue_Destroy_Stomp_Message(stompMessage);
 
