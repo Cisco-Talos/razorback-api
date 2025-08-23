@@ -43,6 +43,10 @@ static size_t
 read_callback(char *buffer, size_t size, size_t nitems, void *userdata) {
     struct StoreContext *context = (struct StoreContext *)userdata;
     //rzb_log(LOG_DEBUG, "%s: Reading %zu blocks of size %zu", __func__, nitems, size);
+    if (context->dataItem == NULL) {
+       // rzb_log(LOG_DEBUG, "%s: No more data to read", __func__);
+        return 0;
+    }
     if (context->dataItem->iFlags == BLOCK_POOL_DATA_FLAG_FILE) {
         // If the data is a file, read from the file handle
         if (context->bytesRead + size * nitems > context->dataItem->iLength) {
@@ -115,6 +119,8 @@ HTTP_Try_Store(void *i, void*ud)
     char *address = i;
     char *url = NULL;
     long http_code = 0;
+    status->dataItem = status->item->pDataHead;
+
     if (asprintf(&url, "http://%s:%d/%c/%c/%c/%c/%s",
                 address,
                 status->port,
@@ -201,6 +207,21 @@ curl_easy_cleanup(curl);
     return LIST_EACH_END;
 }
 
+static int
+HTTP_Store(void *i, void*ud) {
+    int try = 0;
+    int max_tries = 10;
+    struct StoreContext *status = ud;
+    int res;
+    for (try = 0; try < max_tries; try++) {
+        res = HTTP_Try_Store(i, ud);
+        if (status->status == TRANSFER_OK) {
+            return res;
+        }
+        rzb_log(LOG_ERR, "%s: Failed to store file, retrying %d/%d", __func__, try+1, max_tries);
+    }
+    return res;
+}
 
 SO_PUBLIC enum TransferStatus
 Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
@@ -223,7 +244,7 @@ Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
         free(context.memory);
         return TRANSFER_FAIL_LOCAL;
     }
-    List_ForEach(dispatcher->dispatcher->addressList, HTTP_Try_Store, &context);
+    List_ForEach(dispatcher->dispatcher->addressList, HTTP_Store, &context);
     free(context.memory);
     free(context.filename);
     return context.status;
@@ -266,6 +287,7 @@ HTTP_Try_Fetch(void *i, void*ud)
 
 
     rewind(status->fd);
+    ftruncate(fileno(status->fd), 0);
     status->size = 0;
     if (asprintf(&url, "http://%s:%d/%c/%c/%c/%c/%s",
                  address,
@@ -310,13 +332,28 @@ HTTP_Try_Fetch(void *i, void*ud)
     curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
     curl_easy_cleanup(curl);
     free(url);
-    free(status->filename);
     if (http_code != 200) {
         status->status = TRANSFER_FAIL_DISPATCHER;
         return LIST_EACH_OK;
     }
     status->status = TRANSFER_OK;
     return LIST_EACH_END;
+}
+
+static int
+HTTP_Fetch(void *i, void*ud) {
+    int try = 0;
+    int max_tries = 10;
+    struct FetchContext *status = ud;
+    int res;
+    for (try = 0; try < max_tries; try++) {
+        res = HTTP_Try_Fetch(i, ud);
+        if (status->status == TRANSFER_OK) {
+            return res;
+        }
+        rzb_log(LOG_ERR, "%s: Failed to fetch file, retrying %d/%d", __func__, try+1, max_tries);
+    }
+    return res;
 }
 
 SO_PUBLIC enum TransferStatus
@@ -340,8 +377,9 @@ Transfer_HTTP_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     int f = mkstemp(context.tmpFileName );
     context.fd = fdopen(f, "w");
     rzb_log(LOG_DEBUG, "%s: Storing file in: %s", __func__ , context.tmpFileName);
-    List_ForEach(dispatcher->dispatcher->addressList, HTTP_Try_Fetch, &context);
+    List_ForEach(dispatcher->dispatcher->addressList, HTTP_Fetch, &context);
     fclose(context.fd);
+    free(context.filename);
     if (context.status != TRANSFER_OK) {
         rzb_log(LOG_ERR, "%s: Failed to fetch file", __func__);
         free(context.tmpFileName);
