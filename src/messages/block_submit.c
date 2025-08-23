@@ -93,16 +93,19 @@ BlockSubmission_Deserialize(struct Message *message)
 
     if (!JsonBuffer_Get_uint32_t (msg, "Reason", &submit->iReason))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Reason from JSON buffer", __func__);
         json_object_put(msg);
         return false;
     }
     if (!JsonBuffer_Get_Event (msg, "Event", &submit->pEvent))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Event from JSON buffer", __func__);
         json_object_put(msg);
         return false;
     }
     if (!JsonBuffer_Get_uint8_t (msg, "Stored_Locality", &submit->storedLocality))
     {
+        rzb_log(LOG_ERR, "%s: Failed to get Stored_Locality from JSON buffer", __func__);
         json_object_put(msg);
         return false;
     }
