@@ -309,10 +309,14 @@ Queue_Message_Get_Header(struct StompMessage *message, const char *name)
 
 
 static struct Socket *
-Queue_Connect_Socket( const char * address,
-                        int16_t port, const char * username,
-                        const char * password, bool useSSL)
-{
+Queue_Connect_Socket(
+    const char * address,
+    int16_t port,
+    const char * username,
+    const char * password,
+    const char * vHost,
+    bool useSSL
+) {
     struct Socket *socket;
     struct StompMessage *message;
 	
@@ -360,6 +364,15 @@ Queue_Connect_Socket( const char * address,
         Queue_Destroy_Stomp_Message(message);
         Socket_Close(socket);
         return NULL;
+    }
+    if (vHost != NULL) {
+        rzb_log(LOG_DEBUG, "%s: Adding vhost header: %s", __func__, vHost);
+        if (!StompMessage_Add_Header(message, "host", vHost)) {
+            rzb_log(LOG_ERR, "%s: Failed to add vhost header", __func__);
+            Queue_Destroy_Stomp_Message(message);
+            Socket_Close(socket);
+            return NULL;
+        }
     }
 
     // send the Connect message
@@ -487,7 +500,7 @@ Queue_Connect(struct Queue *queue)
     {
         if ((queue->pReadSocket =
              Queue_Connect_Socket(queue->sHostname, queue->iPort,
-                  queue->sUser, queue->sPassword, queue->bUseSSL)) == NULL)
+                  queue->sUser, queue->sPassword, queue->sVhost, queue->bUseSSL)) == NULL)
 
         {
             rzb_log (LOG_ERR,
@@ -506,7 +519,7 @@ Queue_Connect(struct Queue *queue)
     {
         if ((queue->pWriteSocket = 
                     Queue_Connect_Socket(queue->sHostname, queue->iPort,
-                    queue->sUser, queue->sPassword, queue->bUseSSL)) == NULL)
+                    queue->sUser, queue->sPassword, queue->sVhost, queue->bUseSSL)) == NULL)
         {
             rzb_log (LOG_ERR,
                      "%s: failed due to failure of Queue_Connect_Socket (Write)", __func__);
@@ -551,6 +564,7 @@ Queue_Create (const char * p_sQueueName, int p_iFlags)
         Config_getMqPort(),
         Config_getMqUser(),
         Config_getMqPassword(),
+        Config_getMqVhost(),
         Config_getMqSSL()
     );
 }
@@ -561,6 +575,7 @@ Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags,
                         uint32_t p_iPort,
                         const char * p_sUser,
                         const char * p_sPassword,
+                        const char * p_sVhost,
                         bool p_bUseSSL
 )
 {
@@ -577,6 +592,7 @@ Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags,
     l_pQueue->iPort = p_iPort;
     l_pQueue->sUser = (char *)p_sUser;
     l_pQueue->sPassword = (char*)p_sPassword;
+    l_pQueue->sVhost = (char*)p_sVhost;
     l_pQueue->bUseSSL = p_bUseSSL;
 
     if ((l_pQueue->sName = (char *)calloc(strlen((char *)p_sQueueName)+1, sizeof(char))) == NULL)

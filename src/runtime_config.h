@@ -20,13 +20,12 @@ extern bool Config_isBlockStoreRemote(void);
 extern conf_int_t *Config_getLocalityBackupOrder (void);
 extern conf_int_t Config_getLocalityBackupCount (void);
 
+
 extern char *Config_getMqHost (void);
-
 extern uint32_t Config_getMqPort (void);
-
 extern char *Config_getMqUser (void);
-
 extern char *Config_getMqPassword (void);
+extern char *Config_getMqVhost (void);
 extern bool Config_getMqSSL (void);
 
 extern uint32_t Config_getCacheGoodLimit (void);

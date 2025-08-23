@@ -31,9 +31,10 @@ struct Queue
     struct Socket *pWriteSocket;   ///< Write socket
     char *sName;                   ///< Queue name
     int iFlags;                    ///< Flags (read/write/etc)
-    Mutex_t *mReadMutex;      ///< Read Lock
-    Mutex_t *mWriteMutex;     ///< Write lock
+    Mutex_t *mReadMutex;           ///< Read Lock
+    Mutex_t *mWriteMutex;          ///< Write lock
     char *sHostname;               ///< Broker hostname
+    char *sVhost;                  ///< Broker virtual host
     uint32_t iPort;                ///< Broker port
     char *sUser;                   ///< Broker username
     char *sPassword;               ///< Broker password
@@ -61,6 +62,7 @@ SO_PUBLIC extern struct Queue *Queue_Create (const char * p_sQueueName,
  * @param p_iPort Port number to connect to
  * @param *p_sUser User name to connect to the broker with
  * @param *p_sPassword Password to connect to the broker with
+ * @param *p_sVhost Virtual host to connect to on the broker
  * @param p_bUseSSL Enable SSL for the broker connection
  * @return a pointer to a new Queue Struct or NULL on error.
  */
@@ -71,6 +73,7 @@ SO_PUBLIC extern struct Queue *Queue_Create_With_Host (
     uint32_t p_iPort,
     const char * p_sUser,
     const char * p_sPassword,
+    const char * p_sVhost,
     bool p_bUseSSL
     );
 

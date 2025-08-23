@@ -30,6 +30,7 @@ static char *sg_sMqHost;
 static conf_int_t sg_iMqPort;
 static char *sg_sMqUser;
 static char *sg_sMqPassword;
+static char *sg_sMqVhost = NULL;
 static bool sg_sMqSSL;
 
 // Local Cache Stuff
@@ -118,6 +119,13 @@ Config_getMqPassword (void)
 {
     return sg_sMqPassword;
 }
+
+char *
+Config_getMqVhost (void)
+{
+    return sg_sMqVhost;
+}
+
 bool
 Config_getMqSSL (void)
 {
@@ -322,6 +330,7 @@ static RZBConfKey_t global_config[] = {
     {"MessageQueue.Port", RZB_CONF_KEY_TYPE_INT, &sg_iMqPort, NULL},
     {"MessageQueue.User", RZB_CONF_KEY_TYPE_STRING, &sg_sMqUser, NULL},
     {"MessageQueue.Password", RZB_CONF_KEY_TYPE_STRING, &sg_sMqPassword, NULL},
+    {"MessageQueue.Vhost", RZB_CONF_KEY_TYPE_STRING, &sg_sMqVhost, NULL},
     {"MessageQueue.SSL", RZB_CONF_KEY_TYPE_BOOL, &sg_sMqSSL, NULL},
 
     // Logging Stuff
