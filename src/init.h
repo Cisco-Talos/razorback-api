@@ -14,7 +14,7 @@ extern void initcache (void);
 extern void initUuids (void);
 
 // runtime_config.c
-void readApiConfig (void);
+bool readApiConfig (void);
 
 // api.c
 void initApi (void);

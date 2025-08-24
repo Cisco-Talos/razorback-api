@@ -368,14 +368,28 @@ static RZBConfKey_t global_config[] = {
     {NULL, RZB_CONF_KEY_TYPE_END, NULL, NULL}
 };
 
-void readApiConfig (void)
-{
-    if (!readMyConfig (NULL, API_CONFIG_FILE, global_config))
-    {
+bool readApiConfig (void) {
+    char *envVal;
+
+    if (!readMyConfig (NULL, API_CONFIG_FILE, global_config)) {
         rzb_log(LOG_ERR, "Failed to read api config. Exiting.");
-        exit(1);
+        return false;
     }
     sg_iMaxBlockSize = sg_iMaxBlockSize * 1024 * 1024;  // Convert to MB;
+
+    // Check for environment variable overrides
+    if ((envVal = getenv("RZB_MQ_PASSWORD")) != NULL) {
+        sg_sMqPassword = strdup(envVal);
+    }
+
+    if ((sg_sMqHost == NULL)
+            || (sg_sMqUser == NULL)
+            || (sg_sMqPassword == NULL)
+    ) {
+        rzb_log(LOG_ERR, "Message Queue configuration is incomplete,");
+        return false;
+    }
+    return true;
 }
 
 

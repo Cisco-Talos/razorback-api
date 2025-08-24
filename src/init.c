@@ -39,7 +39,9 @@ RZB_Init_API ()
 #endif
 		Crypto_Initialize();
 		initCurl();
-		readApiConfig();
+		if (!readApiConfig()) {
+            exit(1);
+        }
 		configureLogging();
 		Magic_Init();
 		initcache();
