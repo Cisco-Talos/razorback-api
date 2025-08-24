@@ -123,8 +123,8 @@ HTTP_Try_Store(void *i, void*ud)
     // Reset all the context states incase this is a retry
     status->dataItem = status->item->pDataHead;
     status->bytesRead = 0;
-    if (context->dataItem->iFlags == BLOCK_POOL_DATA_FLAG_FILE) {
-        rewind(context->dataItem->data.file);
+    if (status->dataItem->iFlags == BLOCK_POOL_DATA_FLAG_FILE) {
+        rewind(status->dataItem->data.file);
     }
 
     if (asprintf(&url, "http://%s:%d/%c/%c/%c/%c/%s",
