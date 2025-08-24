@@ -264,6 +264,7 @@ struct FetchContext {
     uint16_t port;
     enum TransferStatus status;
     size_t size;
+    size_t expectedSize;
 };
 
 
@@ -342,6 +343,11 @@ HTTP_Try_Fetch(void *i, void*ud)
         status->status = TRANSFER_FAIL_DISPATCHER;
         return LIST_EACH_OK;
     }
+    if (status->size != status->expectedSize) {
+        rzb_log(LOG_ERR, "%s: File size mismatch, got %zu expected %zu", __func__, status->size, status->expectedSize);
+        status->status = TRANSFER_FAIL_DISPATCHER;
+        return LIST_EACH_OK;
+    }
     status->status = TRANSFER_OK;
     return LIST_EACH_END;
 }
@@ -372,6 +378,7 @@ Transfer_HTTP_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         .port = dispatcher->dispatcher->port,
         .status = TRANSFER_FAIL_LOCAL,
         .size = 0,
+        .expectedSize = block->pId->iLength,
     };
     if ((context.filename = Transfer_generateFilename (block)) == NULL)
     {
