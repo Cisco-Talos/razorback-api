@@ -119,7 +119,13 @@ HTTP_Try_Store(void *i, void*ud)
     char *address = i;
     char *url = NULL;
     long http_code = 0;
+
+    // Reset all the context states incase this is a retry
     status->dataItem = status->item->pDataHead;
+    status->bytesRead = 0;
+    if (context->dataItem->iFlags == BLOCK_POOL_DATA_FLAG_FILE) {
+        rewind(context->dataItem->data.file);
+    }
 
     if (asprintf(&url, "http://%s:%d/%c/%c/%c/%c/%s",
                 address,
