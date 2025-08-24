@@ -9,7 +9,6 @@
 #include <razorback/list.h>
 
 #include <signal.h>
-#include <errno.h>
 
 #include "connected_entity_private.h"
 #include "runtime_config.h"
