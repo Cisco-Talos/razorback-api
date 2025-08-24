@@ -139,17 +139,11 @@ enum TransferStatus
 Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
 {
     struct TransportDescriptor *trans = NULL;
-    uint8_t file = 0;
 	int i;
 	enum TransferStatus status;
-    if (sg_bTraditionalMode && (dispatcher->locality == Config_getLocalityId())) // Same locality always use file
-    {
-        trans = List_Find(sg_transportList, &file);
-    }
-    else
-        trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol);
-    if (trans == NULL)
-    {
+
+    if ((trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol)) == NULL) {
+        rzb_log(LOG_ERR, "Failed to find transport descriptor for protocol: %u", dispatcher->dispatcher->protocol);
         return TRANSFER_FAIL_LOCAL;
     }
     rzb_log(LOG_DEBUG, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
