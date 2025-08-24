@@ -25,3 +25,4 @@ tests/configTest
 tests/daemonTest
 tests/logTest
 razorback.pc
+/\.idea
