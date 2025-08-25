@@ -13,6 +13,8 @@
 
 #include "transfer/core.h"
 
+static bool sg_bSkipStore = false;
+
 static struct TransportDescriptor descriptor =
  {
          2,
@@ -24,6 +26,15 @@ static struct TransportDescriptor descriptor =
 
 bool HTTP_Init(void)
 {
+    const char *skip = getenv("RZB_SKIP_HTTP_STORE");
+    if (skip != NULL)
+    {
+        if (strcmp(skip, "1") == 0 || strcasecmp(skip, "true") == 0)
+        {
+            sg_bSkipStore = true;
+            rzb_log(LOG_INFO, "%s: HTTP Store disabled via RZB_SKIP_HTTP_STORE", __func__);
+        }
+    }
     return Transport_Register(&descriptor);
 }
 
@@ -239,11 +250,16 @@ Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
         .filename = NULL,
         .port = dispatcher->dispatcher->port,
         .status = TRANSFER_FAIL_LOCAL,
-        .memory = malloc(1),
+        .memory = NULL,
         .size = 0,
     };
     ASSERT(item != NULL);
     ASSERT(dispatcher != NULL);
+    if (sg_bSkipStore) {
+        return TRANSFER_OK;
+    }
+    context.memory = malloc(1),
+
     if ((context.filename = Transfer_generateFilename (item->pEvent->pBlock)) == NULL)
     {
         rzb_log (LOG_ERR, "%s: failed to generate file name", __func__);
