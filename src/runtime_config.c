@@ -32,6 +32,7 @@ static char *sg_sMqUser;
 static char *sg_sMqPassword;
 static char *sg_sMqVhost = NULL;
 static bool sg_sMqSSL;
+static conf_int_t sg_iMqPrefetch = 10;
 
 // Local Cache Stuff
 static conf_int_t sg_iCacheGoodLimit;
@@ -130,6 +131,12 @@ bool
 Config_getMqSSL (void)
 {
     return sg_sMqSSL;
+}
+
+uint32_t
+Config_getMqPrefetch (void)
+{
+    return sg_iMqPrefetch;
 }
 
 uint32_t
@@ -332,6 +339,7 @@ static RZBConfKey_t global_config[] = {
     {"MessageQueue.Password", RZB_CONF_KEY_TYPE_STRING, &sg_sMqPassword, NULL},
     {"MessageQueue.Vhost", RZB_CONF_KEY_TYPE_STRING, &sg_sMqVhost, NULL},
     {"MessageQueue.SSL", RZB_CONF_KEY_TYPE_BOOL, &sg_sMqSSL, NULL},
+    {"MessageQueue.Prefetch", RZB_CONF_KEY_TYPE_INT, &sg_iMqPrefetch, NULL},
 
     // Logging Stuff
     {"Log.Destination", RZB_CONF_KEY_TYPE_PARSED_STRING, &log_dest, &destCallBack},

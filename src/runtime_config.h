@@ -27,6 +27,7 @@ extern char *Config_getMqUser (void);
 extern char *Config_getMqPassword (void);
 extern char *Config_getMqVhost (void);
 extern bool Config_getMqSSL (void);
+extern uint32_t Config_getMqPrefetch (void);
 
 extern uint32_t Config_getCacheGoodLimit (void);
 

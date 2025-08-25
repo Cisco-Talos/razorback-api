@@ -411,6 +411,7 @@ Queue_BeginReading (struct Queue *p_pQ)
 {
     struct StompMessage *l_pMessage;
     struct timeval tv;
+    char * prefetchCount;
 
 	ASSERT (p_pQ != NULL);
 
@@ -434,15 +435,22 @@ Queue_BeginReading (struct Queue *p_pQ)
         return false;
     }
 
+    if (asprintf(&prefetchCount, "%u", p_pQ->iPrefetch) == -1) {
+        rzb_log(LOG_ERR, "%s: Failed to allocate prefetch count header", __func__);
+        Queue_Destroy_Stomp_Message(l_pMessage);
+        return false;
+    }
+
     if (!(
             StompMessage_Add_Header(l_pMessage, "destination", p_pQ->sName) &&
             StompMessage_Add_Header(l_pMessage, "ack", "client-individual")  &&
             StompMessage_Add_Header(l_pMessage, "id", p_pQ->sSubscriptionId) &&
-            StompMessage_Add_Header(l_pMessage, "prefetch-count", "10")
+            StompMessage_Add_Header(l_pMessage, "prefetch-count", prefetchCount)
         ))
     {
         rzb_log(LOG_ERR, "%s: Failed to add destination headers", __func__);
         Queue_Destroy_Stomp_Message(l_pMessage);
+        free(prefetchCount);
         return false;
     }
 
@@ -451,10 +459,12 @@ Queue_BeginReading (struct Queue *p_pQ)
     {
         rzb_log(LOG_ERR, "%s: Failed to send subscribe message", __func__);
         Queue_Destroy_Stomp_Message(l_pMessage);
+        free(prefetchCount);
         return false;
     }
 
     Queue_Destroy_Stomp_Message(l_pMessage);
+    free(prefetchCount);
 
     return true;
 }
@@ -565,7 +575,8 @@ Queue_Create (const char * p_sQueueName, int p_iFlags)
         Config_getMqUser(),
         Config_getMqPassword(),
         Config_getMqVhost(),
-        Config_getMqSSL()
+        Config_getMqSSL(),
+        Config_getMqPrefetch()
     );
 }
 
@@ -576,7 +587,8 @@ Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags,
                         const char * p_sUser,
                         const char * p_sPassword,
                         const char * p_sVhost,
-                        bool p_bUseSSL
+                        bool p_bUseSSL,
+                        uint32_t p_iPrefetch
 )
 {
     struct Queue *l_pQueue;
@@ -594,6 +606,7 @@ Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags,
     l_pQueue->sPassword = (char*)p_sPassword;
     l_pQueue->sVhost = (char*)p_sVhost;
     l_pQueue->bUseSSL = p_bUseSSL;
+    l_pQueue->iPrefetch = p_iPrefetch;
 
     if ((l_pQueue->sName = (char *)calloc(strlen((char *)p_sQueueName)+1, sizeof(char))) == NULL)
     {

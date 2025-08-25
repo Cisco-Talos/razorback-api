@@ -258,7 +258,7 @@ Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     if (sg_bSkipStore) {
         return TRANSFER_OK;
     }
-    context.memory = malloc(1),
+    context.memory = malloc(1);
 
     if ((context.filename = Transfer_generateFilename (item->pEvent->pBlock)) == NULL)
     {

@@ -40,6 +40,7 @@ struct Queue
     char *sPassword;               ///< Broker password
     bool bUseSSL;                  ///< Use SSL connection to broker
     char *sSubscriptionId;         ///< The subscription ID
+    uint32_t iPrefetch;            ///< Prefetch count
 };
 
 #define QUEUE_FLAG_SEND 0x01
@@ -74,7 +75,8 @@ SO_PUBLIC extern struct Queue *Queue_Create_With_Host (
     const char * p_sUser,
     const char * p_sPassword,
     const char * p_sVhost,
-    bool p_bUseSSL
+    bool p_bUseSSL,
+    uint32_t p_iPrefetch
     );
 
 /** Terminates the queue
