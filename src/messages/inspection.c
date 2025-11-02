@@ -42,40 +42,39 @@ MessageInspectionSubmission_Initialize (
     struct MessageInspectionSubmission *message;
 
     ASSERT (p_pEvent != NULL);
-    if (p_pEvent == NULL)
+    if (p_pEvent == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Event is NULL", __func__);
         return NULL;
+    }
 
-    if ((msg = Message_Create(MESSAGE_TYPE_INSPECTION, MESSAGE_VERSION_1, sizeof(struct MessageInspectionSubmission))) == NULL)
+    if ((msg = Message_Create(MESSAGE_TYPE_INSPECTION, MESSAGE_VERSION_1, sizeof(struct MessageInspectionSubmission))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);
         return NULL;
+    }
     message = msg->message;
-	
-    if ((message->pBlock = Block_Clone(p_pEvent->pBlock)) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to clone block", __func__);
+
+    if ((message->pBlock = Block_Clone(p_pEvent->pBlock)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to clone block", __func__);
         InspectionSubmission_Destroy(msg);
         return NULL;
     }
 
     message->iReason = p_iReason;
-    if ((message->eventId = EventId_Clone(p_pEvent->pId)) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to clone event id", __func__);
+    if ((message->eventId = EventId_Clone(p_pEvent->pId)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to clone event id", __func__);
         InspectionSubmission_Destroy(msg);
         return NULL;
     }
-    message->pEventMetadata = List_Clone (p_pEvent->pMetaDataList);
-    if (message->pEventMetadata == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to clone metadata list", __func__);
+    message->pEventMetadata = List_Clone(p_pEvent->pMetaDataList);
+    if (message->pEventMetadata == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to clone metadata list", __func__);
         InspectionSubmission_Destroy(msg);
         return NULL;
     }
     message->localityCount = localityCount;
-    if (localityCount > 0)
-    {
-        if ((message->localityList = calloc(localityCount, sizeof(uint8_t))) == NULL)
-        {
-            rzb_log(LOG_ERR, "%s: Failed to clone locality list", __func__);
+    if (localityCount > 0) {
+        if ((message->localityList = calloc(localityCount, sizeof(uint8_t))) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to clone locality list", __func__);
             InspectionSubmission_Destroy(msg);
             return NULL;
         }
@@ -98,17 +97,21 @@ InspectionSubmission_Destroy (struct Message
         return;
 
     msg = (struct MessageInspectionSubmission *)message->message;
-
-    // destroy any malloc'd components
-    if (msg->pBlock != NULL)
-        Block_Destroy (msg->pBlock);
-    if (msg->eventId != NULL)
-        EventId_Destroy(msg->eventId);
-    if (msg->pEventMetadata != NULL)
-        List_Destroy(msg->pEventMetadata);
-    if (msg->localityList != NULL)
-        free(msg->localityList);
-
+    if (msg != NULL) {
+        // destroy any malloc'd components
+        if (msg->pBlock != NULL) {
+            Block_Destroy(msg->pBlock);
+        }
+        if (msg->eventId != NULL) {
+            EventId_Destroy(msg->eventId);
+        }
+        if (msg->pEventMetadata != NULL) {
+            List_Destroy(msg->pEventMetadata);
+        }
+        if (msg->localityList != NULL) {
+            free(msg->localityList);
+        }
+    }
     Message_Destroy(message);
 }
 
@@ -119,41 +122,47 @@ InspectionSubmission_Deserialize(struct Message *message)
     json_object *msg;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);
         return false;
+    }
 
-    if ((message->message = calloc(1,sizeof(struct MessageInspectionSubmission))) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageInspectionSubmission))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate message", __func__);
         return false;
+    }
 
     
-    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to parse JSON", __func__);
         return false;
+    }
     
     submit = message->message;
 
-    if (!JsonBuffer_Get_uint32_t (msg, "Reason", &submit->iReason))
-    {
+    if (!JsonBuffer_Get_uint32_t(msg, "Reason", &submit->iReason)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Reason", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Get_EventId (msg, "Event_ID", &submit->eventId))
-    {
+    if (!JsonBuffer_Get_EventId(msg, "Event_ID", &submit->eventId)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Event_ID", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Get_NTLVList (msg, "Event_Metadata", &submit->pEventMetadata))
-    {
+    if (!JsonBuffer_Get_NTLVList(msg, "Event_Metadata", &submit->pEventMetadata)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Event_Metadata", __func__);
         json_object_put(msg);
         return false;
     }
-    
-    if (!JsonBuffer_Get_Block (msg, "Block", &submit->pBlock))
-    {
+
+    if (!JsonBuffer_Get_Block(msg, "Block", &submit->pBlock)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Block", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Get_uint8List (msg, "Avaliable_Localities", &submit->localityList, &submit->localityCount))
-    {
+    if (!JsonBuffer_Get_uint8List(msg, "Avaliable_Localities", &submit->localityList, &submit->localityCount)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Avaliable_Localities", __func__);
         json_object_put(msg);
         return false;
     }
@@ -169,50 +178,54 @@ InspectionSubmission_Serialize(struct Message *message)
     const char * wire;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);
         return false;
+    }
 
     submit = message->message;
 
-    if ((msg = json_object_new_object()) == NULL)
-        return false;
-
-
-    if (!JsonBuffer_Put_uint32_t (msg, "Reason", submit->iReason))
-    {
-        json_object_put(msg);
-        return false;
-    }
-    if (!JsonBuffer_Put_EventId (msg, "Event_ID", submit->eventId))
-    {
-        json_object_put(msg);
-        return false;
-    }
-    if (!JsonBuffer_Put_NTLVList (msg, "Event_Metadata", submit->pEventMetadata))
-    {
-        json_object_put(msg);
+    if ((msg = json_object_new_object()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create JSON object", __func__);
         return false;
     }
 
-    if (!JsonBuffer_Put_Block (msg, "Block", submit->pBlock))
-    {
+
+    if (!JsonBuffer_Put_uint32_t(msg, "Reason", submit->iReason)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to put Reason", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Put_uint8List (msg, "Avaliable_Localities", submit->localityList, submit->localityCount))
-    {
+    if (!JsonBuffer_Put_EventId(msg, "Event_ID", submit->eventId)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to put Event_ID", __func__);
         json_object_put(msg);
         return false;
     }
-    
+    if (!JsonBuffer_Put_NTLVList(msg, "Event_Metadata", submit->pEventMetadata)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to put Event_Metadata", __func__);
+        json_object_put(msg);
+        return false;
+    }
+
+    if (!JsonBuffer_Put_Block(msg, "Block", submit->pBlock)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to put Block", __func__);
+        json_object_put(msg);
+        return false;
+    }
+    if (!JsonBuffer_Put_uint8List(msg, "Avaliable_Localities", submit->localityList, submit->localityCount)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to put Avaliable_Localities", __func__);
+        json_object_put(msg);
+        return false;
+    }
+
     wire = json_object_to_json_string(msg);
-    message->length=strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
-    {
+    message->length = strlen(wire);
+    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate serialized message", __func__);
         json_object_put(msg);
         return false;
     }
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *) message->serialized, wire);
     json_object_put(msg);
     return true;
 }

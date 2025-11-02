@@ -29,8 +29,7 @@ static struct MessageHandler config_handler = {
 
 // core.h
 void 
-Message_CnC_Error_Init(void)
-{
+Message_CnC_Error_Init(void) {
     Message_Register_Handler(&reg_handler);
     Message_Register_Handler(&config_handler);
 }
@@ -40,25 +39,33 @@ MessageError_Initialize (
                         uint32_t p_iCode,
                         const char *p_sMessage,
                        const uuid_t p_uuidSourceNugget,
-                       const uuid_t p_uuidDestNugget)
-{
+                       const uuid_t p_uuidDestNugget) {
     struct Message *msg;
     struct MessageError *message;
 
-    if ((msg = Message_Create_Directed(p_iCode, MESSAGE_VERSION_1, sizeof(struct MessageError), p_uuidSourceNugget, p_uuidDestNugget)) == NULL)
+    msg = Message_Create_Directed(
+        p_iCode,
+        MESSAGE_VERSION_1,
+        sizeof(struct MessageError),
+        p_uuidSourceNugget,
+        p_uuidDestNugget
+    );
+    if (msg == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to create message", __func__);
         return NULL;
+    }
     message = msg->message;
 
     if ((message->sMessage =
-         malloc (strlen ((const char *) p_sMessage) + 1)) == NULL)
-    {
+                 malloc(strlen((const char *) p_sMessage) + 1)) == NULL) {
         Error_Destroy(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to lack of memory", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to lack of memory", __func__);
         return NULL;
     }
-    strcpy ((char *) message->sMessage,
-            (const char *) p_sMessage);
+    strcpy((char *) message->sMessage,
+           (const char *) p_sMessage);
     msg->destroy = Error_Destroy;
     msg->deserialize = Error_Deserialize;
     msg->serialize = Error_Serialize;
@@ -70,13 +77,19 @@ Error_Destroy (struct Message *msg)
 {
     struct MessageError *message;
     ASSERT (msg != NULL);
-    if (msg == NULL)
+    if (msg == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to NULL msg", __func__);
         return;
+    }
 
     message = msg->message;
-
-    if (message->sMessage != NULL)
+    if (message == NULL) {
+        return;
+    }
+    if (message->sMessage != NULL) {
         free(message->sMessage);
+    }
 
     free(message);
 }
@@ -88,22 +101,30 @@ Error_Deserialize(struct Message *message)
     struct MessageError *error;
     
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to NULL message", __func__);
         return false;
+    }
 
-    if ((message->message = calloc(1,sizeof(struct MessageError))) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageError))) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to lack of memory", __func__);
         return false;
+    }
 
-    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of json_tokener_parse", __func__);
         return false;
+    }
     
     error = message->message;
 
-    if ((error->sMessage = (uint8_t *)JsonBuffer_Get_String (msg, "Message")) == NULL)
-    {
+    if ((error->sMessage = (uint8_t *) JsonBuffer_Get_String(msg, "Message")) == NULL) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: ( TERM ) failed due to failure of JsonBuffer_Get_String", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_String", __func__);
         return false;
     }
     json_object_put(msg);
@@ -112,39 +133,44 @@ Error_Deserialize(struct Message *message)
 
 
 static bool
-Error_Serialize(struct Message *message)
-{
+Error_Serialize(struct Message *message) {
     struct MessageError *error;
     json_object *msg;
     const char * wire;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to NULL message", __func__);
         return false;
+    }
 
     error = message->message;
 
-    if ((msg = json_object_new_object()) == NULL)
+    if ((msg = json_object_new_object()) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to to create JSON object", __func__);
         return false;
+    }
 
     if (!JsonBuffer_Put_String
-        (msg, "Message", (char *)error->sMessage))
-    {
+            (msg, "Message", (char *) error->sMessage)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: ( TERM ) failed due to failure of JsonBuffer_Put_String", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Put_String", __func__);
         return false;
     }
 
     wire = json_object_to_json_string(msg);
     message->length = strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
-    {
+    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
         json_object_put(msg);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to lack of memory", __func__);
         return false;
     }
 
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *) message->serialized, wire);
     json_object_put(msg);
 
 

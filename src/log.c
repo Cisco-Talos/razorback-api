@@ -32,6 +32,7 @@ static char level_strings[][9] = {
     "Info",
     "Debug"
 };
+static uint64_t sg_logMask = LOG_C_ALL;
 
 
 bool
@@ -51,15 +52,20 @@ configureLogging (void)
 }
 
 SO_PUBLIC void
-rzb_perror (const char *fmt)
+rzb_perror (uint64_t component, const char *fmt)
 {
-    rzb_log (LOG_ERR, fmt, strerror (errno));
+    rzb_log (LOG_ERR, component, fmt, strerror (errno));
 }
 
 SO_PUBLIC void
-rzb_log (unsigned level, const char *fmt, ...)
+rzb_log (unsigned level, uint64_t compontent, const char *fmt, ...)
 {
     char *msg = NULL;
+
+    if ((level == LOG_DEBUG) && (sg_logMask & compontent) == 0) {
+        return;
+    }
+
 	va_list argp;
     RZB_LOG_DEST_t log_dest = Config_getLogDest();
     if (level > (unsigned) Config_getLogLevel())

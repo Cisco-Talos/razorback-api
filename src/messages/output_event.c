@@ -39,13 +39,19 @@ MessageOutputEvent_Initialize (
     struct MessageOutputEvent *message;
     ASSERT (event != NULL);
     ASSERT (nugget != NULL);
-    if (event == NULL)
+    if (event == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: event is NULL", __func__);
         return NULL;
-    if (nugget == NULL)
+    }
+    if (nugget == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: nugget is NULL", __func__);
         return NULL;
+    }
 
-    if ((msg = Message_Create(MESSAGE_TYPE_OUTPUT_EVENT, MESSAGE_VERSION_1, sizeof(struct MessageOutputEvent))) == NULL)
+    if ((msg = Message_Create(MESSAGE_TYPE_OUTPUT_EVENT, MESSAGE_VERSION_1, sizeof(struct MessageOutputEvent))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message_Create failed", __func__);
         return NULL;
+    }
     message = msg->message;
     message->event = event;
     message->nugget = nugget;
@@ -66,14 +72,16 @@ OutputEvent_Destroy (struct Message *message)
     if (message == NULL)
         return;
     msg = message->message;
+    if (msg != NULL) {
+        // destroy any malloc'd components
+        if (msg->event != NULL) {
+            Event_Destroy(msg->event);
+        }
 
-    // destroy any malloc'd components
-    if (msg->event != NULL)
-        Event_Destroy(msg->event);
-
-    if (msg->nugget != NULL)
-        Nugget_Destroy(msg->nugget);
-
+        if (msg->nugget != NULL) {
+            Nugget_Destroy(msg->nugget);
+        }
+    }
     Message_Destroy(message);
 }
 
@@ -84,24 +92,30 @@ OutputEvent_Deserialize(struct Message *message)
     json_object *msg;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);
         return false;
+    }
 
-    if ((message->message = calloc(1,sizeof(struct MessageOutputEvent))) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageOutputEvent))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: calloc failed", __func__);
         return false;
+    }
 
-    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: json_tokener_parse failed", __func__);
         return false;
+    }
     
     event = message->message;
 
-    if (!JsonBuffer_Get_Nugget(msg, "Nugget", &event->nugget))
-    {
+    if (!JsonBuffer_Get_Nugget(msg, "Nugget", &event->nugget)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: JsonBuffer_Get_Nugget failed", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Get_Event(msg, "Event", &event->event))
-    {
+    if (!JsonBuffer_Get_Event(msg, "Event", &event->event)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: JsonBuffer_Get_Event failed", __func__);
         json_object_put(msg);
         return false;
     }
@@ -118,21 +132,27 @@ OutputEvent_Serialize(struct Message *message)
     const char * wire;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);
         return false;
+    }
 
     event = message->message;
 
-    if ((msg = json_object_new_object()) == NULL)
+    if ((msg = json_object_new_object()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: json_object_new_object failed", __func__);
         return false;
+    }
 
     if (!JsonBuffer_Put_Nugget(msg, "Nugget", event->nugget))
     {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: JsonBuffer_Put_Nugget failed", __func__);
         json_object_put(msg);
         return false;
     }
     if (!JsonBuffer_Put_Event(msg, "Event", event->event))
     {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: JsonBuffer_Put_Event failed", __func__);
         json_object_put(msg);
         return false;
     }
@@ -141,6 +161,7 @@ OutputEvent_Serialize(struct Message *message)
     message->length=strlen(wire);
     if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
     {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to allocate serialized message", __func__);
         json_object_put(msg);
         return false;
     }

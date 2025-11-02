@@ -34,8 +34,7 @@ static int Context_KeyCmp(void *a, void *b);
 static int Context_Cmp(void *a, void *b);
 
 static List_t *sg_ContextList;
-void initApi(void)
-{
+void initApi(void) {
     sg_ContextList = List_Create(LIST_MODE_GENERIC, 
             Context_Cmp, 
             Context_KeyCmp, 
@@ -43,50 +42,57 @@ void initApi(void)
 }
 
 static void 
-Razorback_Remove_Context(struct RazorbackContext *context)
-{
+Razorback_Remove_Context(struct RazorbackContext *context) {
+    ASSERT(context != NULL);
+    if (context == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Context is NULL", __func__);
+        return;
+    }
     List_Remove(sg_ContextList, context);
 }
 
-void Razorback_Destroy_Context(struct RazorbackContext *context)
-{
+void Razorback_Destroy_Context(struct RazorbackContext *context) {
+    ASSERT(context != NULL);
+    if (context == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Context is NULL", __func__);
+        return;
+    }
     Semaphore_Destroy(context->regSem);
     free(context);
 }
 
 SO_PUBLIC bool
-Razorback_Init_Context (struct RazorbackContext *context)
-{
+Razorback_Init_Context (struct RazorbackContext *context) {
 	uuid_t l_pUuid;
 
     ASSERT(context != NULL);
-    if (context == NULL)
-    	return false;
+    if (context == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Context is NULL", __func__);
+        return false;
+    }
     
     context->locality = Config_getLocalityId();
 
     // Init the registration semaphore.
-    if ((context->regSem = Semaphore_Create(false, 0)) == NULL)
+    if ((context->regSem = Semaphore_Create(false, 0)) == NULL) {
         return false;
+    }
 
     List_Push(sg_ContextList, context);
     // Launch C&C for this context
-    if (!CommandAndControl_Start (context))
-    {
-    	rzb_log(LOG_ERR, "%s: Failed to start command and control", __func__);
+    if (!CommandAndControl_Start (context)) {
+    	rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to start command and control", __func__);
         Razorback_Remove_Context(context);
         return false;
     }
 
 
     UUID_Get_UUID (NUGGET_TYPE_COLLECTION, UUID_TYPE_NUGGET_TYPE, l_pUuid);
-    if (uuid_compare (context->uuidNuggetType, l_pUuid) == 0)
-    {
+    if (uuid_compare (context->uuidNuggetType, l_pUuid) == 0) {
         // XXX: This has interesting side effects -> this is not the context we 
         // expect later in execution.
-        if (!Submission_Init (context))
-        {
-            rzb_log(LOG_ERR, "%s: Failed to initialize submission api", __func__);
+        if (!Submission_Init (context)) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission api", __func__);
             Razorback_Remove_Context(context);
             return false;
         }
@@ -95,8 +101,7 @@ Razorback_Init_Context (struct RazorbackContext *context)
 }
 
 SO_PUBLIC struct RazorbackContext *
-Razorback_LookupContext (uuid_t nuggetId)
-{
+Razorback_LookupContext (uuid_t nuggetId) {
     return (struct RazorbackContext *)List_Find(sg_ContextList, nuggetId);
 }
 
@@ -106,21 +111,19 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
                                    uint32_t dataTypeCount,
                                    uuid_t * dataTypeList,
                                    struct RazorbackInspectionHooks *inspectionHooks,
-                                   uint32_t initialThreads, uint32_t maxThreads)
-{
+                                   uint32_t initialThreads, uint32_t maxThreads
+                                   ) {
     struct RazorbackContext *context;
     uuid_t uuidInspector;
     UUID_Get_UUID (NUGGET_TYPE_INSPECTION, UUID_TYPE_NUGGET_TYPE, uuidInspector);
 
-    if (inspectionHooks == NULL)
-    {
-        rzb_log (LOG_ERR, "%s: Inspection Hooks NULL", __func__);
+    if (inspectionHooks == NULL){
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: Inspection Hooks NULL", __func__);
         return NULL;
     }
 
-    if ((context = (struct RazorbackContext *)calloc (1, sizeof (struct RazorbackContext))) == NULL)
-    {
-        rzb_log (LOG_ERR, "%s: Failed to malloc new context", __func__);
+    if ((context = (struct RazorbackContext *)calloc (1, sizeof (struct RazorbackContext))) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to malloc new context", __func__);
         return NULL;
     }
 
@@ -131,9 +134,8 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
     context->inspector.dataTypeCount = dataTypeCount;
     context->inspector.dataTypeList = dataTypeList;
     context->inspector.dataTypeList = calloc(dataTypeCount, sizeof(uuid_t));
-    if (context->inspector.dataTypeList == NULL)
-    {
-    	rzb_log(LOG_ERR, "%s: Failed to allocate data type list", __func__);
+    if (context->inspector.dataTypeList == NULL) {
+    	rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate data type list", __func__);
     	Razorback_Destroy_Context(context);
     	return NULL;
     }
@@ -141,27 +143,26 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
     context->pCommandHooks = NULL;
     context->inspector.hooks = inspectionHooks;
 
-    if (!Razorback_Init_Context (context))
-    {
+    if (!Razorback_Init_Context (context)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize context", __func__);
         Razorback_Destroy_Context(context);
         return NULL;
     }
 	
-    if ((context->inspector.judgmentQueue = Queue_Create(JUDGMENT_QUEUE, QUEUE_FLAG_SEND)) == NULL)
-    {
+    if ((context->inspector.judgmentQueue = Queue_Create(JUDGMENT_QUEUE, QUEUE_FLAG_SEND)) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to create judgment queue", __func__);
         Razorback_Remove_Context(context);
         return false;
     }
 
-    if (!Inspection_Launch (context, initialThreads, maxThreads))
-    {
+    if (!Inspection_Launch (context, initialThreads, maxThreads)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to launch inspection threads", __func__);
         Razorback_Remove_Context(context);
         return false;
     }
     // XXX: This has interesting side effects -> this is not the context we expect later in execution.
-    if (!Submission_Init (context))
-    {
-        rzb_log(LOG_ERR, "%s: Failed to initialize submission api", __func__);
+    if (!Submission_Init (context)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission api", __func__);
         Razorback_Remove_Context(context);
         return false;
     }
@@ -171,15 +172,14 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
 
 SO_PUBLIC struct RazorbackContext *
 Razorback_Init_Output_Context (uuid_t nuggetId,
-                                   uuid_t applicationType)
-{
+                                   uuid_t applicationType) {
     struct RazorbackContext *context;
     uuid_t uuidOutput;
     UUID_Get_UUID (NUGGET_TYPE_OUTPUT, UUID_TYPE_NUGGET_TYPE, uuidOutput);
 
     if ((context = calloc (1, sizeof (struct RazorbackContext))) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: Failed to malloc new context", __func__);
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to malloc new context", __func__);
         return NULL;
     }
 
@@ -197,8 +197,8 @@ Razorback_Init_Output_Context (uuid_t nuggetId,
             NULL, // lock
             NULL); // unlock
 
-    if (!Razorback_Init_Context (context))
-    {
+    if (!Razorback_Init_Context (context)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize context", __func__);
         Razorback_Destroy_Context(context);
         return NULL;
     }
@@ -208,15 +208,13 @@ Razorback_Init_Output_Context (uuid_t nuggetId,
 
 SO_PUBLIC struct RazorbackContext *
 Razorback_Init_Collection_Context (uuid_t nuggetId,
-                                   uuid_t applicationType)
-{
+                                   uuid_t applicationType) {
     struct RazorbackContext *context;
     uuid_t uuidCollection;
-        UUID_Get_UUID (NUGGET_TYPE_COLLECTION, UUID_TYPE_NUGGET_TYPE, uuidCollection);
+    UUID_Get_UUID (NUGGET_TYPE_COLLECTION, UUID_TYPE_NUGGET_TYPE, uuidCollection);
 
-    if ((context = calloc (1, sizeof (struct RazorbackContext))) == NULL)
-    {
-        rzb_log (LOG_ERR, "%s: Failed to malloc new context", __func__);
+    if ((context = calloc (1, sizeof (struct RazorbackContext))) == NULL) {
+        rzb_log (LOG_ERR,LOG_C_CORE, "%s: Failed to malloc new context", __func__);
         return NULL;
     }
 
@@ -230,8 +228,8 @@ Razorback_Init_Collection_Context (uuid_t nuggetId,
     context->inspector.hooks = NULL;
 
 
-    if (!Razorback_Init_Context (context))
-    {
+    if (!Razorback_Init_Context (context)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize context", __func__);
         Razorback_Destroy_Context(context);
         return NULL;
     }
@@ -239,8 +237,7 @@ Razorback_Init_Collection_Context (uuid_t nuggetId,
 }
 
 int
-Kill_Output_Thread(void *ut, void *ud)
-{
+Kill_Output_Thread(void *ut, void *ud) {
     Thread_t *thread = ut;
     Thread_InterruptAndJoin(thread);
     Thread_Destroy(thread);
@@ -248,26 +245,27 @@ Kill_Output_Thread(void *ut, void *ud)
 }
 
 SO_PUBLIC void
-Razorback_Shutdown_Context (struct RazorbackContext *context)
-{
+Razorback_Shutdown_Context (struct RazorbackContext *context) {
     CommandAndControl_Pause();
     CommandAndControl_SendBye(context);
 
-    if (context->inspector.threadPool != NULL)
+    if (context->inspector.threadPool != NULL) {
         ThreadPool_KillWorkers(context->inspector.threadPool);
+    }
 
     List_Remove(sg_ContextList, context);
 
     CommandAndControl_Unpause();
     if ((context->iFlags & CONTEXT_FLAG_STAND_ALONE) ==
-        CONTEXT_FLAG_STAND_ALONE)
-    {
+        CONTEXT_FLAG_STAND_ALONE) {
        CommandAndControl_Shutdown();
     }
-    if (context->inspector.judgmentQueue != NULL)
+
+    if (context->inspector.judgmentQueue != NULL) {
         Queue_Terminate(context->inspector.judgmentQueue);
-    if (context->output.threads != NULL)
-    {
+    }
+
+    if (context->output.threads != NULL) {
         List_ForEach(context->output.threads, Kill_Output_Thread, NULL);
         List_Destroy(context->output.threads);
     }
@@ -283,29 +281,29 @@ struct ContextHook
 };
 
 static int
-ForEach_Context_Wrapper(struct RazorbackContext *context, void *data)
-{
+ForEach_Context_Wrapper(struct RazorbackContext *context, void *data) {
     struct ContextHook *hook = data;
     Thread_t * thread = Thread_GetCurrent();
     struct RazorbackContext *prev;
     int ret;
-    if (thread != NULL)
-    {
+
+    if (thread != NULL) {
         prev = Thread_GetContext(thread);
         Thread_ChangeContext(thread,context); 
     }
+
     ret= hook->function(context, hook->userData);
-    if (thread != NULL)
-    {
+
+    if (thread != NULL) {
         Thread_ChangeContext(thread,prev);
         Thread_Destroy(thread);
     }
+
     return ret;
 }
 
 bool
-Razorback_ForEach_Context (int (*function) (struct RazorbackContext *, void *), void *userData)
-{
+Razorback_ForEach_Context (int (*function) (struct RazorbackContext *, void *), void *userData) {
     struct ContextHook hook;
     hook.function = function;
     hook.userData = userData;
@@ -314,17 +312,23 @@ Razorback_ForEach_Context (int (*function) (struct RazorbackContext *, void *), 
 
 
 SO_PUBLIC bool
-Razorback_Render_Verdict (struct Judgment *judgment)
-{
+Razorback_Render_Verdict (struct Judgment *judgment) {
     struct Message *message;
     struct RazorbackContext *context;
-    context = Thread_GetCurrentContext();
 
-    if ((message = MessageJudgmentSubmission_Initialize (JUDGMENT_REASON_ALERT, judgment)) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to create message", __func__);
+    ASSERT(judgment != NULL);
+    if (judgment == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Judgment is NULL", __func__);
         return false;
     }
+
+    context = Thread_GetCurrentContext();
+
+    if ((message = MessageJudgmentSubmission_Initialize (JUDGMENT_REASON_ALERT, judgment)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);
+        return false;
+    }
+
     Mutex_Lock (sg_mPauseLock);
     Queue_Put (context->inspector.judgmentQueue, message);
     Mutex_Unlock (sg_mPauseLock);
@@ -336,25 +340,33 @@ Razorback_Render_Verdict (struct Judgment *judgment)
 
 
 SO_PUBLIC bool
-Razorback_Output_Launch (struct RazorbackContext *context, struct RazorbackOutputHooks *hooks)
-{
+Razorback_Output_Launch (struct RazorbackContext *context, struct RazorbackOutputHooks *hooks) {
     char *nugName, *threadName;
     Thread_t *thread;
+
+    ASSERT(context != NULL);
+    if (context == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Context is NULL", __func__);
+        return false;
+    }
+    ASSERT(hooks != NULL);
+    if (hooks == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Hooks is NULL", __func__);
+        return false;
+    }
 
     nugName =
         UUID_Get_NameByUUID (context->uuidApplicationType,
                              UUID_TYPE_NUGGET_TYPE);
     threadName = NULL;
-    if (asprintf (&threadName, "Output Thread: %s", nugName) == -1)
-    {
-        rzb_log (LOG_ERR, "%s: Failed to allocate thread name", __func__);
+    if (asprintf (&threadName, "Output Thread: %s", nugName) == -1) {
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to allocate thread name", __func__);
         free(nugName);
         return false;
     }
     free(nugName);
-    if ((thread = Thread_Launch(Razorback_Output_Thread, hooks, threadName, context)) == NULL)
-    {
-        rzb_log (LOG_ERR, "%s: Failed to launch thread.", __func__);
+    if ((thread = Thread_Launch(Razorback_Output_Thread, hooks, threadName, context)) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to launch thread.", __func__);
         return false;
     }
     List_Push(context->output.threads, thread);
@@ -366,72 +378,83 @@ static void
 Razorback_Output_Thread (Thread_t *thread)
 {
     struct Message *message;
-    struct RazorbackOutputHooks *hooks = (struct RazorbackOutputHooks*) Thread_GetUserData(thread);
+    struct RazorbackOutputHooks *hooks;
     char *name;
     const char *pat = NULL;
-    
-    switch (hooks->messageType)
-    {
-    case MESSAGE_TYPE_ALERT_PRIMARY:
-        pat = "/topic/Alert.%s";
-        break;
-    case MESSAGE_TYPE_ALERT_CHILD:
-        pat = "/topic/ChildAlert.%s";
-        break;
-    case MESSAGE_TYPE_OUTPUT_EVENT:
-        pat = "/topic/Event.%s";
-        break;
-    case MESSAGE_TYPE_OUTPUT_LOG:
-        pat = "/topic/Log.%s";
-        break;
-    }
-    if (asprintf(&name, pat, hooks->pattern) == -1)
+
+    ASSERT(thread != NULL);
+    if (thread == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Thread is NULL", __func__);
         return;
-    if ((hooks->queue = Queue_Create (name, QUEUE_FLAG_RECV)) == NULL)
-    {
-        rzb_log (LOG_ERR, "%s: Failed to connect to MQ - Inspector Queue",
+    }
+
+    hooks = (struct RazorbackOutputHooks*) Thread_GetUserData(thread);
+    if (hooks == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Hooks is NULL", __func__);
+        return;
+    }
+
+
+    switch (hooks->messageType) {
+        case MESSAGE_TYPE_ALERT_PRIMARY:
+            pat = "/topic/Alert.%s";
+            break;
+        case MESSAGE_TYPE_ALERT_CHILD:
+            pat = "/topic/ChildAlert.%s";
+            break;
+        case MESSAGE_TYPE_OUTPUT_EVENT:
+            pat = "/topic/Event.%s";
+            break;
+        case MESSAGE_TYPE_OUTPUT_LOG:
+            pat = "/topic/Log.%s";
+            break;
+    }
+
+    if (asprintf(&name, pat, hooks->pattern) == -1) {
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to allocate queue name", __func__);
+        return;
+    }
+
+    if ((hooks->queue = Queue_Create (name, QUEUE_FLAG_RECV)) == NULL){
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to connect to MQ - Inspector Queue",
                  __func__);
         free(name);
         return;
     }
 
-    rzb_log(LOG_DEBUG, "%s: Inspection Thread Launched", __func__);
+    rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: Inspection Thread Launched", __func__);
 
-    while (!Thread_IsStopped(thread))
-    {
-        if ((message = Queue_Get (hooks->queue)) == NULL)
-        {
+    while (!Thread_IsStopped(thread)) {
+        if ((message = Queue_Get (hooks->queue)) == NULL) {
             // timeout
             if (errno == EAGAIN || errno == EINTR)
                 continue;
             // error
-            rzb_log (LOG_ERR,
+            rzb_log (LOG_ERR, LOG_C_CORE,
                      "%s: Dropped block due to failure of InspectorQueue_Get()",
                      __func__);
             // drop message
             continue;
         }
         
-        if (message->type != hooks->messageType)
-        {
+        if (message->type != hooks->messageType) {
             message->destroy(message);
             continue;
         }
 
-        switch (message->type)
-        {
-        case MESSAGE_TYPE_ALERT_PRIMARY:
-            hooks->handleAlertPrimary((struct MessageAlertPrimary*)message->message);
-            break;
-        case MESSAGE_TYPE_ALERT_CHILD:
-            hooks->handleAlertChild((struct MessageAlertChild *)message->message);
-            break;
-        case MESSAGE_TYPE_OUTPUT_EVENT:
-            hooks->handleEvent((struct MessageOutputEvent *)message->message);
-            break;
-        case MESSAGE_TYPE_OUTPUT_LOG:
-            hooks->handleLog((struct MessageOutputLog *)message->message);
-            break;
+        switch (message->type) {
+            case MESSAGE_TYPE_ALERT_PRIMARY:
+                hooks->handleAlertPrimary((struct MessageAlertPrimary*)message->message);
+                break;
+            case MESSAGE_TYPE_ALERT_CHILD:
+                hooks->handleAlertChild((struct MessageAlertChild *)message->message);
+                break;
+            case MESSAGE_TYPE_OUTPUT_EVENT:
+                hooks->handleEvent((struct MessageOutputEvent *)message->message);
+                break;
+            case MESSAGE_TYPE_OUTPUT_LOG:
+                hooks->handleLog((struct MessageOutputLog *)message->message);
+                break;
         }
         message->destroy(message);
     }
@@ -440,16 +463,14 @@ Razorback_Output_Thread (Thread_t *thread)
 }
 
 static int 
-Context_KeyCmp(void *a, void *id)
-{
+Context_KeyCmp(void *a, void *id) {
     struct RazorbackContext *cA = (struct RazorbackContext*) a;
     // XXX: This is a hack
     return uuid_compare(cA->uuidNuggetId, (unsigned char *) id);
 }
 
 static int 
-Context_Cmp(void *a, void *b)
-{
+Context_Cmp(void *a, void *b) {
     struct RazorbackContext *cA = (struct RazorbackContext*) a;
     struct RazorbackContext *cB = (struct RazorbackContext*) b;
     if (a == b)

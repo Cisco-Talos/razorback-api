@@ -22,15 +22,16 @@
 static void Inspection_Thread (Thread_t *p_pThread);
 
 bool
-Inspection_Launch (struct RazorbackContext *p_pContext, uint32_t initThreads, uint32_t maxThreads)
-{
+Inspection_Launch (struct RazorbackContext *p_pContext, uint32_t initThreads, uint32_t maxThreads) {
     p_pContext->inspector.threadPool = ThreadPool_Create(
-            ((initThreads == 0) ? Config_getInspThreadsInit() : initThreads),
-            ((maxThreads == 0) ? Config_getInspThreadsMax() : maxThreads),
-            p_pContext, "Inspection Thread Pool %i", Inspection_Thread);
-    if (p_pContext->inspector.threadPool == NULL)
-    {
-        rzb_log (LOG_ERR, "%s: Failed to launch thread.", __func__);
+        ((initThreads == 0) ? Config_getInspThreadsInit() : initThreads),
+        ((maxThreads == 0) ? Config_getInspThreadsMax() : maxThreads),
+        p_pContext,
+        "Inspection Thread Pool %i",
+        Inspection_Thread
+    );
+    if (p_pContext->inspector.threadPool == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to launch thread.", __func__);
         return false;
     }
     return true;
@@ -55,70 +56,60 @@ Inspection_Thread (Thread_t *p_pThread)
 
 	l_pContext = Thread_GetContext (p_pThread);
     if ((l_pQueue =
-         InspectorQueue_Initialize (l_pContext->uuidApplicationType,
-                                    QUEUE_FLAG_RECV)) == NULL)
-    {
-        rzb_log (LOG_ERR, "%s: Failed to connect to MQ - Inspector Queue",
-                 __func__);
+                 InspectorQueue_Initialize(l_pContext->uuidApplicationType,
+                                           QUEUE_FLAG_RECV)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to connect to MQ - Inspector Queue",
+                __func__);
         return;
     }
-    rzb_log(LOG_DEBUG, "%s: Inspection Thread Launched", __func__);
+    rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: Inspection Thread Launched", __func__);
     Thread_SetUserData(p_pThread, l_pQueue);
-    if (l_pContext->inspector.hooks->initThread != NULL)
-    {
-    	if (!l_pContext->inspector.hooks->initThread(&threadData))
-    	{
-    		rzb_log(LOG_ERR, "%s: Failed to init thread", __func__);
-    		return;
-    	}
+    if (l_pContext->inspector.hooks->initThread != NULL) {
+        if (!l_pContext->inspector.hooks->initThread(&threadData)) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to init thread", __func__);
+            return;
+        }
     }
 
-    while (!Thread_IsStopped(p_pThread))
-    {
-        if ((message = Queue_Get (l_pQueue)) == NULL)
-        {
+    while (!Thread_IsStopped(p_pThread)) {
+        if ((message = Queue_Get(l_pQueue)) == NULL) {
             // timeout
             if (errno == EAGAIN || errno == EINTR)
                 continue;
             // error
-            rzb_log (LOG_ERR,
-                     "%s: Dropped block due to failure of InspectorQueue_Get()",
-                     __func__);
+            rzb_log(LOG_ERR, LOG_C_CORE,
+                    "%s: Dropped block due to failure of InspectorQueue_Get()",
+                    __func__);
             // drop message
             continue;
         }
         l_misMessage = message->message;
-        if (l_misMessage->pBlock == NULL)
-        {
-            rzb_log (LOG_ERR, "%s: Failed dispatch message due to NULL block",
-                     __func__);
+        if (l_misMessage->pBlock == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to NULL block",
+                    __func__);
             message->destroy(message);
             continue;
         }
-        if (l_misMessage->pBlock->pId->pHash == NULL)
-        {
-            rzb_log (LOG_ERR, "%s: Failed dispatch message due to NULL Hash",
-                     __func__);
+        if (l_misMessage->pBlock->pId->pHash == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to NULL Hash",
+                    __func__);
             message->destroy(message);
             continue;
         }
         l_pBlock = l_misMessage->pBlock;
         l_misMessage->pBlock = NULL;
-        transfered=TRANSFER_FAIL_LOCAL;
+        transfered = TRANSFER_FAIL_LOCAL;
         transferTries = 0;
-        while (transferTries < 20)
-        {
+        while (transferTries < 20) {
             dispatcher = ConnectedEntityList_GetDispatcher();
-            if (dispatcher == NULL)
-            {
-                rzb_log(LOG_ERR, "%s: Failed to find usable dispatcher", __func__);
+            if (dispatcher == NULL) {
+                rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to find usable dispatcher", __func__);
                 transferTries++;
                 break;
             }
             transfered = Transfer_Fetch(l_pBlock, dispatcher);
-            if (transfered == TRANSFER_FAIL_DISPATCHER)
-            {
-                rzb_log(LOG_ERR, "%s: Marking dispatcher unusable", __func__);
+            if (transfered == TRANSFER_FAIL_DISPATCHER) {
+                rzb_log(LOG_ERR, LOG_C_CORE, "%s: Marking dispatcher unusable", __func__);
                 ConnectedEntityList_MarkDispatcherUnusable(dispatcher->uuidNuggetId);
             }
             ConnectedEntity_Destroy(dispatcher);
@@ -128,31 +119,27 @@ Inspection_Thread (Thread_t *p_pThread)
                 transferTries++;
         }
         // TODO - Return JUSDGEMENT_ERROR
-        if (transfered != TRANSFER_OK)
-        {
-            rzb_log(LOG_ERR, "%s: Failed to transfer block giving up", __func__);
+        if (transfered != TRANSFER_OK) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to transfer block giving up", __func__);
             message->destroy(message);
             continue;
         }
 
-        if (l_pBlock->data.pointer == NULL || l_pBlock->data.fileName == NULL)
-        {
-            rzb_log (LOG_ERR, "%s: No data block",__func__);
+        if (l_pBlock->data.pointer == NULL || l_pBlock->data.fileName == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: No data block", __func__);
             message->destroy(message);
             continue;
         }
-        if ((l_pEventId = EventId_Clone(l_misMessage->eventId)) == NULL)
-        {
-            rzb_log (LOG_ERR, "%s: Failed create new event id", __func__);
+        if ((l_pEventId = EventId_Clone(l_misMessage->eventId)) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed create new event id", __func__);
             message->destroy(message);
             continue;
         }
-        
+
 
         // Clone the block for the inspector to use.
-        if ((l_pClonedBlock = Block_Clone (l_pBlock)) == NULL)
-        {
-            rzb_log (LOG_ERR, "%s: Failed create new block", __func__);
+        if ((l_pClonedBlock = Block_Clone(l_pBlock)) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed create new block", __func__);
             message->destroy(message);
             continue;
         }
@@ -160,59 +147,54 @@ Inspection_Thread (Thread_t *p_pThread)
         l_pClonedBlock->data.pointer = l_pBlock->data.pointer;
         l_pClonedBlock->data.file = l_pBlock->data.file;
         l_pClonedBlock->data.fileName = l_pBlock->data.fileName;
-		l_pClonedBlock->data.tempFile = l_pBlock->data.tempFile;
-		l_pBlock->data.pointer = NULL;
+        l_pClonedBlock->data.tempFile = l_pBlock->data.tempFile;
+        l_pBlock->data.pointer = NULL;
         l_pBlock->data.file = NULL;
         l_pBlock->data.fileName = NULL;
 
 #ifdef _MSC_VER
-		l_pClonedBlock->data.mfileHandle = l_pBlock->data.mfileHandle;
-		l_pClonedBlock->data.mapHandle = l_pBlock->data.mapHandle;
-		l_pBlock->data.mfileHandle = NULL;
-		l_pBlock->data.mapHandle = NULL;
+        l_pClonedBlock->data.mfileHandle = l_pBlock->data.mfileHandle;
+        l_pClonedBlock->data.mapHandle = l_pBlock->data.mapHandle;
+        l_pBlock->data.mfileHandle = NULL;
+        l_pBlock->data.mapHandle = NULL;
 #endif
-        
 
 
         l_iResult =
-            l_pContext->inspector.hooks->processBlock (l_pClonedBlock,
-                                                        l_misMessage->eventId,
-                                                        l_misMessage->pEventMetadata, threadData);
+                l_pContext->inspector.hooks->processBlock(l_pClonedBlock,
+                                                          l_misMessage->eventId,
+                                                          l_misMessage->pEventMetadata, threadData);
 
         message->destroy(message);
         if ((l_iResult != JUDGMENT_REASON_DONE)
-            && (l_iResult != JUDGMENT_REASON_ERROR)
-            && (l_iResult != JUDGMENT_REASON_DEFERRED))
-        {
-            rzb_log (LOG_ERR, "%s: Bad return from inspection", __func__);
+                && (l_iResult != JUDGMENT_REASON_ERROR)
+                && (l_iResult != JUDGMENT_REASON_DEFERRED)) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Bad return from inspection", __func__);
             continue;
         }
 
 
         // Lock the pause lock before submitting judgment
-        Mutex_Lock (sg_mPauseLock);
+        Mutex_Lock(sg_mPauseLock);
         judgment = Judgment_Create(l_pEventId, l_pClonedBlock->pId);
         // Destroy the copy, we don't need it any more
         Transfer_Free(l_pClonedBlock, dispatcher);
         l_pClonedBlock->data.pointer = NULL;
-        Block_Destroy (l_pClonedBlock);
-        if ((l_mjsMessage = MessageJudgmentSubmission_Initialize (l_iResult, judgment)) == NULL)
-        {
-            rzb_log(LOG_ERR, "%s: Failed to create message", __func__);
-        }
-        else
-        {
-            Queue_Put (l_pContext->inspector.judgmentQueue, l_mjsMessage);
+        Block_Destroy(l_pClonedBlock);
+        if ((l_mjsMessage = MessageJudgmentSubmission_Initialize(l_iResult, judgment)) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);
+        } else {
+            Queue_Put(l_pContext->inspector.judgmentQueue, l_mjsMessage);
             l_mjsMessage->destroy(l_mjsMessage);
         }
-        Mutex_Unlock (sg_mPauseLock);
+        Mutex_Unlock(sg_mPauseLock);
         Block_Destroy(l_pBlock);
         EventId_Destroy(l_pEventId);
     }
     if (l_pContext->inspector.hooks->cleanupThread != NULL)
         l_pContext->inspector.hooks->cleanupThread(threadData);
 
-    rzb_log(LOG_DEBUG, "%s: Inspection Thread Exiting", __func__);
+    rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: Inspection Thread Exiting", __func__);
     return;
 }
 

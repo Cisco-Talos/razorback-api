@@ -48,15 +48,13 @@ static char * Magic_GetFile(void);
  *  API request record
  */
 static int 
-Magic_apprentice()
-{
+Magic_apprentice() {
     FILE *f;
 	char * file = NULL;
     // TODO - Load the magic file into a buffer so we dont load it every time
 	file = Magic_GetFile();
-    if ((f = fopen(file, "r")) == NULL) 
-    {
-        rzb_log(LOG_ERR, "%s: can't read magic file %s", __func__, file);
+    if ((f = fopen(file, "r")) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_MAGIC, "%s: can't read magic file %s", __func__, file);
         return -1;
     }
 
@@ -67,10 +65,11 @@ Magic_apprentice()
 }
 
 bool
-Magic_Init(void)
-{
-    if (Magic_apprentice() == -1)
+Magic_Init(void) {
+    if (Magic_apprentice() == -1) {
+        rzb_log(LOG_ERR, LOG_C_MAGIC, "%s: Magic_apprentice failed", __func__);
         return false;
+    }
 
     return true;
 }
@@ -94,29 +93,24 @@ Magic_process(struct BlockPoolItem *item)
 
     magic_t magic = magic_open( MAGIC_ERROR | MAGIC_MIME_TYPE );
     if (magic == NULL) {
-        rzb_log(LOG_ERR, "%s: magic_open failed", __func__);
+        rzb_log(LOG_ERR, LOG_C_MAGIC, "%s: magic_open failed", __func__);
         return false;
     }
     // TODO - Switch to using the buffer instead of the file
     magic_load(magic, NULL);
 
 
-    if (dataItem->iFlags == BLOCK_POOL_DATA_FLAG_FILE)
-    {
+    if (dataItem->iFlags == BLOCK_POOL_DATA_FLAG_FILE) {
         mimetype = magic_descriptor(magic, fileno(dataItem->data.file));
         rewind(dataItem->data.file);
-
-    }
-    else {
+    } else {
         memset(buf, 0, HOWMANY + 1);
         /*
          * try looking at the first HOWMANY bytes
          */
         while (nbytes < HOWMANY && dataItem != NULL) {
             toCopy = ((nbytes + dataItem->iLength) > HOWMANY ? (HOWMANY - nbytes) : dataItem->iLength);
-            rzb_log(LOG_DEBUG, "%s: Coallessing data buffers Have=%zu Getting=%zu Result=%zu", __func__, nbytes, toCopy, nbytes+toCopy);
-#if MIME_MAGIC_DEBUG
-#endif
+            rzb_log(LOG_DEBUG, LOG_C_MAGIC, "%s: Coallessing data buffers Have=%zu Getting=%zu Result=%zu", __func__, nbytes, toCopy, nbytes+toCopy);
             memcpy(buf+nbytes, dataItem->data.pointer, toCopy);
             nbytes += toCopy;
             dataItem = dataItem->pNext;
@@ -125,15 +119,15 @@ Magic_process(struct BlockPoolItem *item)
         buf[nbytes++] = '\0';  /* null-terminate it */
         mimetype = magic_buffer(magic, buf, nbytes);
     }
-    rzb_log(LOG_DEBUG, "%s: mimetype=%s", __func__, mimetype);
+    rzb_log(LOG_DEBUG, LOG_C_MAGIC, "%s: mimetype=%s", __func__, mimetype);
     if (mimetype == NULL) {
         err = magic_error(magic);
         if (err != NULL) {
-            rzb_log(LOG_ERR, "%s: magic_(descriptor|buffer) failed: %s", __func__, err);
+            rzb_log(LOG_ERR, LOG_C_MAGIC, "%s: magic_(descriptor|buffer) failed: %s", __func__, err);
             ret = false;
-        }
-        else
+        } else {
             ret = true;
+        }
     } else {
         ret = UUID_Get_UUID(mimetype, UUID_TYPE_DATA_TYPE, item->pEvent->pBlock->pId->uuidDataType);
     }

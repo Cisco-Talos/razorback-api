@@ -52,7 +52,7 @@ Socket_CopyAddress (struct Socket *dest, const struct Socket *source)
 
     if ((dest->pAddressInfo = (struct addrinfo *)calloc(1,sizeof(struct addrinfo))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate new address info", __func__);
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to allocate new address info", __func__);
         return false;
     }
 
@@ -70,7 +70,7 @@ Socket_CopyAddress (struct Socket *dest, const struct Socket *source)
     if ((dest->pAddressInfo->ai_addr = (struct sockaddr *)
          malloc (source->pAddressInfo->ai_addrlen)) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate new address", __func__);
+        rzb_log(LOG_ERR,LOG_C_NETWORK, "%s: Failed to allocate new address", __func__);
         return false;
     }
 
@@ -91,7 +91,7 @@ SocketAddress_Initialize (struct Socket *sock,
     ASSERT (sock->pAddressInfo == NULL);
     if (sock->pAddressInfo != NULL)
     {
-        rzb_log(LOG_ERR, "%s: Double address init", __func__);
+        rzb_log(LOG_ERR,LOG_C_NETWORK, "%s: Double address init", __func__);
         return false;
     }
     
@@ -113,10 +113,10 @@ SocketAddress_Initialize (struct Socket *sock,
     {
 
 #ifdef _MSC_VER
-		rzb_log(LOG_ERR, "Failed to get address info: %S, %d, %S", address, ret, gai_strerror(ret));
+		rzb_log(LOG_ERR,LOG_C_NETWORK, "Failed to get address info: %S, %d, %S", address, ret, gai_strerror(ret));
 #else
         rzb_perror
-            ("Failed to get address information in SocketAddress_Initialize: %s");
+            (LOG_C_NETWORK,"Failed to get address information in SocketAddress_Initialize: %s");
 #endif
         sock->pAddressInfo = NULL;
 
@@ -142,14 +142,14 @@ Socket_Listen (const unsigned char *sourceAddress, uint16_t port)
 
     if ((sock = (struct Socket *)calloc (1, sizeof (struct Socket))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate new socket", __func__);
+        rzb_log(LOG_ERR,LOG_C_NETWORK, "%s: Failed to allocate new socket", __func__);
         return NULL;
     }
    
     if (!SocketAddress_Initialize
         (sock, sourceAddress, port))
     {
-        rzb_log (LOG_ERR,
+        rzb_log (LOG_ERR,LOG_C_NETWORK,
                  "%s: failed due to failure of SocketAddress_Initialize", __func__);
         Socket_Destroy(sock);
         return NULL;
@@ -160,14 +160,14 @@ Socket_Listen (const unsigned char *sourceAddress, uint16_t port)
                  sock->pAddressInfo->ai_protocol)) == -1)
     {
         Socket_Destroy (sock);
-        rzb_perror ("Socket_Listen failed due to failure of socket call: %s");
+        rzb_perror (LOG_C_NETWORK,"Socket_Listen failed due to failure of socket call: %s");
         return NULL;
     }
 
     if (setsockopt( sock->iSocket, SOL_SOCKET, SO_REUSEADDR, (OPT_CAST)&on, sizeof(on) ) == -1)
     {
         Socket_Destroy (sock);
-        rzb_perror ("Socket_Listen failed due to failure of setsockopt: %s");
+        rzb_perror (LOG_C_NETWORK,"Socket_Listen failed due to failure of setsockopt: %s");
         return NULL;
     }
     if (bind
@@ -176,14 +176,14 @@ Socket_Listen (const unsigned char *sourceAddress, uint16_t port)
          sock->pAddressInfo->ai_addrlen) == -1)
     {
         Socket_Destroy (sock);
-        rzb_perror ("Socket_Listen failed due to failure of bind call: %s");
+        rzb_perror (LOG_C_NETWORK,"Socket_Listen failed due to failure of bind call: %s");
         return NULL;
     }
 
     if (listen (sock->iSocket, SOMAXCONN) == -1)
     {
         Socket_Destroy (sock);
-        rzb_perror ("Socket_Listen failed due to failure of listen call: %s");
+        rzb_perror (LOG_C_NETWORK,"Socket_Listen failed due to failure of listen call: %s");
         return NULL;
     }
 
@@ -213,13 +213,13 @@ Socket_Listen_Unix (const char *path)
 
     if ((sock = (struct Socket *)calloc (1, sizeof (struct Socket))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate new socket", __func__);\
+        rzb_log(LOG_ERR,LOG_C_NETWORK, "%s: Failed to allocate new socket", __func__);\
         free(server);
         return NULL;
     }
     if ((sock->pAddressInfo = (struct addrinfo *)calloc(1,sizeof(struct addrinfo))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate new address info", __func__);
+        rzb_log(LOG_ERR,LOG_C_NETWORK, "%s: Failed to allocate new address info", __func__);
         Socket_Destroy(sock);
         free(server);
         return false;
@@ -234,7 +234,7 @@ Socket_Listen_Unix (const char *path)
     if ((sock->iSocket = socket (AF_UNIX, SOCK_STREAM, 0)) == -1)
     {
         Socket_Destroy (sock);
-        rzb_perror ("Socket_Listen failed due to failure of socket call: %s");
+        rzb_perror (LOG_C_NETWORK,"Socket_Listen failed due to failure of socket call: %s");
         return NULL;
     }
 
@@ -244,14 +244,14 @@ Socket_Listen_Unix (const char *path)
          sock->pAddressInfo->ai_addrlen) == -1)
     {
         Socket_Destroy (sock);
-        rzb_perror ("Socket_Listen_Unix failed due to failure of bind call: %s");
+        rzb_perror (LOG_C_NETWORK,"Socket_Listen_Unix failed due to failure of bind call: %s");
         return NULL;
     }
 
     if (listen (sock->iSocket, SOMAXCONN) == -1)
     {
         Socket_Destroy (sock);
-        rzb_perror ("Socket_Listen failed due to failure of listen call: %s");
+        rzb_perror (LOG_C_NETWORK,"Socket_Listen failed due to failure of listen call: %s");
         return NULL;
     }
 
@@ -278,7 +278,7 @@ Socket_Accept (struct Socket **retSock,
 
     if ((sock = (struct Socket *)calloc(1, sizeof (struct Socket))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate new socket", __func__);
+        rzb_log(LOG_ERR,LOG_C_NETWORK, "%s: Failed to allocate new socket", __func__);
         return -1;
     }
 
@@ -292,7 +292,7 @@ Socket_Accept (struct Socket **retSock,
     {
         Socket_Destroy (sock);
         rzb_perror
-            ("Socket_Accept failed due to failure of accept call: %s");
+            (LOG_C_NETWORK,"Socket_Accept failed due to failure of accept call: %s");
         return -1;
     }
     
@@ -305,7 +305,7 @@ Socket_Accept (struct Socket **retSock,
         {
             Socket_Destroy (sock);
             rzb_perror
-                ("Socket_Accept failed due to failure of accept call: %s");
+                (LOG_C_NETWORK,"Socket_Accept failed due to failure of accept call: %s");
             return -1;
         }
         *retSock = sock;
@@ -328,7 +328,7 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
 
     if ((sock = (struct Socket *)calloc (1, sizeof (struct Socket))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate new socket", __func__);
+        rzb_log(LOG_ERR,LOG_C_NETWORK, "%s: Failed to allocate new socket", __func__);
         return NULL;
     }
     sock->ssl =false;
@@ -336,7 +336,7 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
     if (!SocketAddress_Initialize
         (sock, destinationAddress, port))
     {
-        rzb_log (LOG_ERR,
+        rzb_log (LOG_ERR,LOG_C_NETWORK,
                  "%s: failed due to failure of SocketAddress_Initialize", __func__);
         return NULL;
     }
@@ -347,7 +347,7 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
 		if ((sock->iSocket = socket (cur->ai_family, cur->ai_socktype, cur->ai_protocol)) ==INVALID_SOCKET)
         {
             rzb_perror
-                ("Socket_Connect failed due to failure of socket call: %s");
+                (LOG_C_NETWORK,"Socket_Connect failed due to failure of socket call: %s");
             cur = cur->ai_next;
             continue;
         }
@@ -361,7 +361,7 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
 		if (connect(sock->iSocket, cur->ai_addr, cur->ai_addrlen) == SOCKET_ERROR)
         {
             rzb_perror
-                ("Socket_Connect failed due to failure of connect call: %s");
+                (LOG_C_NETWORK,"Socket_Connect failed due to failure of connect call: %s");
             cur = cur->ai_next;
 			closesocket(sock->iSocket);
             continue;
@@ -369,7 +369,7 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
         return sock;
     }
 
-    rzb_log(LOG_ERR,"%s: All possible hosts exhausted", __func__);
+    rzb_log(LOG_ERR,LOG_C_NETWORK,"%s: All possible hosts exhausted", __func__);
     Socket_Close(sock);
     return NULL;
 }
@@ -487,7 +487,7 @@ Socket_Tx (const struct Socket *sock, size_t size,
 				errno = EINTR;
 #endif
             if (errno != EINTR && errno != EAGAIN) 
-                rzb_perror ("Socket_Tx failed due to failure of read call: %s");
+                rzb_perror (LOG_C_NETWORK,"Socket_Tx failed due to failure of read call: %s");
 
             return -1;
         }
@@ -582,7 +582,7 @@ Socket_Rx (const struct Socket * sock, size_t len,
 				errno = EINTR;
 #endif
             if (errno != EINTR && errno != EAGAIN) 
-                rzb_perror ("Socket_Rx failed due to failure of read call: %s");
+                rzb_perror (LOG_C_NETWORK,"Socket_Rx failed due to failure of read call: %s");
 
             return -1;
         }
@@ -620,11 +620,13 @@ Socket_Rx_Until (const struct Socket * sock, uint8_t ** r_buffer,
         now = Socket_Rx(sock, 1, &buffer[total]);
         if (now == -1) {
             free(buffer);
-            if (errno != EINTR && errno != EAGAIN)
-                rzb_log(LOG_ERR, "%s: failed due to failure of Socket_Rx", __func__);
+            if (errno != EINTR && errno != EAGAIN) {
+                rzb_perror(LOG_C_NETWORK, "Socket_Rx failed: %s");
+            }
 
             return -1;
         } else if (now == 0) {
+            rzb_log(LOG_DEBUG, LOG_C_NETWORK, "%s: Socket_Rx returned 0 bytes", __func__);
             free(buffer);
             return 0;
         }
@@ -636,6 +638,7 @@ Socket_Rx_Until (const struct Socket * sock, uint8_t ** r_buffer,
         if (total == bufSize) {
             tmp = buffer;
             if ((buffer = realloc(buffer, bufSize + MAXRWSIZE)) == NULL) {
+                rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to realloc buffer", __func__);
                 free(tmp);
                 return -1;
             }

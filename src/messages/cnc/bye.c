@@ -12,8 +12,10 @@ MessageBye_Initialize (
                        const uuid_t p_uuidSourceNugget)
 {
     struct Message *msg;
-    if ((msg = Message_Create_Broadcast(MESSAGE_TYPE_BYE, MESSAGE_VERSION_1, 0, p_uuidSourceNugget)) == NULL)
+    if ((msg = Message_Create_Broadcast(MESSAGE_TYPE_BYE, MESSAGE_VERSION_1, 0, p_uuidSourceNugget)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message_Create_Broadcast failed", __func__);
         return NULL;
+    }
 
     msg->destroy = Message_Destroy;
     msg->deserialize = Message_Deserialize_Empty;

@@ -37,12 +37,6 @@ SO_PUBLIC extern struct Event * Event_Create (void);
  */
 SO_PUBLIC extern void Event_Destroy (struct Event *event);
 
-/** Get the serialize binary length of an event.
- * @param event The event to use.
- * @return The serialized length.
- */
-SO_PUBLIC extern uint32_t Event_BinaryLength (struct Event *event);
-
 #ifdef __cplusplus
 }
 #endif

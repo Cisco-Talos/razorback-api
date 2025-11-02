@@ -27,12 +27,6 @@ SO_PUBLIC extern void Block_Destroy (struct Block *p_pBlock);
  */
 SO_PUBLIC extern struct Block * Block_Clone (const struct Block *p_pSource);
 
-/** Calculate the Wire Size of A Block
- * @param the block
- * @return the size
- */
-SO_PUBLIC extern uint32_t Block_BinaryLength (struct Block *p_pBlock);
-
 /** Add MetaData to a block.
  * @param block The block to add metadata to.
  * @param uuidName The UUID of the metadata name

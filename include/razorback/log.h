@@ -50,19 +50,35 @@ typedef enum
     RZB_LOG_DEST_ERR,           ///< Write to stderr
 } RZB_LOG_DEST_t;
 
+#define LOG_C_ALL     0xFFFFFFFFFFFFFFFF
+#define LOG_C_CORE        (1<<0)
+#define LOG_C_NETWORK     (1<<1)
+#define LOG_C_STOMP       (1<<2)
+#define LOG_C_QUEUE       (1<<3)
+#define LOG_C_TRANSFER    (1<<4)
+#define LOG_C_CNC         (1<<5)
+#define LOG_C_CONFIG      (1<<6)
+#define LOG_C_MAGIC       (1<<7)
+#define LOG_C_LIST        (1<<8)
+#define LOG_C_JSON        (1<<9)
+#define LOG_C_DISPATCHER  (1<<10)
+#define LOG_C_NUGGET      (1<<11)
+
 /** Log a message to the system message log
  * @param level The message level as defined in syslog.h
+* @param component The component the message is associated with.
  * @param fmt The format string for the message
  * @param ... The data to be formatted.
  */
-SO_PUBLIC extern void rzb_log (unsigned level, const char *fmt, ...);
+SO_PUBLIC extern void rzb_log (unsigned level, uint64_t component, const char *fmt, ...);
 SO_PUBLIC extern void
 rzb_log_remote (uint8_t level, struct EventId *eventId, const char *fmt, ...);
 
 /** Log a standard error.
+ * @param component The component the error is associated with.
  * @param message the log message associated with the error.
  */
-SO_PUBLIC extern void rzb_perror (const char *message);
+SO_PUBLIC extern void rzb_perror (uint64_t component, const char *message);
 
 /** Get the currently configured log level
  * @return One of the log levels defined in syslog.h

@@ -25,15 +25,13 @@ static struct MessageHandler handler = {
 
 // core.h
 void 
-Message_CnC_Hello_Init(void)
-{
+Message_CnC_Hello_Init(void) {
     Message_Register_Handler(&handler);
 }
 
 
 static bool
-Hello_Deserialize(struct Message *message)
-{
+Hello_Deserialize(struct Message *message) {
     struct MessageHello *hello;
     json_object *msg;
     uuid_t dispatcher;
@@ -41,16 +39,18 @@ Hello_Deserialize(struct Message *message)
     UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, dispatcher);
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);
         return false;
+    }
 
     if ((message->message = calloc(1,sizeof(struct MessageHello))) == NULL) {
-        rzb_log(LOG_ERR, "%s: Failed to allocate memory for MessageHello", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate memory for MessageHello", __func__);
         return false;
     }
 
     if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
-        rzb_log(LOG_ERR, "%s: failed to parse json: %s", __func__, message->serialized);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to parse json: %s", __func__, message->serialized);
         return false;
     }
 
@@ -58,46 +58,40 @@ Hello_Deserialize(struct Message *message)
     hello = message->message;
 
     if (!JsonBuffer_Get_UUID
-        (msg, "Nugget_Type", hello->uuidNuggetType))
-    {
+            (msg, "Nugget_Type", hello->uuidNuggetType)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
         return false;
     }
 
-    if (!JsonBuffer_Get_UUID(msg, "App_Type", hello->uuidApplicationType))
-    {
+    if (!JsonBuffer_Get_UUID(msg, "App_Type", hello->uuidApplicationType)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
         return false;
     }
-    if (!JsonBuffer_Get_uint8_t(msg, "Locality", &hello->locality))
-    {
+    if (!JsonBuffer_Get_uint8_t(msg, "Locality", &hello->locality)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
         return false;
     }
-    if (uuid_compare(hello->uuidNuggetType, dispatcher) == 0)
-    {
+    if (uuid_compare(hello->uuidNuggetType, dispatcher) == 0) {
         if (!(JsonBuffer_Get_uint8_t(msg, "Priority", &hello->priority) &&
-                JsonBuffer_Get_uint8_t(msg, "Protocol", &hello->protocol) &&
-                JsonBuffer_Get_uint16_t(msg, "Port", &hello->port) &&
-                JsonBuffer_Get_uint32_t(msg, "Flags", &hello->flags)))
-        {
+              JsonBuffer_Get_uint8_t(msg, "Protocol", &hello->protocol) &&
+              JsonBuffer_Get_uint16_t(msg, "Port", &hello->port) &&
+              JsonBuffer_Get_uint32_t(msg, "Flags", &hello->flags))) {
             json_object_put(msg);
-            rzb_log (LOG_ERR,
-                     "%s: failed due to failure of JsonBuffer_Get_uint8", __func__);
+            rzb_log(LOG_ERR, LOG_C_CORE,
+                    "%s: failed due to failure of JsonBuffer_Get_uint8", __func__);
             return false;
         }
         // Address List
-        if (!JsonBuffer_Get_StringList(msg, "Address_List", &hello->addressList))
-        {
+        if (!JsonBuffer_Get_StringList(msg, "Address_List", &hello->addressList)) {
             json_object_put(msg);
-            rzb_log (LOG_ERR,
-                     "%s: failed due to failure of JsonBuffer_Get_StringList", __func__);
+            rzb_log(LOG_ERR, LOG_C_CORE,
+                    "%s: failed due to failure of JsonBuffer_Get_StringList", __func__);
             return false;
         }
 
@@ -114,33 +108,43 @@ MessageHello_Initialize (struct RazorbackContext *context)
     struct Message * msg;
     struct MessageHello *message;
     uuid_t dispatcher;
-    if (!UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, dispatcher))
-    	return NULL;
-
-    if ((msg = Message_Create_Broadcast(MESSAGE_TYPE_HELLO, MESSAGE_VERSION_1, sizeof(struct MessageHello), context->uuidNuggetId)) == NULL)
+    if (!UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, dispatcher)) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed to get dispatcher nugget type uuid", __func__);
         return NULL;
+    }
+
+    msg = Message_Create_Broadcast(
+        MESSAGE_TYPE_HELLO,
+        MESSAGE_VERSION_1,
+        sizeof(struct MessageHello),
+        context->uuidNuggetId
+    );
+    if (msg == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed to create message", __func__);
+        return NULL;
+    }
 
     message = msg->message;
 
     uuid_copy (message->uuidNuggetType, context->uuidNuggetType);
     uuid_copy (message->uuidApplicationType, context->uuidApplicationType);
     message->locality = context->locality;
-    if (uuid_compare(dispatcher, context->uuidNuggetType) == 0)
-    {
+    if (uuid_compare(dispatcher, context->uuidNuggetType) == 0) {
         message->flags = context->dispatcher.flags;
         message->priority = context->dispatcher.priority;
         message->port = context->dispatcher.port;
         message->protocol = context->dispatcher.protocol;
-        if( (message->addressList = List_Clone(context->dispatcher.addressList)) == NULL)
-        {
+        if ((message->addressList = List_Clone(context->dispatcher.addressList)) == NULL) {
             Hello_Destroy(msg);
             return NULL;
         }
     }
 
     msg->destroy = Hello_Destroy;
-    msg->deserialize=Hello_Deserialize;
-    msg->serialize=Hello_Serialize;
+    msg->deserialize = Hello_Deserialize;
+    msg->serialize = Hello_Serialize;
 
     return msg;
 }
@@ -151,12 +155,16 @@ Hello_Destroy (struct Message *msg)
     struct MessageHello *message;
 
     ASSERT (msg != NULL);
-    if (msg == NULL)
+    if (msg == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: msg is NULL", __func__);
         return;
+    }
     message = msg->message;
-
-	if(message->addressList != NULL)
-	    List_Destroy (message->addressList);
+    if (message != NULL) {
+        if (message->addressList != NULL) {
+            List_Destroy(message->addressList);
+        }
+    }
 
     Message_Destroy(msg);
 }
@@ -172,56 +180,54 @@ Hello_Serialize(struct Message *message)
     UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, dispatcher);
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);
         return false;
+    }
 
     hello = message->message;
 
-    if ((msg = json_object_new_object()) == NULL)
-        return false;
-
-    if (!JsonBuffer_Put_UUID
-        (msg, "Nugget_Type", hello->uuidNuggetType))
-    {
-        json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
-        return false;
-    }
-    if (!JsonBuffer_Put_UUID
-        (msg, "App_Type", hello->uuidApplicationType))
-    {
-        json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
+    if ((msg = json_object_new_object()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to create new json object", __func__);
         return false;
     }
 
-    if (!JsonBuffer_Put_uint8_t(msg, "Locality", hello->locality))
-    {
+    if (!JsonBuffer_Put_UUID
+            (msg, "Nugget_Type", hello->uuidNuggetType)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
         return false;
     }
-    if (uuid_compare(hello->uuidNuggetType, dispatcher) == 0)
-    {
+    if (!JsonBuffer_Put_UUID
+            (msg, "App_Type", hello->uuidApplicationType)) {
+        json_object_put(msg);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
+        return false;
+    }
+
+    if (!JsonBuffer_Put_uint8_t(msg, "Locality", hello->locality)) {
+        json_object_put(msg);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+        return false;
+    }
+    if (uuid_compare(hello->uuidNuggetType, dispatcher) == 0) {
         if (!(JsonBuffer_Put_uint8_t(msg, "Priority", hello->priority) &&
-                JsonBuffer_Put_uint8_t(msg, "Protocol", hello->protocol) &&
-                JsonBuffer_Put_uint16_t(msg, "Port", hello->port) &&
-                JsonBuffer_Put_uint32_t(msg, "Flags", hello->flags)))
-        {
+              JsonBuffer_Put_uint8_t(msg, "Protocol", hello->protocol) &&
+              JsonBuffer_Put_uint16_t(msg, "Port", hello->port) &&
+              JsonBuffer_Put_uint32_t(msg, "Flags", hello->flags))) {
             json_object_put(msg);
-            rzb_log (LOG_ERR,
-                     "%s: failed due to failure of JsonBuffer_Put_uint8", __func__);
+            rzb_log(LOG_ERR, LOG_C_CORE,
+                    "%s: failed due to failure of JsonBuffer_Put_uint8", __func__);
             return false;
         }
         // Address List
-        if (!JsonBuffer_Put_StringList(msg, "Address_List", hello->addressList))
-        {
+        if (!JsonBuffer_Put_StringList(msg, "Address_List", hello->addressList)) {
             json_object_put(msg);
-            rzb_log (LOG_ERR,
-                     "%s: failed due to failure of JsonBuffer_Put_StringList", __func__);
+            rzb_log(LOG_ERR, LOG_C_CORE,
+                    "%s: failed due to failure of JsonBuffer_Put_StringList", __func__);
             return false;
         }
 
@@ -229,12 +235,12 @@ Hello_Serialize(struct Message *message)
 
     wire = json_object_to_json_string(msg);
     message->length = strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
-    {
+    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
         json_object_put(msg);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate memory for serialized message", __func__);
         return false;
     }
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *) message->serialized, wire);
     json_object_put(msg);
 
     return true;

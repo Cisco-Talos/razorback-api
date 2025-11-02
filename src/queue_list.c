@@ -53,7 +53,7 @@ QueueList_Add (List_t * p_pList, struct Queue * p_pQ,
 
     if ((l_pEntry = calloc (1,sizeof (struct QueueListEntry))) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: failed due to lack of memory", __func__);
+        rzb_log (LOG_ERR, LOG_C_QUEUE, "%s: failed due to lack of memory", __func__);
         return false;
     }
 

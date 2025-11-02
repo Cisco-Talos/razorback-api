@@ -33,18 +33,19 @@
 #include <string.h>
 
 SO_PUBLIC bool JsonBuffer_Put_bool (json_object * parent,
-                                        const char *name, bool p_iValue)
-{
+                                        const char *name, bool p_iValue) {
     json_object *new;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
         return false;
+    }
     if (name == NULL)
         return false;
 
-    if ((new = json_object_new_boolean(p_iValue)) == NULL)
+    if ((new = json_object_new_boolean(p_iValue)) == NULL) {
         return false;
+    }
 
     json_object_object_add(parent, name, new);
     return true;
@@ -90,7 +91,7 @@ SO_PUBLIC bool JsonBuffer_Put_uint64_t (json_object * parent, const char * name,
     return true;
 }
 
-SO_PUBLIC bool JsonBuffer_Put_ByteArray (json_object * parent, const char *name, 
+SO_PUBLIC bool JsonBuffer_Put_ByteArray (json_object * parent, const char *name,
                                       uint32_t p_iSize,
                                       const uint8_t * p_pByteArray)
 {
@@ -142,7 +143,7 @@ SO_PUBLIC bool JsonBuffer_Put_String (json_object * parent, const char * name,
         return false;
 
     json_object_object_add(parent, name, new);
-    
+
     return true;
 }
 
@@ -265,7 +266,7 @@ SO_PUBLIC bool JsonBuffer_Get_uint64_t (json_object * parent, const char *name,
         }
     } else {
         // Not a string or int
-        rzb_log(LOG_ERR, "%s: Invalid json object type for %s", __func__, name);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Invalid json object type for %s", __func__, name);
         return false;
     }
 
@@ -318,7 +319,7 @@ SO_PUBLIC bool JsonBuffer_Get_ByteArray (json_object * parent, const char * name
     length = strlen(input);
     if ((output = calloc(length, sizeof(uint8_t))) == NULL)
         return false;
-    
+
     b64 = BIO_new (BIO_f_base64());
     BIO_set_flags (b64, BIO_FLAGS_BASE64_NO_NL);
     bmem = BIO_new_mem_buf (input, strlen(input));
@@ -393,7 +394,7 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
 
     if (json_object_object_get(parent, "String_Value") != NULL)
         str = JsonBuffer_Get_String(parent, "String_Value");
-    
+
     if (json_object_object_get(parent, "Bin_Value") != NULL)
         JsonBuffer_Get_ByteArray(parent, "Bin_Value", &size, &byteData);
 
@@ -473,7 +474,7 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
     UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuid);
     if (uuid_compare(uuid, p_pItem->uuidType) == 0)
         str = (char *)p_pItem->pData;
-    
+
     UUID_Get_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, uuid);
     if (uuid_compare(uuid, p_pItem->uuidType) == 0)
     {
@@ -759,7 +760,7 @@ SO_PUBLIC bool JsonBuffer_Get_BlockId (json_object * parent, const char * name,
     return true;
 }
 
-SO_PUBLIC bool JsonBuffer_Put_Block (json_object * parent, const char * name, 
+SO_PUBLIC bool JsonBuffer_Put_Block (json_object * parent, const char * name,
                                   struct Block *p_pBlock)
 {
     json_object *object;
@@ -842,14 +843,14 @@ SO_PUBLIC bool JsonBuffer_Get_Block (json_object * parent, const char * name,
             return false;
         }
     } else {
-        rzb_log(LOG_ERR, "%s: Metadata not found in Block", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Metadata not found in Block", __func__);
     }
 
     *p_pBlock = block;
     return true;
 }
 
-SO_PUBLIC bool JsonBuffer_Put_Event (json_object * parent, const char * name, 
+SO_PUBLIC bool JsonBuffer_Put_Event (json_object * parent, const char * name,
                                   struct Event *p_pEvent)
 {
     json_object *object;
@@ -897,20 +898,20 @@ SO_PUBLIC bool JsonBuffer_Get_Event (json_object * parent, const char * name,
         return false;
     // Get the container
     if ((object = json_object_object_get(parent, name)) == NULL) {
-        rzb_log(LOG_ERR, "%s: Failed to get Event field: %s", __func__, name);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Event field: %s", __func__, name);
         return false;
     }
     if (json_object_get_type(object) != json_type_object) {
-        rzb_log(LOG_ERR, "$%s: Invalid json object type for %s", __func__, name);
+        rzb_log(LOG_ERR, LOG_C_JSON, "$%s: Invalid json object type for %s", __func__, name);
         return false;
     }
     parent = object;
     if ((event = calloc(1, sizeof(struct Event))) == NULL) {
-        rzb_log(LOG_ERR, "%s: Failed to allocate Event", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to allocate Event", __func__);
         return false;
     }
     if (!JsonBuffer_Get_EventId(parent, "Id", &event->pId)) {
-        rzb_log(LOG_ERR, "%s: Failed to get EventId", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get EventId", __func__);
         Event_Destroy(event);
         return false;
     }
@@ -919,7 +920,7 @@ SO_PUBLIC bool JsonBuffer_Get_Event (json_object * parent, const char * name,
     {
         if (!JsonBuffer_Get_EventId(parent, "Parent_Id", &event->pParentId))
         {
-            rzb_log(LOG_ERR, "%s: Failed to get Parent_Id", __func__);
+            rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Parent_Id", __func__);
             Event_Destroy(event);
             return false;
         }
@@ -929,7 +930,7 @@ SO_PUBLIC bool JsonBuffer_Get_Event (json_object * parent, const char * name,
     {
         if (!JsonBuffer_Get_Event(parent, "Parent", &event->pParent))
         {
-            rzb_log(LOG_ERR, "%s: Failed to get Parent", __func__);
+            rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Parent", __func__);
             Event_Destroy(event);
             return false;
         }
@@ -938,11 +939,11 @@ SO_PUBLIC bool JsonBuffer_Get_Event (json_object * parent, const char * name,
     {
         if (!JsonBuffer_Get_NTLVList(parent, "Metadata", &event->pMetaDataList))
         {
-            rzb_log(LOG_ERR, "%s: Failed to get Metadata", __func__);
+            rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Metadata", __func__);
             Event_Destroy(event);
             return false;
         }
-    } 
+    }
     else
     {
         if ((event->pMetaDataList = NTLVList_Create()) == NULL)
@@ -956,7 +957,7 @@ SO_PUBLIC bool JsonBuffer_Get_Event (json_object * parent, const char * name,
     {
         if (!JsonBuffer_Get_Block(parent, "Block", &event->pBlock))
         {
-            rzb_log(LOG_ERR, "%s: Failed to get Block", __func__);
+            rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Block", __func__);
             Event_Destroy(event);
             return false;
         }
@@ -988,7 +989,7 @@ SO_PUBLIC bool JsonBuffer_Put_EventId (json_object * parent, const char * name,
     if (!JsonBuffer_Put_UUID(object, "Id", p_pEventId->uuidNuggetId))
         return false;
     // XXX: End
-    
+
     if (!JsonBuffer_Put_uint64_t(parent, "Seconds", p_pEventId->iSeconds))
         return false;
 
@@ -998,7 +999,7 @@ SO_PUBLIC bool JsonBuffer_Put_EventId (json_object * parent, const char * name,
     return true;
 }
 
-SO_PUBLIC bool JsonBuffer_Get_EventId (json_object * parent, const char * name, 
+SO_PUBLIC bool JsonBuffer_Get_EventId (json_object * parent, const char * name,
                                     struct EventId **p_pEventId)
 {
     struct EventId *eventId;
@@ -1018,7 +1019,7 @@ SO_PUBLIC bool JsonBuffer_Get_EventId (json_object * parent, const char * name,
     parent = object;
     // XXX: Refactor this!!
     if ((object = json_object_object_get(parent, "Nugget")) == NULL) {
-        rzb_log(LOG_ERR, "%s: Failed to get Nugget", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Nugget", __func__);
         return false;
     }
     if (json_object_get_type(object) != json_type_object)
@@ -1031,22 +1032,22 @@ SO_PUBLIC bool JsonBuffer_Get_EventId (json_object * parent, const char * name,
     // XXX: Refactor this!!
     if (!JsonBuffer_Get_UUID(object, "Id", eventId->uuidNuggetId))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Nugget ID", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Nugget ID", __func__);
         EventId_Destroy(eventId);
         return false;
     }
     // XXX: End
-    
+
     if (!JsonBuffer_Get_uint64_t(parent, "Seconds", &eventId->iSeconds))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Seconds", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Seconds", __func__);
         EventId_Destroy(eventId);
         return false;
     }
 
     if (!JsonBuffer_Get_uint64_t(parent, "Nano_Seconds", &eventId->iNanoSecs))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Nano_Seconds", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Nano_Seconds", __func__);
         EventId_Destroy(eventId);
         return false;
     }
@@ -1082,7 +1083,7 @@ SO_PUBLIC bool JsonBuffer_Put_Judgment (json_object * parent, const char * name,
 
     if (!JsonBuffer_Put_BlockId(parent, "Block_ID", p_pJudgment->pBlockId))
         return false;
-     
+
     if (!JsonBuffer_Put_uint8_t(parent, "Priority", p_pJudgment->iPriority))
         return false;
 
@@ -1108,13 +1109,13 @@ SO_PUBLIC bool JsonBuffer_Put_Judgment (json_object * parent, const char * name,
         return false;
 
     if (p_pJudgment->sMessage != NULL)
-        if (!JsonBuffer_Put_String(parent, "Message", (char *)p_pJudgment->sMessage)) 
+        if (!JsonBuffer_Put_String(parent, "Message", (char *)p_pJudgment->sMessage))
             return false;
 
     return true;
 }
 
-SO_PUBLIC bool JsonBuffer_Get_Judgment (json_object * parent, const char * name, 
+SO_PUBLIC bool JsonBuffer_Get_Judgment (json_object * parent, const char * name,
                                      struct Judgment **p_pJudgment)
 {
     struct Judgment *judgment;
@@ -1136,91 +1137,91 @@ SO_PUBLIC bool JsonBuffer_Get_Judgment (json_object * parent, const char * name,
 
     if (!JsonBuffer_Get_UUID(parent, "Nugget_ID", judgment->uuidNuggetId))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Nugget_ID", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Nugget_ID", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint64_t(parent, "Seconds", &judgment->iSeconds))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Seconds", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Seconds", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint64_t(parent, "Nano_Seconds", &judgment->iNanoSecs))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Nano_Seconds", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Nano_Seconds", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_EventId(parent, "Event_ID", &judgment->pEventId))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Event_ID", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Event_ID", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_BlockId(parent, "Block_ID", &judgment->pBlockId))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Block_ID", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Block_ID", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
-     
+
     if (!JsonBuffer_Get_uint8_t(parent, "Priority", &judgment->iPriority))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Priority", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Priority", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_NTLVList(parent, "Metadata", &judgment->pMetaDataList))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Metadata", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Metadata", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "GID", &judgment->iGID))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get GID", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get GID", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "SID", &judgment->iSID))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get SID", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get SID", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "Set_SF_Flags", &judgment->Set_SfFlags))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Set_SF_Flags", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Set_SF_Flags", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "Set_Ent_Flags", &judgment->Set_EntFlags))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Set_Ent_Flags", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Set_Ent_Flags", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "Unset_SF_Flags", &judgment->Unset_SfFlags))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Unset_SF_Flags", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Unset_SF_Flags", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
 
     if (!JsonBuffer_Get_uint32_t(parent, "Unset_Ent_Flags", &judgment->Unset_EntFlags))
     {
-        rzb_log(LOG_ERR, "%s: Failed to get Unset_Ent_Flags", __func__);
+        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Unset_Ent_Flags", __func__);
         Judgment_Destroy(judgment);
         return false;
     }
@@ -1229,7 +1230,7 @@ SO_PUBLIC bool JsonBuffer_Get_Judgment (json_object * parent, const char * name,
     {
         if ((judgment->sMessage = (uint8_t *)JsonBuffer_Get_String(parent, "Message")) == NULL)
         {
-            rzb_log(LOG_ERR, "%s: Failed to get Message", __func__);
+            rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Message", __func__);
             Judgment_Destroy(judgment);
             return false;
         }
@@ -1238,7 +1239,7 @@ SO_PUBLIC bool JsonBuffer_Get_Judgment (json_object * parent, const char * name,
     return true;
 }
 
-SO_PUBLIC bool JsonBuffer_Put_Nugget (json_object * parent, const char * name, 
+SO_PUBLIC bool JsonBuffer_Put_Nugget (json_object * parent, const char * name,
                                            struct Nugget * nugget)
 {
     json_object *object;
@@ -1277,7 +1278,7 @@ SO_PUBLIC bool JsonBuffer_Put_Nugget (json_object * parent, const char * name,
     return true;
 }
 
-SO_PUBLIC bool JsonBuffer_Get_Nugget (json_object * parent, const char * name, 
+SO_PUBLIC bool JsonBuffer_Get_Nugget (json_object * parent, const char * name,
                                            struct Nugget ** r_nugget)
 {
     struct Nugget *nugget;
@@ -1343,7 +1344,7 @@ SO_PUBLIC bool JsonBuffer_Get_Nugget (json_object * parent, const char * name,
     return true;
 }
 
-static int 
+static int
 JsonBuffer_Put_UUIDList_Add(void *vnode, void *varray)
 {
     struct UUIDListNode *node = vnode;
@@ -1365,8 +1366,8 @@ JsonBuffer_Put_UUIDList_Add(void *vnode, void *varray)
     return LIST_EACH_OK;
 }
 
-SO_PUBLIC bool 
-JsonBuffer_Put_UUIDList (json_object * parent, const char * name, 
+SO_PUBLIC bool
+JsonBuffer_Put_UUIDList (json_object * parent, const char * name,
                                            List_t * list)
 {
     json_object *object;
@@ -1384,13 +1385,13 @@ JsonBuffer_Put_UUIDList (json_object * parent, const char * name,
     return true;
 }
 
-SO_PUBLIC bool JsonBuffer_Get_UUIDList (json_object * parent, const char * name, 
+SO_PUBLIC bool JsonBuffer_Get_UUIDList (json_object * parent, const char * name,
                                            List_t ** r_list)
 {
     List_t *list;
     json_object *object;
     uuid_t uuid;
-    const char *uuidS, *nameS, *desc; 
+    const char *uuidS, *nameS, *desc;
     size_t i;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
@@ -1428,7 +1429,7 @@ SO_PUBLIC bool JsonBuffer_Get_UUIDList (json_object * parent, const char * name,
     return true;
 }
 
-static int 
+static int
 JsonBuffer_Put_StringList_Add(void *vnode, void *varray)
 {
     char *node = vnode;
@@ -1442,8 +1443,8 @@ JsonBuffer_Put_StringList_Add(void *vnode, void *varray)
     return LIST_EACH_OK;
 }
 
-SO_PUBLIC bool 
-JsonBuffer_Put_StringList (json_object * parent, const char * name, 
+SO_PUBLIC bool
+JsonBuffer_Put_StringList (json_object * parent, const char * name,
                                            List_t * list)
 {
     json_object *object;
@@ -1461,8 +1462,8 @@ JsonBuffer_Put_StringList (json_object * parent, const char * name,
     return true;
 }
 
-SO_PUBLIC bool 
-JsonBuffer_Get_StringList (json_object * parent, const char * name, 
+SO_PUBLIC bool
+JsonBuffer_Get_StringList (json_object * parent, const char * name,
                                            List_t ** r_list)
 {
     List_t *list;
@@ -1499,8 +1500,8 @@ JsonBuffer_Get_StringList (json_object * parent, const char * name,
 }
 
 
-SO_PUBLIC bool 
-JsonBuffer_Put_uint8List (json_object * parent, const char * name, 
+SO_PUBLIC bool
+JsonBuffer_Put_uint8List (json_object * parent, const char * name,
                                            uint8_t *list, uint32_t count)
 {
     json_object *object;
@@ -1525,8 +1526,8 @@ JsonBuffer_Put_uint8List (json_object * parent, const char * name,
     return true;
 }
 
-SO_PUBLIC bool 
-JsonBuffer_Get_uint8List (json_object * parent, const char * name, 
+SO_PUBLIC bool
+JsonBuffer_Get_uint8List (json_object * parent, const char * name,
                                            uint8_t **list, uint32_t *count)
 {
     json_object *object;
@@ -1548,7 +1549,7 @@ JsonBuffer_Get_uint8List (json_object * parent, const char * name,
     if (c > 0)
         if ((items = calloc(c, sizeof(uint8_t))) == NULL)
             return false;
-    
+
     for ( i = 0; i < c; i++)
     {
         if (((object = json_object_array_get_idx(parent, i)) == NULL) ||

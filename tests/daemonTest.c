@@ -6,14 +6,14 @@
 
 
 int main() {
-    rzb_log(LOG_INFO, "Daemonizing");
+    rzb_log(LOG_INFO, LOG_C_CORE,"Daemonizing");
     if (rzb_daemonize(NULL, NULL)) {
-        rzb_log(LOG_EMERG, "Failed to daemonize");
+        rzb_log(LOG_EMERG, LOG_C_CORE,"Failed to daemonize");
         return 1;
     }
-    rzb_log(LOG_INFO, "Sleeping as a daemon");
+    rzb_log(LOG_INFO,LOG_C_CORE, "Sleeping as a daemon");
     sleep(60);
-    rzb_log(LOG_INFO, "Daemon exiting");
+    rzb_log(LOG_INFO,LOG_C_CORE, "Daemon exiting");
 }
 
 

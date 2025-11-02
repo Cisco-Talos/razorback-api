@@ -9,8 +9,7 @@
 
 /** List node structure.
  */
-struct ListNode
-{
+struct ListNode {
     struct ListNode *next;	///< Next node
     struct ListNode *prev;	///< Previous node
     void *item;				///< Item data
@@ -28,8 +27,7 @@ struct ListNode
  * 'upgrade' to a write lock which can not be done while
  * holding the read lock.
  */
-struct _List
-{
+struct _List {
     struct ListNode * head;         ///< Head node
     struct ListNode * tail;	        ///< Tail node
     atomic_size_t length;           ///< Number of items in the list
@@ -61,28 +59,30 @@ List_Create(int mode,
         void (*destroy)(void *),
         void *(*clone)(void *),
         void (*nodeLock)(void *),
-        void (*nodeUnlock)(void *))
-{
+        void (*nodeUnlock)(void *)) {
     List_t * list;
 
-    if ((list = calloc(1,sizeof(List_t))) == NULL)
+    if ((list = calloc(1,sizeof(List_t))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: Failed to allocate list", __func__);
         return NULL;
+    }
 
     if ((list->lock = RWLock_Create() ) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: Failed to create list lock", __func__);
         free(list);
         return NULL;
     }
 
-    if (mode == LIST_MODE_QUEUE || mode == LIST_MODE_STACK)
-    {
-    	if ((list->sem = Semaphore_Create(true, 0)) == NULL)
-    	{
-    		free(list);
-    		return NULL;
-    	}
+    if (mode == LIST_MODE_QUEUE || mode == LIST_MODE_STACK) {
+        if ((list->sem = Semaphore_Create(true, 0)) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_LIST, "%s: Failed to create list semaphore", __func__);
+            RWLock_Destroy(list->lock);
+            free(list);
+            return NULL;
+        }
+    } else {
+        list->sem = NULL;
     }
-    else
-    	list->sem = NULL;
 
     list->mode = mode;
     list->cmp = cmp;
@@ -99,10 +99,10 @@ struct FindData {
     void * ret;
     void * id;
 };
+
 static int List_FindKeyCmp(void * item, void *d) {
     struct FindData *data = (struct FindData *)d;
-    if (data->list->keyCmp(item, data->id) == 0)
-    {
+    if (data->list->keyCmp(item, data->id) == 0) {
         data->ret = item;
         // TODO - Check the node lock function and call it if set
         return LIST_EACH_END;
@@ -111,72 +111,75 @@ static int List_FindKeyCmp(void * item, void *d) {
 }
 
 SO_PUBLIC void
-List_SetLimit(List_t *list, size_t limit)
-{
+List_SetLimit(List_t *list, size_t limit) {
     ASSERT(list != NULL);
-    if (list == NULL)
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
         return;
+    }
     RWLock_WriteLock(list->lock);
     list->limit = limit;
     RWLock_Unlock(list->lock);
 }
 
 SO_PUBLIC void * 
-List_Find(List_t *list, void *id)
-{
+List_Find(List_t *list, void *id) {
     struct FindData data;
     ASSERT(list != NULL);
     ASSERT(id != NULL);
     ASSERT(list->keyCmp != NULL);
 
 
-    if ((list == NULL) || (id == NULL) || (list->keyCmp == NULL))
+    if ((list == NULL) || (id == NULL) || (list->keyCmp == NULL)) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: Invalid parameter", __func__);
         return NULL;
+    }
 
     data.list = list;
     data.id = id;
     data.ret = NULL;
 
     if (!List_ForEach(list, List_FindKeyCmp, &data)) {
-        rzb_log(LOG_ERR, "%s: Error calling List_ForEach", __func__);
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: Error calling List_ForEach", __func__);
     }
 
     return data.ret;
 }
 
 SO_PUBLIC bool 
-List_Push(List_t *list, void *item)
-{
+List_Push(List_t *list, void *item) {
     struct ListNode *node;
     bool insert_result = false;
     ASSERT(list != NULL);
-    if (list == NULL)
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
         return false;
-    if ((node = calloc(1, sizeof(struct ListNode))) == NULL)
+    }
+
+    if ((node = calloc(1, sizeof(struct ListNode))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: Failed to allocate list node", __func__);
         return false;
+    }
 
     node->item = item;
 
 
     RWLock_WriteLock(list->lock);
-    if (list->limit > 0 && list->length >= list->limit)
-    {
+    if (list->limit > 0 && list->length >= list->limit) {
         RWLock_Unlock(list->lock);
         free(node);
         return false;
     }
-    switch (list->mode)
-    {
-    case LIST_MODE_GENERIC:
-    case LIST_MODE_QUEUE:
-        insert_result = List_Queue_Push(list, node);
-        break;
-    case LIST_MODE_STACK:
-        insert_result = List_Stack_Push(list, node);
-        break;
+    switch (list->mode) {
+        case LIST_MODE_GENERIC:
+        case LIST_MODE_QUEUE:
+            insert_result = List_Queue_Push(list, node);
+            break;
+        case LIST_MODE_STACK:
+            insert_result = List_Stack_Push(list, node);
+            break;
     }
-    if (!insert_result)
-    {
+    if (!insert_result) {
         free(node);
         RWLock_Unlock(list->lock);
         return false;
@@ -185,16 +188,20 @@ List_Push(List_t *list, void *item)
     list->length++;
     RWLock_Unlock(list->lock);
 
-    if (list->sem != NULL)
-		Semaphore_Post(list->sem);
+    if (list->sem != NULL) {
+        Semaphore_Post(list->sem);
+    }
     return true;
 }
 
 static struct ListNode *
-List_Do_Pop(List_t *list)
-{
-    switch (list->mode)
-    {
+List_Do_Pop(List_t *list) {
+    ASSERT(list != NULL);
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
+        return NULL;
+    }
+    switch (list->mode) {
         case LIST_MODE_GENERIC:
         case LIST_MODE_QUEUE:
             return List_Queue_Pop(list);
@@ -206,16 +213,18 @@ List_Do_Pop(List_t *list)
 }
 
 SO_PUBLIC void *
-List_Pop(List_t *list)
-{
+List_Pop(List_t *list) {
     struct ListNode *node = NULL;
     void * ret = NULL;
     ASSERT(list != NULL);
-    if (list == NULL)
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
         return NULL;
+    }
 
-    if (list->sem != NULL)
-    	Semaphore_Wait(list->sem);
+    if (list->sem != NULL) {
+        Semaphore_Wait(list->sem);
+    }
 
     RWLock_WriteLock(list->lock);
     node = List_Do_Pop(list);
@@ -231,21 +240,22 @@ List_Pop(List_t *list)
 
 
 SO_PUBLIC bool
-List_ForEach(List_t *list, int (*op)(void *, void *), void *userData)
-{
+List_ForEach(List_t *list, int (*op)(void *, void *), void *userData) {
     struct ListNode *cur = NULL, *delNode;
     bool del = false;
     bool ret = true;
     bool last = false;
     int opRet;
     ASSERT(list != NULL);
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
+        return false;
+    }
     ASSERT(op != NULL);
-
-    if (list == NULL)
+    if (op == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST,"%s: op is NULL", __func__);
         return false;
-    if (op == NULL)
-        return false;
-
+    }
     // List is empty we did what was asked successfully
     if (list->head == NULL) {
         return true;
@@ -271,9 +281,7 @@ List_ForEach(List_t *list, int (*op)(void *, void *), void *userData)
                 last = true;
                 break;
             case LIST_EACH_REMOVE:
-#ifdef LIST_DEBUG
-                rzb_log(LOG_DEBUG, "%s: Delete requested marking node for deletion: %p", __func__, cur);
-#endif
+                rzb_log(LOG_DEBUG, LOG_C_LIST, "%s: Delete requested marking node for deletion: %p", __func__, cur);
                 del = true;
                 cur->del = true;
                 break;
@@ -287,18 +295,14 @@ List_ForEach(List_t *list, int (*op)(void *, void *), void *userData)
     RWLock_Unlock(list->lock);
 
     if (del) {
-#ifdef LIST_DEBUG
-        rzb_log(LOG_DEBUG, "%s: Item deletion requested in loop pruning list", __func__);
-#endif
+        rzb_log(LOG_DEBUG, LOG_C_LIST, "%s: Item deletion requested in loop pruning list", __func__);
         RWLock_WriteLock(list->lock);
         cur = list->head;
         while (cur != NULL) {
             if (cur->del) {
                 delNode = cur;
                 cur = delNode->next;
-#ifdef LIST_DEBUG
-                rzb_log(LOG_DEBUG, "%s: Removing deleted node from list %p", __func__, delNode);A
-#endif
+                rzb_log(LOG_DEBUG, LOG_C_LIST, "%s: Removing deleted node from list %p", __func__, delNode);
                 List_RemoveNode(list, delNode);
                 if (list->destroy)
                     list->destroy(delNode->item);
@@ -341,10 +345,10 @@ List_Remove(List_t *list, void *item)
     data.list = list;
     data.ret = NULL;
     if (!List_ForEach(list, List_FindRemove, &data)) {
-        rzb_log(LOG_ERR, "%s: Error calling List_ForEach", __func__);
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: Error calling List_ForEach", __func__);
     }
     if(data.ret == NULL) {
-        rzb_log(LOG_ERR, "%s: Failed remove item", __func__);
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: Failed remove item", __func__);
         return false;
     }
 
@@ -355,32 +359,30 @@ static void
 List_RemoveNode(List_t *list, struct ListNode *node)
 {
     ASSERT(list != NULL);
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
+        return;
+    }
     ASSERT(node != NULL);
+    if (node == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: node is NULL", __func__);
+        return;
+    }
     ASSERT(list->head != NULL);
-    if (list == NULL)
+    if (list->head == NULL) {
         return;
-    if (node == NULL)
-        return;
-    if (list->head == NULL)
-        return;
+    }
 
-    if (node == list->head && node == list->tail)
-    {
+    if (node == list->head && node == list->tail) {
         list->head = NULL;
         list->tail = NULL;
-    }
-    else if (node == list->head)
-    {
+    } else if (node == list->head) {
         list->head = node->next;
         list->head->prev = NULL;
-    }
-    else if (node == list->tail)
-    {
+    } else if (node == list->tail) {
         list->tail = node->prev;
         list->tail->next = NULL;
-    }
-    else
-    {
+    } else {
         node->prev->next = node->next;
         node->next->prev = node->prev;
     }
@@ -392,12 +394,13 @@ List_Clear(List_t *list)
 {
     struct ListNode *item;
     ASSERT(list != NULL);
-    if (list == NULL)
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
         return;
+    }
 
     item = List_Do_Pop(list);
-    while ( item != NULL )
-    {
+    while (item != NULL) {
         if (list->destroy != NULL) {
             list->destroy(item->item);
         }
@@ -407,21 +410,23 @@ List_Clear(List_t *list)
 }
 
 SO_PUBLIC size_t
-List_Length(List_t *list)
-{
+List_Length(List_t *list) {
     ASSERT(list != NULL);
-    if (list == NULL)
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
         return 0;
+    }
 
     return list->length;
 }
 
 SO_PUBLIC void
-List_Destroy(List_t *list)
-{
+List_Destroy(List_t *list) {
     ASSERT(list != NULL);
-    if (list == NULL)
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
         return;
+    }
     
     List_Clear(list);
     RWLock_Destroy(list->lock);
@@ -429,28 +434,34 @@ List_Destroy(List_t *list)
 }
 
 static int
-List_Clone_Node(void *vItem, void *vDest)
-{
+List_Clone_Node(void *vItem, void *vDest) {
     List_t *dest = (List_t*)vDest;
     void *new = dest->clone(vItem);
-    if (new == NULL)
+    if (new == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: Failed to clone node", __func__);
         return LIST_EACH_ERROR;
-    if (List_Push(dest, new))
-        return LIST_EACH_OK;
-    else
+    }
+    if (!List_Push(dest, new)) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: Failed to push cloned node to new list", __func__);
         return LIST_EACH_ERROR;
+    }
+    return LIST_EACH_OK;
+
 }
 
 SO_PUBLIC List_t*
-List_Clone (List_t *source)
-{
+List_Clone (List_t *source) {
     List_t *dest;
     ASSERT(source != NULL);
+    if (source == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: source list is NULL", __func__);
+        return NULL;
+    }
     ASSERT(source->clone != NULL);
-    if (source == NULL)
+    if (source->clone == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: source list clone function is NULL", __func__);
         return NULL;
-    if (source->clone == NULL)
-        return NULL;
+    }
     
     dest = List_Create(source->mode, 
             source->cmp, 
@@ -460,11 +471,13 @@ List_Clone (List_t *source)
             source->nodeLock,
             source->nodeUnlock);
 
-    if(dest == NULL)
+    if(dest == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: Failed to create destination list", __func__);
         return NULL;
+    }
 
-    if (!List_ForEach(source, List_Clone_Node, dest))
-    {
+    if (!List_ForEach(source, List_Clone_Node, dest)) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: Failed to clone list nodes", __func__);
         List_Destroy(dest);
         return NULL;
     }
@@ -472,14 +485,17 @@ List_Clone (List_t *source)
 }
 
 SO_PUBLIC bool
-List_Transfer (List_t *dest, List_t *source)
-{
+List_Transfer (List_t *dest, List_t *source) {
     ASSERT(source != NULL);
     ASSERT(dest != NULL);
-    if (source == NULL)
+    if (source == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: source list is NULL", __func__);
         return false;
-    if (dest == NULL)
+    }
+    if (dest == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: dest list is NULL", __func__);
         return false;
+    }
 
     RWLock_WriteLock(dest->lock);
     RWLock_WriteLock(source->lock);
@@ -501,41 +517,38 @@ List_Transfer (List_t *dest, List_t *source)
 
 
 static bool
-List_Stack_Push(List_t *list, struct ListNode *node)
-{
+List_Stack_Push(List_t *list, struct ListNode *node) {
     ASSERT(list != NULL);
     ASSERT(node != NULL);
-    if (list == NULL)
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
         return false;
+    }
 
-    if (list->head == NULL)
-    {
+    if (list->head == NULL) {
         list->head = node;
         list->tail = node;
-    }
-    else
-    {
+    } else {
         node->next = list->head;
         list->head->prev = node;
         list->head = node;
     }
     return true;
 }
+
 static bool
-List_Queue_Push(List_t *list, struct ListNode *node)
-{
+List_Queue_Push(List_t *list, struct ListNode *node) {
     ASSERT(list != NULL);
     ASSERT(node != NULL);
-    if (list == NULL || node == NULL)
+    if (list == NULL || node == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list or node is NULL", __func__);
         return false;
+    }
 
-    if (list->tail == NULL)
-    {
+    if (list->tail == NULL) {
         list->head = node;
         list->tail = node;
-    }
-    else
-    {
+    } else {
         node->prev = list->tail;
         list->tail->next = node;
         list->tail = node;
@@ -548,11 +561,14 @@ List_Stack_Pop(List_t *list)
 {
     struct ListNode *ret;
     ASSERT(list != NULL);
-    if (list == NULL)
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
         return NULL;
+    }
 
-    if (list->head == NULL)
+    if (list->head == NULL) {
         return NULL;
+    }
 
 
     ret = list->head;
@@ -562,15 +578,17 @@ List_Stack_Pop(List_t *list)
 }
 
 static struct 
-ListNode * List_Queue_Pop(List_t *list)
-{
+ListNode * List_Queue_Pop(List_t *list) {
     struct ListNode *ret;
     ASSERT(list != NULL);
-    if (list == NULL)
+    if (list == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
         return NULL;
+    }
 
-    if (list->tail == NULL)
+    if (list->tail == NULL) {
         return NULL;
+    }
 
     ret = list->tail;
     // Clang scan-build complains about this line

@@ -98,7 +98,7 @@ SSH_mkdir(struct SSH_Session *session, const char *fmt, ...)
     va_start (argp, fmt);
     if (vasprintf (&dir, fmt, argp) == -1)
     {
-        rzb_log (LOG_ERR, "%s: Could not allocate directory string",
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Could not allocate directory string",
                  __func__);
         return NULL;
     }
@@ -107,7 +107,7 @@ SSH_mkdir(struct SSH_Session *session, const char *fmt, ...)
     {
         if (sftp_mkdir (session->sftp, dir, CREATE_MODE) == -1)
         {
-            rzb_log (LOG_ERR, "%s: Error creating directory %s", __func__,
+            rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Error creating directory %s", __func__,
                      dir);
             free (dir);
             return NULL;
@@ -165,7 +165,7 @@ writeWrap (sftp_file fd, uint8_t * data, uint64_t length)
         bytessofar = sftp_write (fd, data + totalbytes, size - totalbytes);
         if (bytessofar < 0)
         {
-            rzb_log (LOG_ERR, "%s: Could not write data to file", __func__);
+            rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Could not write data to file", __func__);
             return 0;
         }
         totalbytes += bytessofar;
@@ -192,13 +192,13 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
     ctx = Thread_GetContext(Thread_GetCurrent());
     if (ctx == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup thread context", __func__);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to lookup thread context", __func__);
         return TRANSFER_FAIL_LOCAL;
     }
     session = SSH_Get_Session(ctx->uuidNuggetId, dispatcher);
     if (session == NULL) 
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup context protocol session", __func__);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to lookup context protocol session", __func__);
         return TRANSFER_FAIL_DISPATCHER;
     }
     if (!SSH_Check_Session(session))
@@ -207,18 +207,18 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
     
     if ((filename = Transfer_generateFilename (item->pEvent->pBlock)) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: failed to generate file name", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file name", __func__);
         return TRANSFER_FAIL_LOCAL;
     }
     if (( path = createDirectory(item->pEvent->pBlock, session)) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: failed to create storage dir", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to create storage dir", __func__);
         free (filename);
         return TRANSFER_FAIL_DISPATCHER;
     }
     if (asprintf(&fullpath, "%s/%s", path, filename) == -1)
     {
-        rzb_log (LOG_ERR, "%s: failed to generate file path", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file path", __func__);
         free(path);
         free (filename);
         return TRANSFER_FAIL_LOCAL;
@@ -239,7 +239,7 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
                S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (fd == NULL)
     {
-        rzb_log (LOG_ERR, "%s: Could not open file for writing: %s", __func__, ssh_get_error(session->ssh));
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Could not open file for writing: %s", __func__, ssh_get_error(session->ssh));
         free (filename);
         return TRANSFER_FAIL_DISPATCHER;
     }
@@ -252,7 +252,7 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
             {
                 if (writeWrap(fd,data,len) == 0)
                 {
-                    rzb_log (LOG_ERR, "%s: Write failed.", __func__);
+                    rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Write failed.", __func__);
                     free(fullpath);
                     free(path);
                     free (filename);
@@ -266,7 +266,7 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
         {
             if ((writeWrap (fd, dataItem->data.pointer, dataItem->iLength)) == 0)
             {
-                rzb_log (LOG_ERR, "%s: Write failed.", __func__);
+                rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Write failed.", __func__);
                 sftp_close (fd);
                 free(fullpath);
                 free(path);
@@ -309,36 +309,36 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     ctx = Thread_GetContext(Thread_GetCurrent());
     if (ctx == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup thread context", __func__);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to lookup thread context", __func__);
         return TRANSFER_FAIL_LOCAL;
     }
     session = SSH_Get_Session(ctx->uuidNuggetId, dispatcher);
     if (session == NULL) {
-        rzb_log(LOG_ERR, "%s: Failed to lookup context protocol session", __func__);
+        rzb_log(LOG_ERR, LOG_C_TRANSFER,"%s: Failed to lookup context protocol session", __func__);
         return TRANSFER_FAIL_DISPATCHER;
     }
     if (!SSH_Check_Session(session))
 	{
-		rzb_log(LOG_ERR, "%s: Check Session failed", __func__);
+		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Check Session failed", __func__);
         return TRANSFER_FAIL_DISPATCHER;
 	}
 
     if ((filename = Transfer_generateFilename (block)) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: failed to generate file name", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file name", __func__);
         return TRANSFER_FAIL_LOCAL;
     }
 	
     if ((path = sftp_canonicalize_path(session->sftp, ".")) == NULL)
 	{
 		free(filename);
-		rzb_log(LOG_ERR, "%s: Failed to canonicalize path on server", __func__);
+		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to canonicalize path on server", __func__);
 		return TRANSFER_FAIL_DISPATCHER;
 	}
     if (asprintf(&fullpath, "%s/%c/%c/%c/%c/%s", path,
                 filename[0], filename[1], filename[2], filename[3], filename) == -1)
     {
-        rzb_log (LOG_ERR, "%s: failed to generate file path", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file path", __func__);
         free(path);
         free(filename);
         return TRANSFER_FAIL_LOCAL;
@@ -352,13 +352,13 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 
     if (fd == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Could not open file for reading: %s", __func__, ssh_get_error(session->ssh));
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Could not open file for reading: %s", __func__, ssh_get_error(session->ssh));
         return TRANSFER_FAIL_DISPATCHER;
     }
 
     if ((tmp_string = calloc(1,MAX_PATH)) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate path", __func__);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to allocate path", __func__);
         return TRANSFER_FAIL_LOCAL;
     }
     tmp_string[0] = 0;
@@ -370,15 +370,15 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     if (tmpnam (tmp_string) == NULL)
 #endif
     {
-		rzb_log(LOG_ERR, "%s: Cannot create temporary file name: %s, error: %s", __func__, tmp_string, strerror(errno));
+		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Cannot create temporary file name: %s, error: %s", __func__, tmp_string, strerror(errno));
 		free(tmp_string);
         return TRANSFER_FAIL_LOCAL;
     }
-	//rzb_log(LOG_DEBUG, "%s: Thread ID: %d FileName: %s:", __func__, Thread_GetCurrent()->iThread, tmp_string);
+	//rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Thread ID: %d FileName: %s:", __func__, Thread_GetCurrent()->iThread, tmp_string);
     // Create tmpfile
     if ((out_file = fopen (tmp_string, "w")) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Cannot create temporary file: %s, error: %s", __func__, tmp_string, strerror(errno));
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Cannot create temporary file: %s, error: %s", __func__, tmp_string, strerror(errno));
         free(tmp_string);
         return TRANSFER_FAIL_LOCAL;
     }
@@ -388,7 +388,7 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         got = sftp_read(fd, buf, 1024);
         if (got < 0)
         {
-            rzb_log(LOG_ERR, "%s: Failed to read: %s", __func__, ssh_get_error(session->ssh));
+            rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to read: %s", __func__, ssh_get_error(session->ssh));
             sftp_close(fd);
 			fclose(out_file);
 			remove(tmp_string);
@@ -402,7 +402,7 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     }
     if ((uint64_t)read != block->pId->iLength)
     {
-        rzb_log(LOG_ERR, "%s: Failed to read full data block", __func__);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to read full data block", __func__);
         sftp_close (fd);
         fclose(out_file);
         remove(tmp_string);
@@ -492,29 +492,29 @@ SSH_Verify_Dispatcher(ssh_session session)
 
     case SSH_SERVER_KNOWN_CHANGED:
         hexa = ssh_get_hexa(hash, hlen);
-        rzb_log(LOG_ERR, "%s: Host key for server changed. For security reasons, connection will be stopped. New key: %s", __func__, hexa);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Host key for server changed. For security reasons, connection will be stopped. New key: %s", __func__, hexa);
         free(hexa);
         free(hash);
         return false;
 
     case SSH_SERVER_FOUND_OTHER:
-        rzb_log(LOG_ERR, "%s: The host key for this server was not found but an other"
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: The host key for this server was not found but an other"
             "type of key exists. An attacker might change the default server key to"
             "confuse your client into thinking the key does not exist", __func__);
         free(hash);
         return false;
 
     case SSH_SERVER_FILE_NOT_FOUND:
-        rzb_log(LOG_ERR, "%s: Could not find known host file, it will be automatically created.", __func__);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Could not find known host file, it will be automatically created.", __func__);
         /* fallback to SSH_SERVER_NOT_KNOWN behavior */
 	break;
     case SSH_SERVER_NOT_KNOWN:
         hexa = ssh_get_hexa(hash, hlen);
-        rzb_log(LOG_ERR,"%s The server is unknown. Adding the key: %s", __func__, hexa);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER,"%s The server is unknown. Adding the key: %s", __func__, hexa);
         free(hexa);
         if (ssh_session_update_known_hosts(session) < 0)
         {
-            rzb_log(LOG_ERR, "%s: %s", __func__, strerror(errno));
+            rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: %s", __func__, strerror(errno));
             free(hash);
             return false;
         }
@@ -540,7 +540,7 @@ SSH_Connect_Address(void *i, void*ud)
     char *address = i;
     ssh_options_set(status->session->ssh, SSH_OPTIONS_HOST, address);
     if (ssh_connect(status->session->ssh) != SSH_OK) {
-        rzb_log(LOG_ERR, "%s: Failed to connect session (%s)", __func__, address);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to connect session (%s)", __func__, address);
     } else {
         status->connected = true;
         return LIST_EACH_END;
@@ -561,7 +561,7 @@ SSH_Check_Session(struct SSH_Session *session)
     {
         if ((session->ssh = ssh_new()) == NULL)
         {
-            rzb_log(LOG_ERR, "%s: Failed to allocate ssh session", __func__);
+            rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to allocate ssh session", __func__);
             return false;
         }
         uuid_unparse(session->key.nuggetId, user);
@@ -572,7 +572,7 @@ SSH_Check_Session(struct SSH_Session *session)
 
         if (!status.connected)
         {
-            rzb_log(LOG_ERR, "%s: Failed to connected to dispatcher", __func__);
+            rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to connected to dispatcher", __func__);
             ssh_disconnect(session->ssh);
             ssh_free(session->ssh);
             session->ssh = NULL;
@@ -581,7 +581,7 @@ SSH_Check_Session(struct SSH_Session *session)
 
         if (!SSH_Verify_Dispatcher(session->ssh))
         {
-            rzb_log(LOG_ERR, "%s: Failed to verify dispatcher", __func__);
+            rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to verify dispatcher", __func__);
             ssh_disconnect(session->ssh);
             ssh_free(session->ssh);
             session->ssh = NULL;
@@ -589,7 +589,7 @@ SSH_Check_Session(struct SSH_Session *session)
         }
         if (ssh_userauth_password(session->ssh, NULL, Razorback_Get_Transfer_Password()) != SSH_AUTH_SUCCESS)
         {
-            rzb_log(LOG_ERR, "%s: Failed to authenticate: %s", __func__, ssh_get_error(session->ssh));
+            rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to authenticate: %s", __func__, ssh_get_error(session->ssh));
             ssh_disconnect(session->ssh);
             ssh_free(session->ssh);
             session->ssh = NULL;
@@ -597,7 +597,7 @@ SSH_Check_Session(struct SSH_Session *session)
         }
         if ((session->sftp = sftp_new(session->ssh)) == NULL)
         {
-            rzb_log(LOG_ERR, "%s: Failed to create sftp session: %s", __func__, ssh_get_error(session->ssh));
+            rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to create sftp session: %s", __func__, ssh_get_error(session->ssh));
             ssh_disconnect(session->ssh);
             ssh_free(session->ssh);
             session->ssh = NULL;
@@ -605,7 +605,7 @@ SSH_Check_Session(struct SSH_Session *session)
         }
         if (sftp_init(session->sftp) != 0)
         {
-            rzb_log(LOG_ERR, "%s: Failed to init sftp session: %s", __func__, ssh_get_error(session->ssh));
+            rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to init sftp session: %s", __func__, ssh_get_error(session->ssh));
             sftp_free(session->sftp);
             ssh_disconnect(session->ssh);
             ssh_free(session->ssh);
@@ -632,7 +632,7 @@ static char * SSH_GetKnownDispatchers(void)
 	PathAppendA(path, "Razorback");
 	CreateDirectoryA(path, NULL);
 	PathAppendA(path, "known_dispatchers");
-	//rzb_log(LOG_ERR, "PATH: %s",path);
+	//rzb_log(LOG_ERR, LOG_C_TRANSFER,"PATH: %s",path);
 	return path;
 }
 #else //_MSC_VER

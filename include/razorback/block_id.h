@@ -52,12 +52,6 @@ SO_PUBLIC extern void BlockId_Destroy (struct BlockId *p_pBlockId);
 SO_PUBLIC extern struct BlockId * BlockId_Clone (
                           const struct BlockId *p_pSource);
 
-/** Gets binary length of block id
- * @param p_pBlockId the block id
- * @return the size when placed in a binary buffer
- */
-SO_PUBLIC extern uint32_t BlockId_BinaryLength (const struct BlockId *p_pBlockId);
-
 #ifdef __cplusplus
 }
 #endif

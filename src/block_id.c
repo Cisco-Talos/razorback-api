@@ -10,15 +10,19 @@
 #include "runtime_config.h"
 
 SO_PUBLIC bool
-BlockId_IsEqual (const struct BlockId * p_pA, const struct BlockId * p_pB)
-{
+BlockId_IsEqual (const struct BlockId * p_pA, const struct BlockId * p_pB) {
 	bool uuid, hash, length;
     ASSERT (p_pA != NULL);
     ASSERT (p_pB != NULL);
+    if (p_pA == NULL || p_pB == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pA or p_pB is NULL", __func__);
+        return false;
+    }
 
     // check if pointers equal
-    if (p_pA == p_pB)
+    if (p_pA == p_pB) {
         return true;
+    }
 
     uuid = (uuid_compare (p_pA->uuidDataType, p_pB->uuidDataType) == 0);
     hash = Hash_IsEqual (p_pA->pHash, p_pB->pHash);
@@ -27,13 +31,16 @@ BlockId_IsEqual (const struct BlockId * p_pA, const struct BlockId * p_pB)
 }
 
 SO_PUBLIC void
-BlockId_ToText (const struct BlockId *p_pA, uint8_t * p_sText)
-{
+BlockId_ToText (const struct BlockId *p_pA, uint8_t * p_sText) {
     char l_sUUID[UUID_STRING_LENGTH];
     char *l_sHash;
 
 	ASSERT (p_pA != NULL);
     ASSERT (p_sText != NULL);
+    if (p_pA == NULL || p_sText == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pA or p_sText is NULL", __func__);
+        return;
+    }
 
     // create the text string
     uuid_unparse (p_pA->uuidDataType, l_sUUID);
@@ -44,26 +51,22 @@ BlockId_ToText (const struct BlockId *p_pA, uint8_t * p_sText)
 }
 
 struct BlockId *
-BlockId_Create_Shallow (void)
-{
+BlockId_Create_Shallow (void) {
     return calloc(1, sizeof(struct BlockId));
 }
 
 SO_PUBLIC struct BlockId *
-BlockId_Create (void)
-{
+BlockId_Create (void) {
     struct BlockId *id;
 
-    if ((id = BlockId_Create_Shallow()) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to allocate block id", __func__);
+    if ((id = BlockId_Create_Shallow()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate block id", __func__);
         return NULL;
     }
     // intialize the hash
-    if ((id->pHash = Hash_Create()) == NULL)
-    {
+    if ((id->pHash = Hash_Create()) == NULL) {
         BlockId_Destroy(id);
-        rzb_log (LOG_ERR, "%s: failed due to lack of memory: Hash_Create", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed due to lack of memory: Hash_Create", __func__);
         return NULL;
     }
     return id;
@@ -72,31 +75,45 @@ BlockId_Create (void)
 SO_PUBLIC uint32_t
 BlockId_StringLength (struct BlockId *p_pB)
 {
+    ASSERT (p_pB != NULL);
+    if (p_pB == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pB is NULL", __func__);
+        return 0;
+    }
     // return the value
     return UUID_STRING_LENGTH + Hash_StringLength (p_pB->pHash) + 9;  // "%s-%8.8x-%s"
 }
 
 SO_PUBLIC void
-BlockId_Destroy (struct BlockId *p_pBlockId)
-{
-    if (p_pBlockId->pHash != NULL)
-        Hash_Destroy (p_pBlockId->pHash);
+BlockId_Destroy (struct BlockId *p_pBlockId) {
+    ASSERT (p_pBlockId != NULL);
+    if (p_pBlockId == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pBlockId is NULL", __func__);
+        return;
+    }
+    if (p_pBlockId->pHash != NULL) {
+        Hash_Destroy(p_pBlockId->pHash);
+    }
     free(p_pBlockId);
 }
 
 SO_PUBLIC struct BlockId *
-BlockId_Clone (const struct BlockId *p_pSource)
-{
+BlockId_Clone (const struct BlockId *p_pSource) {
     struct BlockId *dest;
-	ASSERT (p_pSource != NULL);   
-
-    if ((dest = BlockId_Create_Shallow()) == NULL)
+	ASSERT (p_pSource != NULL);
+    if (p_pSource == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pSource is NULL", __func__);
         return NULL;
+    }
 
-    if ((dest->pHash = Hash_Clone (p_pSource->pHash)) == NULL)
-    {
+    if ((dest = BlockId_Create_Shallow()) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: failed due to lack of memory", __func__);
+        return NULL;
+    }
+
+    if ((dest->pHash = Hash_Clone (p_pSource->pHash)) == NULL) {
         BlockId_Destroy(dest);
-        rzb_log (LOG_ERR, "%s: failed due to failure of Hash_Clone", __func__);
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: failed due to failure of Hash_Clone", __func__);
         return NULL;
     }
 
@@ -105,14 +122,4 @@ BlockId_Clone (const struct BlockId *p_pSource)
 
     // done
     return dest;
-}
-
-SO_PUBLIC uint32_t
-BlockId_BinaryLength (const struct BlockId * p_pBlockId)
-{
-    ASSERT (p_pBlockId != NULL);
-
-    return Hash_BinaryLength (p_pBlockId->pHash) +
-        (uint32_t) sizeof (p_pBlockId->uuidDataType) +
-        (uint32_t) sizeof (p_pBlockId->iLength);
 }

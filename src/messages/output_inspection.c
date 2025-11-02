@@ -41,13 +41,19 @@ MessageOutputInspection_Initialize (
     struct timespec l_tsTime;
     ASSERT (blockId != NULL);
     ASSERT (nugget != NULL);
-    if (blockId == NULL)
+    if (blockId == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: BlockId is NULL", __func__);
         return NULL;
-    if (nugget == NULL)
+    }
+    if (nugget == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Nugget is NULL", __func__);
         return NULL;
+    }
 
-    if ((msg = Message_Create(MESSAGE_TYPE_OUTPUT_INSPECTION, MESSAGE_VERSION_1, sizeof(struct MessageOutputInspection))) == NULL)
+    if ((msg = Message_Create(MESSAGE_TYPE_OUTPUT_INSPECTION, MESSAGE_VERSION_1, sizeof(struct MessageOutputInspection))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);
         return NULL;
+    }
     message = msg->message;
     message->blockId = BlockId_Clone(blockId);
     message->nugget = nugget;
@@ -55,9 +61,8 @@ MessageOutputInspection_Initialize (
     message->final = final;
 
     memset(&l_tsTime, 0, sizeof(struct timespec));
-    if (clock_gettime(CLOCK_REALTIME, &l_tsTime) == -1)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to get time stamp", __func__);
+    if (clock_gettime(CLOCK_REALTIME, &l_tsTime) == -1) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get time stamp", __func__);
         return NULL;
     }
     message->seconds = l_tsTime.tv_sec;
@@ -76,17 +81,21 @@ OutputInspection_Destroy (struct Message *message)
     struct MessageOutputInspection *msg;
     
     ASSERT (message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message is NULL", __func__);
         return;
+    }
     msg = message->message;
+    if (msg != NULL) {
+        // destroy any malloc'd components
+        if (msg->blockId != NULL) {
+            BlockId_Destroy(msg->blockId);
+        }
 
-    // destroy any malloc'd components
-    if (msg->blockId != NULL)
-        BlockId_Destroy(msg->blockId);
-
-    if (msg->nugget != NULL)
-        Nugget_Destroy(msg->nugget);
-
+        if (msg->nugget != NULL) {
+            Nugget_Destroy(msg->nugget);
+        }
+    }
     Message_Destroy(message);
 }
 
@@ -97,52 +106,59 @@ OutputInspection_Deserialize(struct Message *message)
     json_object *msg;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message is NULL", __func__);
         return false;
+    }
 
-    if ((message->message = calloc(1,sizeof(struct MessageOutputInspection))) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageOutputInspection))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate message", __func__);
         return false;
+    }
 
-    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to parse JSON", __func__);
         return false;
+    }
     
     event = message->message;
 
-    if (!JsonBuffer_Get_Nugget(msg, "Nugget", &event->nugget))
-    {
+    if (!JsonBuffer_Get_Nugget(msg, "Nugget", &event->nugget)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Nugget", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Get_BlockId(msg, "BlockId", &event->blockId))
-    {
+    if (!JsonBuffer_Get_BlockId(msg, "BlockId", &event->blockId)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get BlockId", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Get_uint8_t(msg, "Status", &event->status))
-    {
+    if (!JsonBuffer_Get_uint8_t(msg, "Status", &event->status)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Status", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Get_uint64_t(msg, "Seconds", &event->seconds))
-    {
+    if (!JsonBuffer_Get_uint64_t(msg, "Seconds", &event->seconds)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Seconds", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Get_uint64_t(msg, "NanoSecs", &event->nanosecs))
-    {
+    if (!JsonBuffer_Get_uint64_t(msg, "NanoSecs", &event->nanosecs)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get NanoSecs", __func__);
         json_object_put(msg);
         return false;
     }
     uint8_t final = 0;
-    if (!JsonBuffer_Get_uint8_t(msg, "Final", &final))
-    {
+    if (!JsonBuffer_Get_uint8_t(msg, "Final", &final)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Final", __func__);
         json_object_put(msg);
         return false;
     }
-    if (final == 0)
+    if (final == 0) {
         event->final = false;
-    else 
+    } else {
         event->final = true;
+    }
 
     json_object_put(msg);
     return true;
@@ -153,52 +169,56 @@ OutputInspection_Serialize(struct Message *message)
 {
     struct MessageOutputInspection *event;
     json_object *msg;
-    const char * wire;
+    const char *wire;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message is NULL", __func__);
         return false;
+    }
 
     event = message->message;
 
-    if ((msg = json_object_new_object()) == NULL)
+    if ((msg = json_object_new_object()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create JSON object", __func__);
         return false;
+    }
 
-    if (!JsonBuffer_Put_Nugget(msg, "Nugget", event->nugget))
-    {
+    if (!JsonBuffer_Put_Nugget(msg, "Nugget", event->nugget)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to put Nugget", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Put_BlockId(msg, "BlockId", event->blockId))
-    {
+    if (!JsonBuffer_Put_BlockId(msg, "BlockId", event->blockId)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to put BlockId", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Put_uint8_t(msg, "Status", event->status))
-    {
+    if (!JsonBuffer_Put_uint8_t(msg, "Status", event->status)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to put Status", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Put_uint64_t(msg, "Seconds", event->seconds))
-    {
+    if (!JsonBuffer_Put_uint64_t(msg, "Seconds", event->seconds)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to put Seconds", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Put_uint64_t(msg, "NanoSecs", event->nanosecs))
-    {
+    if (!JsonBuffer_Put_uint64_t(msg, "NanoSecs", event->nanosecs)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to put NanoSecs", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Put_uint8_t(msg, "Final", (event->final ? 1 : 0)))
-    {
+    if (!JsonBuffer_Put_uint8_t(msg, "Final", (event->final ? 1 : 0))) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to put Final", __func__);
         json_object_put(msg);
         return false;
     }
 
     wire = json_object_to_json_string(msg);
-    message->length=strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
-    {
+    message->length = strlen(wire);
+    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate serialized string", __func__);
         json_object_put(msg);
         return false;
     }

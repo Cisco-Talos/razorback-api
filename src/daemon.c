@@ -16,8 +16,7 @@ static bool rzb_daemonize_posix(void (*signal_handler)(int), const char *pidFile
 #endif
 
 SO_PUBLIC bool
-rzb_daemonize (void (*signal_handler) (int), const char *pidFile)
-{
+rzb_daemonize (void (*signal_handler) (int), const char *pidFile) {
 #ifdef _MSC_VER
 	return rzb_daemonize_win32();
 #else //_MSC_VER
@@ -37,8 +36,7 @@ static bool rzb_daemonize_win32(void)
 static const char *sg_pidFile = NULL;
 
 static void 
-unlinkPidFile(void)
-{
+unlinkPidFile(void) {
     if (sg_pidFile != NULL)
         unlink(sg_pidFile);
 }
@@ -47,66 +45,56 @@ rzb_daemonize_posix (void (*signal_handler) (int), const char *pidFile)
 {
     pid_t pid, sid;
 
-    if (rzb_get_log_dest () == RZB_LOG_DEST_ERR)
-    {
-        rzb_log (LOG_EMERG, "%s: Can't daemonize when using stderr for logging", __func__);
+    if (rzb_get_log_dest() == RZB_LOG_DEST_ERR) {
+        rzb_log(LOG_EMERG, LOG_C_CORE, "%s: Can't daemonize when using stderr for logging", __func__);
         return false;
     }
 
-    if (signal_handler != NULL)
-    {
-        rzb_log (LOG_DEBUG, "%s: Installing new signal handler", __func__);
-        signal (SIGHUP, signal_handler);
-        signal (SIGTERM, signal_handler);
-        signal (SIGINT, signal_handler);
-        signal (SIGQUIT, signal_handler);
+    if (signal_handler != NULL) {
+        rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: Installing new signal handler", __func__);
+        signal(SIGHUP, signal_handler);
+        signal(SIGTERM, signal_handler);
+        signal(SIGINT, signal_handler);
+        signal(SIGQUIT, signal_handler);
     }
 
-    pid = fork ();
-    if (pid < 0)
-    {
-        rzb_log (LOG_EMERG, "%s: Failed to daemonize", __func__);
+    pid = fork();
+    if (pid < 0) {
+        rzb_log(LOG_EMERG, LOG_C_CORE, "%s: Failed to daemonize", __func__);
         return false;
     }
     /* If we got a good PID, then
        we can exit the parent process. */
-    if (pid > 0)
-    {
-        exit (EXIT_SUCCESS);
+    if (pid > 0) {
+        exit(EXIT_SUCCESS);
     }
 
     /* Create a new SID for the child process */
-    sid = setsid ();
-    if (sid < 0)
-    {
-        rzb_log (LOG_EMERG, "%s: Failed to become session leader", __func__);
+    sid = setsid();
+    if (sid < 0) {
+        rzb_log(LOG_EMERG, LOG_C_CORE, "%s: Failed to become session leader", __func__);
         return false;
     }
 
     /* Close out the standard file descriptors */
-    close (STDIN_FILENO);
-    close (STDOUT_FILENO);
-    close (STDERR_FILENO);
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
 
-    if (pidFile != NULL)
-    {
-    /* save the PID */
-        pid_t mainpid = getpid ();
+    if (pidFile != NULL) {
+        /* save the PID */
+        pid_t mainpid = getpid();
         FILE *fd;
-        mode_t old_umask = umask (0002);
-        if ((fd = fopen (pidFile, "w")) == NULL)
-        {
-            rzb_log (LOG_ERR, "Can't save PID in file %s", pidFile);
-        }
-        else
-        {
-            if (fprintf (fd, "%u", (unsigned int) mainpid) < 0)
-            {
-                rzb_log (LOG_ERR, "Can't save PID in file %s", pidFile);
+        mode_t old_umask = umask(0002);
+        if ((fd = fopen(pidFile, "w")) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "Can't save PID in file %s", pidFile);
+        } else {
+            if (fprintf(fd, "%u", (unsigned int) mainpid) < 0) {
+                rzb_log(LOG_ERR, LOG_C_CORE, "Can't save PID in file %s", pidFile);
             }
-            fclose (fd);
+            fclose(fd);
         }
-        umask (old_umask);
+        umask(old_umask);
         sg_pidFile = pidFile;
         atexit(unlinkPidFile);
     }

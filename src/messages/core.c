@@ -22,16 +22,17 @@ static int MessageHandler_Cmp(void *a, void *b);
 static void MessageHandler_Delete(void *a);
 
 struct Message *
-Message_Create(uint32_t type, uint32_t version, size_t msgSize)
-{
+Message_Create(uint32_t type, uint32_t version, size_t msgSize) {
     struct Message *message;
-    if ((message = calloc(1,sizeof(struct Message))) == NULL)
+    if ((message = calloc(1,sizeof(struct Message))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc new message", __func__);
         return NULL;
+    }
     message->type = type;
     message->version = version;
-    if (msgSize > 0)
-    {
-        if ((message->message = calloc(1,msgSize)) == NULL) {
+    if (msgSize > 0) {
+        if ((message->message = calloc(1, msgSize)) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc new message data", __func__);
             free(message);
             return NULL;
         }
@@ -44,36 +45,54 @@ SO_PUBLIC void
 Message_Destroy(struct Message *message)
 {
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL message", __func__);
         return;
+    }
 
-    if (message->message != NULL)
+    if (message->message != NULL) {
         free(message->message);
+    }
 
-    if (message->serialized != NULL)
+    if (message->serialized != NULL) {
         free(message->serialized);
+    }
 
-    List_Destroy(message->headers);
+    if (message->headers != NULL) {
+        List_Destroy(message->headers);
+    }
     free(message);
 }
 
 struct MessageHeader *
 Message_HeaderList_Add(List_t * headers, const char *p_sName, const char *p_sValue ){
     struct MessageHeader *l_pHeader;
-    if ((l_pHeader = calloc(1, sizeof (struct MessageHeader))) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to alloc new header", __func__);
+    ASSERT(headers != NULL);
+    ASSERT(p_sName != NULL);
+    ASSERT(p_sValue != NULL);
+    if (headers == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL header list", __func__);
         return false;
     }
-    if ((l_pHeader->sName = calloc(1, strlen(p_sName)+1)) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to alloc new header name", __func__);
+    if (p_sName == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL header name", __func__);
+        return false;
+    }
+    if (p_sValue == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL header value", __func__);
+        return false;
+    }
+    if ((l_pHeader = calloc(1, sizeof(struct MessageHeader))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc new header", __func__);
+        return false;
+    }
+    if ((l_pHeader->sName = calloc(1, strlen(p_sName) + 1)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc new header name", __func__);
         free(l_pHeader);
         return false;
     }
-    if ((l_pHeader->sValue = calloc(1, strlen(p_sValue)+1)) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to alloc new header value", __func__);
+    if ((l_pHeader->sValue = calloc(1, strlen(p_sValue) + 1)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc new header value", __func__);
         free(l_pHeader->sName);
         free(l_pHeader);
         return false;
@@ -88,17 +107,22 @@ Message_HeaderList_Add(List_t * headers, const char *p_sName, const char *p_sVal
 void * MessageHeader_Clone(void *o) {
     struct MessageHeader *orig = (struct MessageHeader *)o;
     struct MessageHeader *clone;
+    ASSERT(orig != NULL);
+    if (orig == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL original header", __func__);
+        return NULL;
+    }
     if ((clone = calloc(1, sizeof(struct MessageHeader))) == NULL) {
-        rzb_log(LOG_ERR, "%s: Failed to alloc new header clone", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc new header clone", __func__);
         return NULL;
     }
     if ((clone->sName = strdup(orig->sName)) == NULL) {
-        rzb_log(LOG_ERR, "%s: Failed to alloc new header name clone", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc new header name clone", __func__);
         free(clone);
         return NULL;
     }
     if ((clone->sValue = strdup(orig->sValue)) == NULL) {
-        rzb_log(LOG_ERR, "%s: Failed to alloc new header value clone", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc new header value clone", __func__);
         free(clone->sName);
         free(clone);
         return NULL;
@@ -107,11 +131,25 @@ void * MessageHeader_Clone(void *o) {
 }
 
 SO_PUBLIC bool
-Message_Add_Header(struct Message *p_pMessage, const char *p_sName, const char *p_sValue)
-{
+Message_Add_Header(struct Message *p_pMessage, const char *p_sName, const char *p_sValue) {
     struct MessageHeader *l_pHeader;
+    ASSERT(p_pMessage != NULL);
+    ASSERT(p_sName != NULL);
+    ASSERT(p_sValue != NULL);
+    if (p_pMessage == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL message", __func__);
+        return false;
+    }
+    if (p_sName == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL header name", __func__);
+        return false;
+    }
+    if (p_sValue == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL header value", __func__);
+        return false;
+    }
     if ((l_pHeader = Message_HeaderList_Add(p_pMessage->headers, p_sName, p_sValue)) == NULL) {
-        rzb_log(LOG_ERR, "%s: (%p) Failed to add message header %s - %s", __func__, p_pMessage, p_sName, p_sValue);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: (%p) Failed to add message header %s - %s", __func__, p_pMessage, p_sName, p_sValue);
         return false;
     }
     l_pHeader->pMessage = p_pMessage;
@@ -120,8 +158,7 @@ Message_Add_Header(struct Message *p_pMessage, const char *p_sName, const char *
 
 
 SO_PUBLIC List_t *
-Message_Header_List_Create(void)
-{
+Message_Header_List_Create(void) {
     return List_Create(LIST_MODE_GENERIC, 
             MessageHeader_Cmp,
             MessageHeader_KeyCmp,
@@ -130,16 +167,14 @@ Message_Header_List_Create(void)
 }
 
 static int 
-MessageHeader_KeyCmp(void *a, void *id)
-{
+MessageHeader_KeyCmp(void *a, void *id) {
     struct MessageHeader *item = (struct MessageHeader *)a;
     char *key = id;
     return strcmp(item->sName, key);
 }
 
 static int
-MessageHeader_Cmp(void *a, void *b)
-{
+MessageHeader_Cmp(void *a, void *b) {
     struct MessageHeader *iA = (struct MessageHeader *)a;
     struct MessageHeader *iB = (struct MessageHeader *)b;
     if (a == b)
@@ -154,9 +189,13 @@ MessageHeader_Cmp(void *a, void *b)
 }
 
 static void 
-MessageHeader_Delete(void *a)
-{
+MessageHeader_Delete(void *a) {
     struct MessageHeader *header = a;
+    ASSERT(header != NULL);
+    if (header == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL header", __func__);
+        return;
+    }
     free(header->sName);
     free(header->sValue);
     free(header);
@@ -164,16 +203,17 @@ MessageHeader_Delete(void *a)
 
 
 bool
-Message_Init()
-{
+Message_Init() {
     handlerList = List_Create(LIST_MODE_GENERIC, 
             MessageHandler_Cmp,
             MessageHandler_KeyCmp,
             MessageHandler_Delete,
             NULL, NULL, NULL);
 
-    if (handlerList == NULL)
+    if (handlerList == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create handler list", __func__);
         return false;
+    }
 
     MessageBlockSubmission_Init();
     MessageCacheReq_Init();
@@ -206,13 +246,19 @@ Message_Init()
 }
 
 bool
-Message_Setup(struct Message *message)
-{
+Message_Setup(struct Message *message) {
     struct MessageHandler *handler = NULL;
+    ASSERT(message != NULL);
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL message", __func__);
+        return false;
+    }
 	
 	handler = List_Find(handlerList, &message->type);
-    if (handler == NULL) 
+    if (handler == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: No handler for message type %u", __func__, message->type);
         return false;
+    }
 	
     message->serialize = handler->serialize;
     message->deserialize = handler->deserialize;
@@ -221,24 +267,26 @@ Message_Setup(struct Message *message)
     return true;
 }
 
-bool Message_Register_Handler(struct MessageHandler *handler)
-{
+bool Message_Register_Handler(struct MessageHandler *handler) {
+    ASSERT(handler != NULL);
+    if (handler == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL handler", __func__);
+        return false;
+    }
     return List_Push(handlerList, handler);
 }
 
 
 
 static int 
-MessageHandler_KeyCmp(void *a, void *id)
-{
+MessageHandler_KeyCmp(void *a, void *id) {
     struct MessageHandler *item = (struct MessageHandler *)a;
     uint32_t *key = id;
     return (item->type - *key);
 }
 
 static int
-MessageHandler_Cmp(void *a, void *b)
-{
+MessageHandler_Cmp(void *a, void *b) {
     struct MessageHandler *iA = (struct MessageHandler *)a;
     struct MessageHandler *iB = (struct MessageHandler *)b;
     if (a == b)
@@ -252,9 +300,13 @@ MessageHandler_Delete(void *a)
 }
 
 static bool 
-Message_Add_Directed_Headers(struct Message *message, const uuid_t source, const uuid_t dest)
-{
+Message_Add_Directed_Headers(struct Message *message, const uuid_t source, const uuid_t dest) {
     char uuid[UUID_STRING_LENGTH];
+    ASSERT(message != NULL);
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL message", __func__);
+        return false;
+    }
     uuid_unparse(source, uuid);
     Message_Add_Header(message, MSG_CNC_HEADER_SOURCE, uuid);
     uuid_unparse(dest, uuid);
@@ -268,38 +320,52 @@ Message_Create_Directed(uint32_t type, uint32_t version,
         size_t msgSize, const uuid_t source, const uuid_t dest)
 {
     struct Message *msg;
-    if ((msg = Message_Create(type, version, msgSize)) == NULL)
+    if ((msg = Message_Create(type, version, msgSize)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);
         return NULL;
+    }
 
-    Message_Add_Directed_Headers(msg, source, dest);
+    if (!Message_Add_Directed_Headers(msg, source, dest)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to add directed headers", __func__);
+        Message_Destroy(msg);
+        return NULL;
+    }
     return msg;
 }
 
 SO_PUBLIC struct Message * 
 Message_Create_Broadcast(uint32_t type, uint32_t version, 
-        size_t msgSize, const uuid_t source)
-{
+        size_t msgSize, const uuid_t source) {
     struct Message *msg;
     uuid_t dest;
     uuid_clear(dest);
 
-    if ((msg = Message_Create(type, version, msgSize)) == NULL)
+    if ((msg = Message_Create(type, version, msgSize)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);
         return NULL;
+    }
 
-    Message_Add_Directed_Headers(msg, source, dest);
+    if (!Message_Add_Directed_Headers(msg, source, dest)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to add directed headers", __func__);
+        Message_Destroy(msg);
+        return NULL;
+    }
     return msg;
 }
 
 SO_PUBLIC bool
-Message_Serialize_Empty(struct Message *message)
-{
+Message_Serialize_Empty(struct Message *message) {
     ASSERT(message != NULL);
-    if ( message == NULL )
+    if ( message == NULL ) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL message", __func__);
         return false;
+    }
 
 
-    if ((message->serialized = calloc(2, sizeof(uint8_t))) == NULL)
+    if ((message->serialized = calloc(2, sizeof(uint8_t))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc serialized data", __func__);
         return false;
+    }
 
     message->serialized[0]=' ';
     message->serialized[1]='\0';
@@ -309,36 +375,44 @@ Message_Serialize_Empty(struct Message *message)
 }
 
 SO_PUBLIC bool
-Message_Deserialize_Empty(struct Message *message)
-{
+Message_Deserialize_Empty(struct Message *message) {
     ASSERT(message != NULL);
-    if ( message == NULL )
+    if ( message == NULL ) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL message", __func__);
         return false;
-
-
+    }
     return true;
 }
 
 SO_PUBLIC bool 
-Message_Get_Nuggets(struct Message *message, uuid_t source, uuid_t dest)
-{
+Message_Get_Nuggets(struct Message *message, uuid_t source, uuid_t dest) {
     struct MessageHeader *header;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL message", __func__);
         return false;
+    }
 
-    if ((header = List_Find(message->headers, (void *)MSG_CNC_HEADER_DEST)) == NULL)
+    if ((header = List_Find(message->headers, (void *)MSG_CNC_HEADER_DEST)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: No destination header", __func__);
         return false;
+    }
 
-    if (uuid_parse(header->sValue, dest) != 0)
+    if (uuid_parse(header->sValue, dest) != 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to parse destination UUID", __func__);
         return false;
+    }
 
-    if ((header = List_Find(message->headers, (void *)MSG_CNC_HEADER_SOURCE)) == NULL)
+    if ((header = List_Find(message->headers, (void *)MSG_CNC_HEADER_SOURCE)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: No source header", __func__);
         return false;
+    }
 
-    if (uuid_parse(header->sValue, source) != 0)
+    if (uuid_parse(header->sValue, source) != 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to parse source UUID", __func__);
         return false;
+    }
 
     return true;
 }

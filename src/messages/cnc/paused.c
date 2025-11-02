@@ -13,7 +13,14 @@ MessagePaused_Initialize (
                           const uuid_t p_uuidDestNugget)
 {
     struct Message *msg;
-    if ((msg = Message_Create_Directed(MESSAGE_TYPE_PAUSED, MESSAGE_VERSION_1, 0, p_uuidSourceNugget, p_uuidDestNugget)) == NULL)
+    msg = Message_Create_Directed(
+        MESSAGE_TYPE_PAUSED,
+        MESSAGE_VERSION_1,
+        0,
+        p_uuidSourceNugget,
+        p_uuidDestNugget
+    );
+    if (msg == NULL)
         return NULL;
 
     msg->destroy = Message_Destroy;

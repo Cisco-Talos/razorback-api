@@ -37,7 +37,7 @@ SO_PUBLIC extern struct Hash * Hash_Create_From_String(uint32_t p_iType, const c
  * @return the length in bytes.
  */
 SO_PUBLIC extern uint32_t Hash_DigestLength (struct Hash *p_pHash);
-SO_PUBLIC extern uint32_t Hash_BinaryLength (struct Hash *p_pHash);
+//SO_PUBLIC extern uint32_t Hash_BinaryLength (struct Hash *p_pHash);
 
 /** Return the size of the string required to hold the hex encoded digets.
  * @param p_pHash the hash.

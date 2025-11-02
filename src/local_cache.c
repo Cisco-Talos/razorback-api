@@ -40,14 +40,14 @@ Lookup_Result checkLocalEntry(uint8_t *key, uint32_t size, uint32_t *sfflags, ui
 
     //Set Cache pointer based on CACHETYPE value    
     if (type >= ALL) {
-        rzb_log(LOG_ERR, "%s: Invalid CacheType passed as argument", __func__); 
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
         return R_ERROR;
 	}
 
 	cache = &Cache[type];
 
     if (sfflags == NULL || entflags == NULL || key == NULL) {
-        rzb_log(LOG_ERR, "%s: NULL pointer passed as argument", __func__); 
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL pointer passed as argument", __func__);
 		return R_ERROR;
 	}
  
@@ -108,7 +108,7 @@ Lookup_Result checkLocalEntry(uint8_t *key, uint32_t size, uint32_t *sfflags, ui
                 break;
 
             case LT_NONE:
-                rzb_log(LOG_ERR, "%s: Unexpected listtype value, possible memory corruption", __func__);
+                rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unexpected listtype value, possible memory corruption", __func__);
 				Mutex_Unlock(cache->cachemutex);
 				return R_ERROR;
         }
@@ -119,9 +119,9 @@ Lookup_Result checkLocalEntry(uint8_t *key, uint32_t size, uint32_t *sfflags, ui
 		*sfflags = cachehit->sfflags;
 
 		if (type == BADHASH)
-			rzb_log(LOG_DEBUG, "%s: --Local Cache Hit-- BADHASH SF: 0x%08x, ENT: 0x%08x", __func__, *sfflags, *entflags);
+			rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: --Local Cache Hit-- BADHASH SF: 0x%08x, ENT: 0x%08x", __func__, *sfflags, *entflags);
 		else if (type == GOODHASH)
-			rzb_log(LOG_DEBUG, "%s: --Local Cache Hit-- GOODHASH SF: 0x%08x, ENT: 0x%08x", __func__, *sfflags, *entflags);
+			rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: --Local Cache Hit-- GOODHASH SF: 0x%08x, ENT: 0x%08x", __func__, *sfflags, *entflags);
 
         return R_FOUND;
     }
@@ -137,7 +137,7 @@ Lookup_Result addLocalEntry(uint8_t *key, uint32_t size, uint32_t sfflags, uint3
     ENTRY *newentry;
 
     if (type >= ALL) {
-		rzb_log(LOG_ERR, "%s: Invalid CacheType passed as argument", __func__);
+		rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
         return R_ERROR;
     }
 
@@ -189,7 +189,7 @@ Lookup_Result addLocalEntry(uint8_t *key, uint32_t size, uint32_t sfflags, uint3
     if (newentry->key != NULL)
 		free(newentry->key);
 	if ((newentry->key = (uint8_t *)malloc(size)) == 0) {
-	    rzb_log(LOG_ERR, "%s: malloctile dysfunction", __func__);
+	    rzb_log(LOG_ERR, LOG_C_CORE, "%s: malloctile dysfunction", __func__);
 		Mutex_Unlock(cache->cachemutex);
 		return R_ERROR;
 	}
@@ -206,14 +206,14 @@ Lookup_Result updateLocalEntry(uint8_t *key, uint32_t size, uint32_t sfflags, ui
     ENTRY temp;
 
 	if (type >= ALL) {
-        rzb_log(LOG_ERR, "%s: Invalid CacheType passed as argument", __func__); 
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
         return R_ERROR;
     }
 
     cache = &Cache[type];
 
     if (key == NULL) {
-        rzb_log(LOG_ERR, "%s: NULL key passed as argument", __func__); 
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL key passed as argument", __func__);
         return R_ERROR;
     }
 
@@ -247,14 +247,14 @@ Lookup_Result removeLocalEntry(uint8_t *key, uint32_t size, CacheType type) {
 	ENTRY temp;
 
 	if (type >= ALL) {
-		rzb_log(LOG_ERR, "%s: Invalid CacheType passed as argument", __func__);
+		rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
 		return R_ERROR;
 	}
 
 	cache = &Cache[type];
 
 	if (key == NULL) {
-		rzb_log(LOG_ERR, "%s: NULL key passed as argument", __func__);
+		rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL key passed as argument", __func__);
 		return R_ERROR;
 	}
 
@@ -291,7 +291,7 @@ clearLocalEntry(CacheType type, ClearMethod method)
 	CACHE *cache;
 
     if (type > ALL) {
-		rzb_log(LOG_ERR, "%s: Unrecognized cache type.", __func__);
+		rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unrecognized cache type.", __func__);
 		return R_ERROR;
 	}
 
@@ -323,7 +323,7 @@ clearLocalEntry(CacheType type, ClearMethod method)
                     break;
 
                 default:
-                    rzb_log(LOG_EMERG, "%s: Unsupported method", __func__);
+                    rzb_log(LOG_EMERG, LOG_C_CORE, "%s: Unsupported method", __func__);
                     Mutex_Unlock(cache->cachemutex);
                     return R_ERROR;
             }
@@ -355,7 +355,7 @@ clearLocalEntry(CacheType type, ClearMethod method)
 				break;
 
 			default:
-				rzb_log(LOG_EMERG, "%s: Unsupported method", __func__);
+				rzb_log(LOG_EMERG, LOG_C_CORE, "%s: Unsupported method", __func__);
                 Mutex_Unlock(cache->cachemutex);
 				return R_ERROR;
 		}
@@ -390,7 +390,7 @@ static ENTRY *getNewEntry(CACHE *cache)
         return newentry;
     }
     
-	rzb_log(LOG_ERR, "%s: returning NULL, the math is wrong somewhere", __func__);
+	rzb_log(LOG_ERR, LOG_C_CORE, "%s: returning NULL, the math is wrong somewhere", __func__);
     return NULL;
 }
 
@@ -463,7 +463,7 @@ static ENTRY *PurgeLRU(LISTTYPE listtype, CACHE *cache)
     {
         //either you're trying to purge from an empty list
         //or LRU isn't registered or listtype isn't set properly
-        rzb_log(LOG_EMERG, "%s: Could not find LRU, This shouldn't happen", __func__);
+        rzb_log(LOG_EMERG, LOG_C_CORE, "%s: Could not find LRU, This shouldn't happen", __func__);
         return NULL;
     }
 
@@ -590,7 +590,7 @@ initcache(void)
 			Cache[i].MRU[j] = NULL;
 		}
     }
-    rzb_log(LOG_DEBUG, "%s: Cache initialized", __func__);
+    rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: Cache initialized", __func__);
 }
 
 

@@ -22,23 +22,31 @@ static struct MessageHandler handler = {
 
 // core.h
 void 
-Message_CnC_ConfigAck_Init(void)
-{
+Message_CnC_ConfigAck_Init(void) {
     Message_Register_Handler(&handler);
 }
 
 SO_PUBLIC struct Message *
 MessageConfigurationAck_Initialize (
-                                    const uuid_t p_uuidSourceNugget,
-                                    const uuid_t p_uuidDestNugget,
-                                    const uuid_t p_uuidNuggetType,
-                                    const uuid_t p_uuidApplicationType)
-{
+        const uuid_t p_uuidSourceNugget,
+        const uuid_t p_uuidDestNugget,
+        const uuid_t p_uuidNuggetType,
+        const uuid_t p_uuidApplicationType
+        ) {
     struct Message *msg;
     struct MessageConfigurationAck * message;
 
-    if ((msg = Message_Create_Directed(MESSAGE_TYPE_CONFIG_ACK, MESSAGE_VERSION_1, sizeof(struct MessageConfigurationAck), p_uuidSourceNugget, p_uuidDestNugget)) == NULL)
+    msg = Message_Create_Directed(
+        MESSAGE_TYPE_CONFIG_ACK,
+        MESSAGE_VERSION_1,
+        sizeof(struct MessageConfigurationAck),
+        p_uuidSourceNugget,
+        p_uuidDestNugget
+    );
+    if (msg == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to create message", __func__);
         return NULL;
+    }
     message = msg->message;
 
     uuid_copy (message->uuidNuggetType, p_uuidNuggetType);
@@ -51,35 +59,39 @@ MessageConfigurationAck_Initialize (
 
 
 static bool
-ConfigAck_Deserialize(struct Message *message)
-{
+ConfigAck_Deserialize(struct Message *message) {
     struct MessageConfigurationAck *configAck;
     json_object *msg;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);
         return false;
+    }
 
-    if ((message->message = calloc(1,sizeof(struct MessageConfigurationAck))) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageConfigurationAck))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to allocate message", __func__);
         return false;
+    }
 
-    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to failure of json_tokener_parse", __func__);
         return false;
+    }
 
     configAck = message->message;
 
-    if (!JsonBuffer_Get_UUID (msg, "Nugget_Type", configAck->uuidNuggetType))
-    {
+    if (!JsonBuffer_Get_UUID(msg, "Nugget_Type", configAck->uuidNuggetType)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
         return false;
     }
-    if (!JsonBuffer_Get_UUID(msg, "App_Type", configAck->uuidApplicationType))
-    {
+    if (!JsonBuffer_Get_UUID(msg, "App_Type", configAck->uuidApplicationType)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
         return false;
     }
     json_object_put(msg);
@@ -87,47 +99,48 @@ ConfigAck_Deserialize(struct Message *message)
 }
 
 static bool
-ConfigAck_Serialize(struct Message *message)
-{
+ConfigAck_Serialize(struct Message *message) {
     struct MessageConfigurationAck *configAck;
     json_object *msg;
     const char * wire;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);
         return false;
+    }
 
     configAck = message->message;
 
-    if ((msg = json_object_new_object()) == NULL)
+    if ((msg = json_object_new_object()) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to failure of json_object_new_object", __func__);
         return false;
+    }
 
 
     if (!JsonBuffer_Put_UUID
-        (msg, "Nugget_Type", configAck->uuidNuggetType))
-    {
+            (msg, "Nugget_Type", configAck->uuidNuggetType)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Put_UUID ( Nug Type )", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Put_UUID ( Nug Type )", __func__);
         return false;
     }
 
     if (!JsonBuffer_Put_UUID
-        (msg, "App_Type", configAck->uuidApplicationType))
-    {
+            (msg, "App_Type", configAck->uuidApplicationType)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Put_UUID ( App Type) ", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Put_UUID ( App Type) ", __func__);
         return false;
     }
     wire = json_object_to_json_string(msg);
-    message->length=strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
-    {
+    message->length = strlen(wire);
+    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
         json_object_put(msg);
         return false;
     }
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *)message->serialized, wire);
     json_object_put(msg);
 
     return true;

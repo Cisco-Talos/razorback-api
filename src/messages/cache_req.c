@@ -23,34 +23,37 @@ static struct MessageHandler handler = {
 
 // core.h
 void
-MessageCacheReq_Init(void)
-{
+MessageCacheReq_Init(void) {
     Message_Register_Handler(&handler);
 }
 
 SO_PUBLIC struct Message *
 MessageCacheReq_Initialize (const uuid_t p_uuidRequestor,
-                            const struct BlockId *p_pBlockId)
-{
+                            const struct BlockId *p_pBlockId) {
     struct Message *msg;
     struct MessageCacheReq *message;
 
     ASSERT (p_pBlockId != NULL);
 
-    if (p_pBlockId == NULL)
+    if (p_pBlockId == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to NULL p_pBlockId", __func__);
         return NULL;
+    }
 
-    if ((msg = Message_Create(MESSAGE_TYPE_REQ, MESSAGE_VERSION_1, sizeof(struct MessageCacheReq))) == NULL)
+    if ((msg = Message_Create(MESSAGE_TYPE_REQ, MESSAGE_VERSION_1, sizeof(struct MessageCacheReq))) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to failure of Message_Create", __func__);
         return NULL;
+    }
 
     message = msg->message;
 
     // fill in rest of message
     uuid_copy (message->uuidRequestor, p_uuidRequestor);
-    if ((message->pId = BlockId_Clone (p_pBlockId)) == NULL)
-    {
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of BlockId_Clone", __func__);
+    if ((message->pId = BlockId_Clone(p_pBlockId)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of BlockId_Clone", __func__);
         CacheReq_Destroy(msg);
         return NULL;
     }
@@ -63,51 +66,60 @@ MessageCacheReq_Initialize (const uuid_t p_uuidRequestor,
 }
 
 static void
-CacheReq_Destroy (struct Message *message)
-{
+CacheReq_Destroy (struct Message *message) {
     struct MessageCacheReq *msg;
     ASSERT (message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to NULL message", __func__);
         return;
+    }
     msg = message->message;
 
     // destroy any malloc'd components
-    if (msg != NULL)
-        BlockId_Destroy (msg->pId);
+    if (msg != NULL) {
+        BlockId_Destroy(msg->pId);
+    }
     
     Message_Destroy(message);
 }
 
 static bool
-CacheReq_Deserialize(struct Message *message)
-{
+CacheReq_Deserialize(struct Message *message) {
     struct MessageCacheReq *submit;
     json_object *msg;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to NULL message", __func__);
         return false;
+    }
 
-    if ((message->message = calloc(1,sizeof(struct MessageCacheReq))) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageCacheReq))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of calloc", __func__);
         return false;
+    }
 
-    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to failure of json_tokener_parse", __func__);
         return false;
+    }
  
     submit = message->message;
 
-    if (!JsonBuffer_Get_UUID (msg, "Requestor", submit->uuidRequestor))
-    {
+    if (!JsonBuffer_Get_UUID(msg, "Requestor", submit->uuidRequestor)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
         return false;
     }
-    if (!JsonBuffer_Get_BlockId (msg, "Block_ID", &submit->pId))
-    {
+    if (!JsonBuffer_Get_BlockId(msg, "Block_ID", &submit->pId)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_GetBlockId", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_GetBlockId", __func__);
         return false;
     }
     json_object_put(msg);
@@ -124,33 +136,36 @@ CacheReq_Serialize(struct Message *message)
     const char * wire;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to NULL message", __func__);
         return false;
+    }
 
     submit = message->message;
 
-    if ((msg = json_object_new_object()) == NULL)
-        return false;
-
-    if (!JsonBuffer_Put_UUID (msg, "Requestor", submit->uuidRequestor))
-    {
-        json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
+    if ((msg = json_object_new_object()) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to failure of json_object_new_object", __func__);
         return false;
     }
 
-    if (!JsonBuffer_Put_BlockId (msg, "Block_ID", submit->pId))
-    {
+    if (!JsonBuffer_Put_UUID(msg, "Requestor", submit->uuidRequestor)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Put_BlockId", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
+        return false;
+    }
+
+    if (!JsonBuffer_Put_BlockId(msg, "Block_ID", submit->pId)) {
+        json_object_put(msg);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Put_BlockId", __func__);
         return false;
     }
     wire = json_object_to_json_string(msg);
-    message->length=strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
-    {
+    message->length = strlen(wire);
+    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
         json_object_put(msg);
         return false;
     }

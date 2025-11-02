@@ -311,7 +311,7 @@ UUID_Create_List (void)
 
     if (list == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate new list", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate new list", __func__);
         return NULL;
     }
     return list;

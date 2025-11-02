@@ -64,7 +64,7 @@ Queue_Read_Message(struct Socket *socket)
 
     if ((message = (struct StompMessage *)calloc (1, sizeof (struct StompMessage))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate message struct", __func__);
+        rzb_log(LOG_ERR, LOG_C_STOMP, "%s: Failed to allocate message struct", __func__);
         return NULL;
     }
     message->headers= Message_Header_List_Create();
@@ -75,8 +75,9 @@ readverb:
 
     if (messageLen <= 0)
     {
-        if (errno != EINTR)
-            rzb_log (LOG_ERR, "%s: failed due to failure of Socket_Rx_Until", __func__);
+        if (errno != EINTR) {
+            rzb_perror(LOG_C_STOMP, "Queue_Read_Message: Read VERB - Socket_Rx_Until failed: %s");
+        }
 
         Queue_Destroy_Stomp_Message(message);
         return NULL;
@@ -89,7 +90,7 @@ readverb:
     }
     if ((message->sVerb = (char *)calloc(messageLen, sizeof(char))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: failed due to failure of calloc", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: failed due to failure of calloc", __func__);
         Queue_Destroy_Stomp_Message(message);
         free(buffer);
         return NULL;
@@ -98,14 +99,13 @@ readverb:
     // Copy the verb
     strncpy(message->sVerb, buffer, messageLen);
 #ifdef STOMP_DEBUG
-    rzb_log(LOG_DEBUG, "%s: (%p) Message Verb: %s - Len %u", __func__, message, message->sVerb, messageLen);
+    rzb_log(LOG_DEBUG, LOG_C_STOMP, "%s: (%p) Message Verb: %s - Len %u", __func__, message, message->sVerb, messageLen);
 #endif
     free(buffer);
     buffer = NULL;
     if ((messageLen = Socket_Rx_Until (socket, (uint8_t**)&buffer, '\n')) <= 0)
     {
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of Socket_Rx_Until", __func__);
+        rzb_perror(LOG_C_STOMP, "Queue_Read_Message: Read Header - Socket_Rx_Until failed: %s");
         Queue_Destroy_Stomp_Message(message);
         return NULL;
     }
@@ -126,7 +126,7 @@ readverb:
 
 
 #ifdef STOMP_DEBUG
-        rzb_log(LOG_DEBUG, "%s: (%p) Message Header: %s:%s", __func__, message, buffer, headerItem);
+        rzb_log(LOG_DEBUG, LOG_C_STOMP, "%s: (%p) Message Header: %s:%s", __func__, message, buffer, headerItem);
 #endif
 
         if (strcasecmp(buffer, "content-length") == 0)
@@ -134,13 +134,13 @@ readverb:
             message->bodyLength =strtoul(headerItem, NULL, 10);
             if (message->bodyLength == 0)
             {
-                rzb_log(LOG_ERR, "%s: Failed to parse message length: %s", __func__, headerItem);
+                rzb_log(LOG_ERR, LOG_C_STOMP, "%s: Failed to parse message length: %s", __func__, headerItem);
                 Queue_Destroy_Stomp_Message(message);
                 free(buffer);
                 return NULL;
             }
 #ifdef STOMP_DEBUG
-            rzb_log(LOG_DEBUG, "%s: (%p) Found content length: %d", __func__, message, message->bodyLength);
+            rzb_log(LOG_DEBUG, LOG_C_STOMP, "%s: (%p) Found content length: %d", __func__, message, message->bodyLength);
 #endif
         }
 
@@ -149,7 +149,8 @@ readverb:
         buffer = NULL;
         if ((messageLen = Socket_Rx_Until (socket, (uint8_t**)&buffer, '\n')) <= 0)
         {
-            rzb_log (LOG_ERR,
+            rzb_perror(LOG_C_STOMP, "Queue_Read_Message: Read Header - Socket_Rx_Until failed: %s");
+            rzb_log (LOG_ERR,LOG_C_STOMP,
                      "%s failed due to failure of Socket_Rx_Until", __func__);
             Queue_Destroy_Stomp_Message(message);
             free(buffer);
@@ -167,14 +168,14 @@ readverb:
 		if ((message->pBody = (uint8_t *)malloc(message->bodyLength+1)) == NULL) 
         {
 			//Need to store it
-            rzb_log (LOG_ERR,
-                     "%s: failed to allocate binary buffer", __func__);
+            rzb_log (LOG_ERR,LOG_C_STOMP,
+                     "%s: failed to allocate buffer", __func__);
             Queue_Destroy_Stomp_Message(message);
             return NULL;
         }
         if (Socket_Rx(socket, message->bodyLength, message->pBody) != (ssize_t)message->bodyLength)
         {
-            rzb_log (LOG_ERR,
+            rzb_log (LOG_ERR,LOG_C_STOMP,
                      "%s: failed to read message body", __func__);
             Queue_Destroy_Stomp_Message(message);
             return NULL;
@@ -182,7 +183,7 @@ readverb:
         // read the final '\0'
         if (Socket_Rx (socket, 1, (uint8_t *)&message->pBody[message->bodyLength]) != 1)
         {
-            rzb_log (LOG_ERR, "%s: failed due to Socket_Rx", __func__);
+            rzb_log (LOG_ERR,LOG_C_STOMP, "%s: failed due to Socket_Rx", __func__);
             Queue_Destroy_Stomp_Message(message);
             return NULL;
         }
@@ -193,7 +194,7 @@ readverb:
         messageLen = Socket_Rx_Until(socket, &message->pBody, '\0');
         if (messageLen <= 0)
         {
-			rzb_log (LOG_ERR, "%s: failed due to Socket_Rx", __func__);
+            rzb_perror(LOG_C_STOMP, "Queue_Read_Message: Read Body - Socket_Rx_Until failed: %s");
 			Queue_Destroy_Stomp_Message(message);
 			return NULL;
         }
@@ -209,17 +210,17 @@ Queue_Send_Header(void *vHeader, void *vSocket)
     struct Socket *socket = vSocket;
     char *line = NULL;
 #ifdef STOMP_DEBUG
-        rzb_log(LOG_DEBUG, "%s: (%p) Message Header: '%s:%s'", __func__, header->pMessage, header->sName, header->sValue);
+        rzb_log(LOG_DEBUG,LOG_C_STOMP, "%s: (%p) Message Header: '%s:%s'", __func__, header->pMessage, header->sName, header->sValue);
 #endif
     if (asprintf(&line, "%s:%s\n", header->sName, header->sValue) == -1)
     {
-        rzb_log(LOG_ERR, "%s: Failed to alloc header", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to alloc header", __func__);
         return LIST_EACH_ERROR;
     }
 //    printf("'%s'\n", line);
     if (Socket_Tx(socket, strlen(line), (uint8_t *)line) != (ssize_t)strlen(line))
     {
-        rzb_log(LOG_ERR, "%s: Failed to send header", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send header", __func__);
         free(line);
         return LIST_EACH_ERROR;
     }
@@ -233,17 +234,17 @@ Queue_Send_Message(struct Socket *socket, struct StompMessage *message)
 {
     char *line;
 #ifdef STOMP_DEBUG
-    rzb_log(LOG_DEBUG, "%s: (%p) Message Verb: %s - %u", __func__, message, message->sVerb, message->bodyLength);
+    rzb_log(LOG_DEBUG,LOG_C_STOMP, "%s: (%p) Message Verb: %s - %u", __func__, message, message->sVerb, message->bodyLength);
 #endif
 
     if (asprintf(&line, "%s\n", message->sVerb) == -1)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate verb", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to allocate verb", __func__);
         return false;
     }
 
     if (Socket_Tx(socket, strlen(line), (uint8_t *)line) != (ssize_t)strlen(line)) {
-        rzb_log(LOG_ERR, "%s: Failed to send verb", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send verb", __func__);
         free(line);
         return false;
     }
@@ -254,20 +255,20 @@ Queue_Send_Message(struct Socket *socket, struct StompMessage *message)
 
     if (Socket_Tx(socket, 1, (uint8_t *)"\n") != 1)
     {
-        rzb_log(LOG_ERR, "%s: Failed to send end of header", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send end of header", __func__);
         return false;
     }
     if (message->pBody != NULL)
     {
         if (Socket_Tx(socket, message->bodyLength, message->pBody) != (ssize_t)message->bodyLength)
         {
-            rzb_log(LOG_ERR, "%s: Failed to send message body", __func__);
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send message body", __func__);
             return false;
         }
     }
     if (Socket_Tx(socket, 1, (uint8_t *)"\0") != 1)
     {
-        rzb_log(LOG_ERR, "%s: Failed to send end of message", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send end of message", __func__);
         return false;
     }
     return true;
@@ -279,12 +280,12 @@ Queue_Message_Create(const char * verb)
     struct StompMessage *message;
     if ((message = calloc(1, sizeof(struct StompMessage))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to alloc message", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to alloc message", __func__);
         return NULL;
     }
     if ((message->sVerb = calloc(strlen(verb)+1, sizeof(char))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate verb", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to allocate verb", __func__);
         free(message);
         return NULL;
     }
@@ -333,17 +334,17 @@ Queue_Connect_Socket(
     if (socket == NULL )
     {
         if (useSSL)
-            rzb_log (LOG_ERR,
+            rzb_log (LOG_ERR,LOG_C_STOMP,
                      "%s: failed due to failure of SSL_Socket_Connect", __func__);
         else 
-            rzb_log (LOG_ERR,
+            rzb_log (LOG_ERR,LOG_C_STOMP,
                      "%s: failed due to failure of Socket_Connect", __func__);
         return NULL;
     }
 
     if ((message= Queue_Message_Create("CONNECT")) == NULL) 
     {
-        rzb_log(LOG_ERR, "%s: Failed to create connect message", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create connect message", __func__);
         Socket_Close(socket);
         return NULL;
     }
@@ -360,15 +361,15 @@ Queue_Connect_Socket(
              */
         )
     ){
-        rzb_log(LOG_ERR, "%s: Failed to add connect headers", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add connect headers", __func__);
         Queue_Destroy_Stomp_Message(message);
         Socket_Close(socket);
         return NULL;
     }
     if (vHost != NULL) {
-        rzb_log(LOG_DEBUG, "%s: Adding vhost header: %s", __func__, vHost);
+        rzb_log(LOG_DEBUG,LOG_C_STOMP, "%s: Adding vhost header: %s", __func__, vHost);
         if (!StompMessage_Add_Header(message, "host", vHost)) {
-            rzb_log(LOG_ERR, "%s: Failed to add vhost header", __func__);
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add vhost header", __func__);
             Queue_Destroy_Stomp_Message(message);
             Socket_Close(socket);
             return NULL;
@@ -378,7 +379,7 @@ Queue_Connect_Socket(
     // send the Connect message
     if (!Queue_Send_Message(socket, message))
     {
-        rzb_log(LOG_ERR, "%s: Failed to send connect message", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send connect message", __func__);
         Socket_Close(socket);
         Queue_Destroy_Stomp_Message(message);
         return NULL;
@@ -387,13 +388,13 @@ Queue_Connect_Socket(
 
     if ((message = Queue_Read_Message(socket)) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to read connection response", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to read connection response", __func__);
         Socket_Close(socket);
         return NULL;
     }
     if (strcasecmp(message->sVerb, "CONNECTED") != 0)
     {
-        rzb_log (LOG_ERR,
+        rzb_log (LOG_ERR,LOG_C_STOMP,
                  "%s: failed due to failure of strncasecmp ( CONNECTED )", __func__);
         Queue_Destroy_Stomp_Message(message);
         Socket_Close(socket);
@@ -424,19 +425,19 @@ Queue_BeginReading (struct Queue *p_pQ)
                 p_pQ->sName,
                 (((long long)tv.tv_sec)*1000)+(tv.tv_usec/1000))
                 == -1) {
-            rzb_log(LOG_ERR, "%s: Failed to generate subscription ID", __func__);
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to generate subscription ID", __func__);
         }
     }
     // send the subscribe message
 
     if ((l_pMessage= Queue_Message_Create("SUBSCRIBE")) == NULL) 
     {
-        rzb_log(LOG_ERR, "%s: Failed to create subscribe message", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create subscribe message", __func__);
         return false;
     }
 
     if (asprintf(&prefetchCount, "%u", p_pQ->iPrefetch) == -1) {
-        rzb_log(LOG_ERR, "%s: Failed to allocate prefetch count header", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to allocate prefetch count header", __func__);
         Queue_Destroy_Stomp_Message(l_pMessage);
         return false;
     }
@@ -448,7 +449,7 @@ Queue_BeginReading (struct Queue *p_pQ)
             StompMessage_Add_Header(l_pMessage, "prefetch-count", prefetchCount)
         ))
     {
-        rzb_log(LOG_ERR, "%s: Failed to add destination headers", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add destination headers", __func__);
         Queue_Destroy_Stomp_Message(l_pMessage);
         free(prefetchCount);
         return false;
@@ -457,7 +458,7 @@ Queue_BeginReading (struct Queue *p_pQ)
     // send the Connect message
     if (!Queue_Send_Message(p_pQ->pReadSocket, l_pMessage))
     {
-        rzb_log(LOG_ERR, "%s: Failed to send subscribe message", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send subscribe message", __func__);
         Queue_Destroy_Stomp_Message(l_pMessage);
         free(prefetchCount);
         return false;
@@ -480,13 +481,13 @@ Queue_EndReading (struct Queue *p_pQ)
 
     if ((l_pMessage= Queue_Message_Create("UNSUBSCRIBE")) == NULL) 
     {
-        rzb_log(LOG_ERR, "%s: Failed to create unsubscribe message", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create unsubscribe message", __func__);
         return false;
     }
 
     if (!StompMessage_Add_Header(l_pMessage, "destination", p_pQ->sName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to add destination headers", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add destination headers", __func__);
         Queue_Destroy_Stomp_Message(l_pMessage);
         return false;
     }
@@ -494,7 +495,7 @@ Queue_EndReading (struct Queue *p_pQ)
     // send the Connect message
     if (!Queue_Send_Message(p_pQ->pReadSocket, l_pMessage))
     {
-        rzb_log(LOG_ERR, "%s: Failed to send unsubscribe message", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send unsubscribe message", __func__);
         Queue_Destroy_Stomp_Message(l_pMessage);
         return false;
     }
@@ -513,13 +514,13 @@ Queue_Connect(struct Queue *queue)
                   queue->sUser, queue->sPassword, queue->sVhost, queue->bUseSSL)) == NULL)
 
         {
-            rzb_log (LOG_ERR,
+            rzb_log (LOG_ERR,LOG_C_STOMP,
                      "%s: failed due to failure of Queue_Connect_Socket (Read)", __func__);
             return false;
         }
         if (!Queue_BeginReading (queue))
         {
-            rzb_log (LOG_ERR,
+            rzb_log (LOG_ERR,LOG_C_STOMP,
                      "%s: failed due to failure of Queue_BeginReading", __func__);
             return false;
         }
@@ -531,7 +532,7 @@ Queue_Connect(struct Queue *queue)
                     Queue_Connect_Socket(queue->sHostname, queue->iPort,
                     queue->sUser, queue->sPassword, queue->sVhost, queue->bUseSSL)) == NULL)
         {
-            rzb_log (LOG_ERR,
+            rzb_log (LOG_ERR,LOG_C_STOMP,
                      "%s: failed due to failure of Queue_Connect_Socket (Write)", __func__);
             return false;
         }
@@ -597,7 +598,7 @@ Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags,
 
     if ((l_pQueue = (struct Queue *)calloc (1, sizeof (struct Queue))) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: Failed to alloc new queue", __func__);
+        rzb_log (LOG_ERR,LOG_C_STOMP, "%s: Failed to alloc new queue", __func__);
         return NULL;
     }
     l_pQueue->sHostname = (char *)p_sHost;
@@ -610,7 +611,7 @@ Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags,
 
     if ((l_pQueue->sName = (char *)calloc(strlen((char *)p_sQueueName)+1, sizeof(char))) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: Failed to alloc new queue name", __func__);
+        rzb_log (LOG_ERR,LOG_C_STOMP, "%s: Failed to alloc new queue name", __func__);
         free(l_pQueue);
         return NULL;
     }
@@ -624,7 +625,7 @@ Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags,
     l_pQueue->iFlags = p_iFlags;
     if (!Queue_Connect(l_pQueue))
     {
-        rzb_log (LOG_ERR,
+        rzb_log (LOG_ERR,LOG_C_STOMP,
                  "%s: failed due to failure of Queue_Connect", __func__);
         Queue_Terminate(l_pQueue);
         return NULL;
@@ -643,7 +644,7 @@ Queue_Terminate (struct Queue *p_pQ)
     Mutex_Lock (p_pQ->mWriteMutex);
     if ((l_pMessage= Queue_Message_Create("DISCONNECT")) == NULL) 
     {
-        rzb_log(LOG_ERR, "%s: Failed to create disconnect message", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create disconnect message", __func__);
     }
  
     if ((p_pQ->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
@@ -689,9 +690,9 @@ Queue_Get (struct Queue *queue)
     {
         if ( errno != EINTR )
         {
-            rzb_perror ("failed due to failure of Queue_Read_Message: %s");
+            rzb_perror (LOG_C_STOMP,"failed due to failure of Queue_Read_Message: %s");
             while (!Queue_Reconnect(queue))
-                rzb_log(LOG_ERR, "%s: Reconnecting", __func__);
+                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Reconnecting", __func__);
         }
         Mutex_Unlock (queue->mReadMutex);
         return NULL;
@@ -700,7 +701,7 @@ Queue_Get (struct Queue *queue)
     {
         if ((messageId = Queue_Message_Get_Header(message, "ack")) == NULL)
         {
-            rzb_log(LOG_ERR, "%s: Failed to get message-id", __func__);
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to get message-id", __func__);
             Mutex_Unlock (queue->mReadMutex);
             Queue_Destroy_Stomp_Message(message);
             return NULL;
@@ -709,14 +710,14 @@ Queue_Get (struct Queue *queue)
         // Send Ack
         if ((ack = Queue_Message_Create("ACK")) == NULL)
         {
-            rzb_log(LOG_ERR, "%s: Failed to create ACK", __func__);
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create ACK", __func__);
             Queue_Destroy_Stomp_Message(message);
             Mutex_Unlock (queue->mReadMutex);
             return NULL;
         }
         if (!StompMessage_Add_Header(ack, "id", messageId))
         {
-            rzb_log(LOG_ERR, "%s: Failed to add ack message-id headers", __func__);
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add ack message-id headers", __func__);
             Queue_Destroy_Stomp_Message(ack);
             Queue_Destroy_Stomp_Message(message);
             Mutex_Unlock (queue->mReadMutex);
@@ -724,7 +725,7 @@ Queue_Get (struct Queue *queue)
         }
         if (!Queue_Send_Message(queue->pReadSocket, ack))
         {
-            rzb_log(LOG_ERR, "%s: Failed to send ack message", __func__);
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send ack message", __func__);
             Queue_Destroy_Stomp_Message(ack);
             Queue_Destroy_Stomp_Message(message);
             Mutex_Unlock (queue->mReadMutex);
@@ -740,7 +741,7 @@ Queue_Get (struct Queue *queue)
         }
         if ((queue->iFlags & QUEUE_FLAG_EXTERNAL_MODE) != QUEUE_FLAG_EXTERNAL_MODE) {
             if ((header = (struct MessageHeader *) List_Find(message->headers, (void *) "rzb-msg-type")) == NULL) {
-                rzb_log(LOG_ERR, "%s: Message header missing - rzb-msg-type", __func__);
+                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-type", __func__);
                 free(ret);
                 Queue_Destroy_Stomp_Message(message);
                 return NULL;
@@ -748,7 +749,7 @@ Queue_Get (struct Queue *queue)
             ret->type = strtoul(header->sValue, NULL, 10);
 
             if ((header = (struct MessageHeader *) List_Find(message->headers, (void *) "rzb-msg-ver")) == NULL) {
-                rzb_log(LOG_ERR, "%s: Message header missing - rzb-msg-ver", __func__);
+                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-ver", __func__);
                 free(ret);
                 Queue_Destroy_Stomp_Message(message);
                 return NULL;
@@ -764,12 +765,12 @@ Queue_Get (struct Queue *queue)
         Queue_Destroy_Stomp_Message(message);
         if ((queue->iFlags & QUEUE_FLAG_EXTERNAL_MODE) != QUEUE_FLAG_EXTERNAL_MODE) {
             if (!Message_Setup(ret)) {
-                rzb_log(LOG_ERR, "%s: Message_Setup failed", __func__);
+                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message_Setup failed", __func__);
                 free(ret);
                 return NULL;
             }
             if(!ret->deserialize(ret)) {
-                rzb_log(LOG_ERR, "%s: Message deserialize failed: type %u body %s", __func__, ret->type, ret->serialized);
+                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message deserialize failed: type %u body %s", __func__, ret->type, ret->serialized);
                 ret->destroy(ret);
                 return NULL;
             }
@@ -816,7 +817,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
     {
         if (!message->serialize(message))
         {
-            rzb_log(LOG_ERR, "%s: Failed to serialize message", __func__);
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to serialize message", __func__);
             Mutex_Unlock (queue->mWriteMutex);
             return false;
         }
@@ -825,7 +826,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
 
     if ((stompMessage = Queue_Message_Create("SEND")) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to create SEND", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create SEND", __func__);
         Mutex_Unlock (queue->mWriteMutex);
         return false;
     }
@@ -877,7 +878,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
             StompMessage_Add_Header(stompMessage, "rzb-msg-type", messageType) &&
             StompMessage_Add_Header(stompMessage, "rzb-msg-ver", messageVer)))
     {
-        rzb_log(LOG_ERR, "%s: Failed to add ack message-id headers", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add ack message-id headers", __func__);
         stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
         Queue_Destroy_Stomp_Message(stompMessage);
         Mutex_Unlock (queue->mWriteMutex);
@@ -892,10 +893,10 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
 		if (errno != EINTR)
         {
             while (!Queue_Reconnect(queue))
-                rzb_log(LOG_ERR, "%s: Reconnecting", __func__);
+                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Reconnecting", __func__);
             continue;
         }
-        rzb_log(LOG_ERR, "%s: Failed to send message", __func__);
+        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send message", __func__);
         stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
         Queue_Destroy_Stomp_Message(stompMessage);
         Mutex_Unlock (queue->mWriteMutex);
@@ -907,7 +908,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
 
     if (( stompMessage = Queue_Read_Message (queue->pWriteSocket)) == NULL)
     {
-        rzb_log (LOG_ERR,
+        rzb_log (LOG_ERR,LOG_C_STOMP,
                  "%s: failed due to failure of Queue_Read_Message", __func__);
         Mutex_Unlock (queue->mWriteMutex);
         return false;
@@ -916,14 +917,14 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
     {
         if ((l_pReceiptId = Queue_Message_Get_Header(stompMessage, "receipt-id")) == NULL)
         {
-            rzb_log(LOG_ERR, "%s: Failed to get receipt-id", __func__);
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to get receipt-id", __func__);
             Mutex_Unlock (queue->mWriteMutex);
             Queue_Destroy_Stomp_Message(stompMessage);
             return false;
         }
         if (strcmp(l_pReceiptId, messageId) != 0)
         {
-            rzb_log(LOG_ERR, "%s: receipt-id did not match sent message: %s, %s", __func__, l_pReceiptId, messageId);
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: receipt-id did not match sent message: %s, %s", __func__, l_pReceiptId, messageId);
             Mutex_Unlock (queue->mWriteMutex);
             Queue_Destroy_Stomp_Message(stompMessage);
             return false;

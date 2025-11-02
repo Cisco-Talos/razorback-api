@@ -20,6 +20,7 @@
 
 #include <razorback/config_file.h>
 #include <razorback/log.h>
+#include <razorback/debug.h>
 #include "runtime_config.h"
 
 #define API_CONFIG_FILE "rzb.conf"
@@ -32,13 +33,14 @@
 static config_t config;
 #endif //_MSC_VER
 
-typedef enum
-{
-    UNINIT, READY, CONFIGURED, UNCONFIGURED
+typedef enum {
+    UNINIT,
+    READY,
+    CONFIGURED,
+    UNCONFIGURED
 } CONFIGSTATE;
 
-struct RZBConfigFile
-{
+struct RZBConfigFile {
     RZBConfKey_t *type;
 #ifdef _MSC_VER
 #else //_MSC_VER
@@ -65,28 +67,34 @@ bool parseRoutingType (const char *, conf_int_t *);
 #ifndef _MSC_VER
 
 SO_PUBLIC char *
-getConfigFile (const char *configDir, const char *configFile)
-{
-	char *result;
-    if (configDir == NULL)
-    {
+getConfigFile(const char *configDir, const char *configFile) {
+    char *result;
+    if (configDir == NULL) {
         configDir = ETC_DIR;
     }
-    
-    result =
-        calloc (strlen (configDir) + strlen (configFile) + 2, sizeof (char));
-    if (result == NULL)
+    ASSERT(configFile != NULL);
+    if (configFile == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: configFile was null", __func__);
         return NULL;
+    }
+
+    result =
+            calloc(strlen(configDir) + strlen(configFile) + 2, sizeof(char));
+    if (result == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate memory for config file name",
+                __func__);
+        return NULL;
+    }
 
     // The following are safe as the buffer is always larger than the 2 strings
     //
-    #pragma GCC diagnostic push
-    #pragma GCC diagnostic ignored "-Wstringop-truncation"
-    #pragma GCC diagnostic ignored "-Wstringop-overflow"
-    strncpy (result, configDir, strlen (configDir) + 1);
-    strncat (result, "/", 1);
-    strncat (result, configFile, strlen (configFile));
-    #pragma GCC diagnostic pop
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-truncation"
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+    strncpy(result, configDir, strlen(configDir) + 1);
+    strncat(result, "/", 1);
+    strncat(result, configFile, strlen(configFile));
+#pragma GCC diagnostic pop
     return result;
 }
 
@@ -94,9 +102,9 @@ getConfigFile (const char *configDir, const char *configFile)
 
 
 SO_PUBLIC bool
-readMyConfig (const char *configDir, const char *configFile,
-              RZBConfKey_t * config_fmt)
-{
+readMyConfig(const char *configDir,
+             const char *configFile,
+             RZBConfKey_t *config_fmt) {
 #ifdef _MSC_VER
 	//Reading from the registry instead of a config file
 	//Implements same API
@@ -108,14 +116,14 @@ readMyConfig (const char *configDir, const char *configFile,
 	dirkey = NULL;
 
 	if (configFile == NULL) {
-		rzb_log(LOG_ERR, "%s: configFile is NULL.", __func__);
+		rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: configFile is NULL.", __func__);
 		return false;
 	}
 
 	/*
 	keyname = createConfKeyName(configDir, configFile);
 	if (keyname == NULL) {
-		rzb_log(LOG_ERR, "%s: Failed due to failure of createConfKeyName().", __func__);
+		rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed due to failure of createConfKeyName().", __func__);
 		return false;
 	}
 	*/
@@ -127,7 +135,7 @@ readMyConfig (const char *configDir, const char *configFile,
 
     if ((file = (RZBConfigFile *)calloc(1, sizeof (RZBConfigFile))) == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to allocate config storage", __func__);
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate config storage", __func__);
         return false;
     }
 
@@ -150,7 +158,7 @@ readMyConfig (const char *configDir, const char *configFile,
 		&razorback);
 	
 	if(lRet != ERROR_SUCCESS) {
-		rzb_log(LOG_ERR, "%s: Failed because registry key does not exist. SOFTWARE", __func__);
+		rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed because registry key does not exist. SOFTWARE", __func__);
 		return false;
 	}
 
@@ -167,7 +175,7 @@ readMyConfig (const char *configDir, const char *configFile,
 		&dirkey);
 
 	if(lRet != ERROR_SUCCESS) {
-		rzb_log(LOG_ERR, "%s: Failed because registry key does not exist: %s %d", __func__, configDir, lRet);
+		rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed because registry key does not exist: %s %d", __func__, configDir, lRet);
 		return false;
 	}
 	
@@ -181,13 +189,13 @@ readMyConfig (const char *configDir, const char *configFile,
 		&rzbapikey);
 
 	if(lRet != ERROR_SUCCESS) {
-		rzb_log(LOG_ERR, "%s: Failed because registry key does not exist: %S %d", __func__, configDir, lRet);
+		rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed because registry key does not exist: %S %d", __func__, configDir, lRet);
 		return false;
 	}
     
 
 	if(!parseBlockWin32(rzbapikey, config_fmt)) {
-		rzb_log(LOG_ERR, "%s: Failed due to failure of parseBlockWin32.", __func__);
+		rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed due to failure of parseBlockWin32.", __func__);
 		return false;
 	}
 
@@ -201,51 +209,44 @@ readMyConfig (const char *configDir, const char *configFile,
 	return true;
 
 #else
-    if (configFile == NULL)
-    {
-        rzb_log (LOG_EMERG, "%s: configFile was null", __func__);
+    if (configFile == NULL) {
+        rzb_log(LOG_EMERG, LOG_C_CONFIG, "%s: configFile was null", __func__);
         return false;
     }
-    if (configState == UNINIT)
-    {
-        memset (&config, 0, sizeof (config));
-        config_init (&config);
+    if (configState == UNINIT) {
+        memset(&config, 0, sizeof(config));
+        config_init(&config);
         configState = READY;
     }
 
-    char *configfile = getConfigFile (configDir, configFile);
-    RZBConfigFile * file;
+    char *configfile = getConfigFile(configDir, configFile);
+    RZBConfigFile *file;
 
-    if ((file =calloc(1, sizeof (RZBConfigFile))) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to allocate config storage", __func__);
+    if ((file = calloc(1, sizeof(RZBConfigFile))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate config storage", __func__);
         free(configfile);
         return false;
     }
 
     file->type = config_fmt;
-    if (!testFile (configfile))
-    {
-        free (configfile);
+    if (!testFile(configfile)) {
+        free(configfile);
         free(file);
         return false;
     }
-    if (config_read_file (&file->config, configfile) != CONFIG_TRUE)
-        rzb_log (LOG_ERR, "%s: failed to read file: %s", __func__, config_error_text (&config));
+    if (config_read_file(&file->config, configfile) != CONFIG_TRUE)
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: failed to read file: %s", __func__, config_error_text(&config));
 
-    if (configList == NULL)
-    {
+    if (configList == NULL) {
         configList = file;
-    }
-    else
-    {
+    } else {
         file->next = configList;
         configList = file;
     }
-    free (configfile);
+    free(configfile);
 
-    return parseBlock (&file->config, config_fmt);
-	#endif
+    return parseBlock(&file->config, config_fmt);
+#endif
 }
 
 #ifdef _MSC_VER
@@ -275,7 +276,7 @@ parseArrayWin32 (HKEY key, RZBConfKey_t *block)
 		&arraykey);
 
 	if (lRet != ERROR_SUCCESS) {
-		rzb_log(LOG_ERR, "%s: Failed to open subkey", __func__);
+		rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to open subkey", __func__);
 		return false;
 	}
 
@@ -295,7 +296,7 @@ parseArrayWin32 (HKEY key, RZBConfKey_t *block)
 		NULL);
 
 	if (lRet != ERROR_SUCCESS) {
-		rzb_log(LOG_ERR, "%s: Failed to obtain number of values in subkey", __func__);
+		rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to obtain number of values in subkey", __func__);
 		return false;
 	}
 
@@ -313,7 +314,7 @@ parseArrayWin32 (HKEY key, RZBConfKey_t *block)
             for (i = 0; i < numvalues; i++) {
 
 				if (asprintf(&valuename, "%d", i+1) <= 0) {
-					rzb_log(LOG_ERR, "%s: Failed due to failure of asprintf()", __func__);
+					rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed due to failure of asprintf()", __func__);
 					free(ints);
 					return false;
 				}
@@ -330,12 +331,12 @@ parseArrayWin32 (HKEY key, RZBConfKey_t *block)
 		            &RegValueLen);
 
 				if (lRet != ERROR_SUCCESS) {
-					rzb_log(LOG_ERR, "%s: Failed to query registry value", __func__);
+					rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to query registry value", __func__);
 					return false;
 				}
 
 				if (type != REG_DWORD) {
-					rzb_log(LOG_ERR, "%s: Failed because registry key is not the right type", __func__);
+					rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed because registry key is not the right type", __func__);
 					return false;
 				}
 
@@ -357,7 +358,7 @@ parseArrayWin32 (HKEY key, RZBConfKey_t *block)
 			for (i = 0; i < numvalues; i++) {
                 
 				if (asprintf(&valuename, "%d", i+1) <= 0) {
-					rzb_log(LOG_ERR, "%s: Failed due to failure of asprintf()", __func__);
+					rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed due to failure of asprintf()", __func__);
 					return false;
 				} 
 
@@ -373,7 +374,7 @@ parseArrayWin32 (HKEY key, RZBConfKey_t *block)
 		            &RegValueLen);
 
 				if (lRet != ERROR_SUCCESS) {
-					rzb_log(LOG_ERR, "%s: Failed to query registry value length", __func__);
+					rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to query registry value length", __func__);
 					return false;
 			    }
 
@@ -388,12 +389,12 @@ parseArrayWin32 (HKEY key, RZBConfKey_t *block)
 		            &RegValueLen);
 
 				if (lRet != ERROR_SUCCESS) {
-					rzb_log(LOG_ERR, "%s: Failed to query registry value", __func__);
+					rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to query registry value", __func__);
 					return false;
 			    }
 
 				if (type != REG_SZ) {
-					rzb_log(LOG_ERR, "%s: Failed because registry key is not the right type", __func__);
+					rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed because registry key is not the right type", __func__);
 					return false;
 				}
 
@@ -425,7 +426,7 @@ parseArrayWin32 (HKEY key, RZBConfKey_t *block)
 				for (i = 0; i < numvalues; i++) {
 					if (uuid_parse (strings[i], (uuids[i])) == -1)
 					{
-						rzb_log (LOG_ERR, "%s: Failed to parse UUID: %s", __func__, strings[i]);
+						rzb_log (LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse UUID: %s", __func__, strings[i]);
 						return false;
 					}
 					free(strings[i]);
@@ -446,7 +447,7 @@ parseArrayWin32 (HKEY key, RZBConfKey_t *block)
                         bools[i] = false;
                     else
                     {
-						rzb_log (LOG_ERR, "%s: Failed to parse bool: %s", __func__, strings[i]);
+						rzb_log (LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse bool: %s", __func__, strings[i]);
 				        return false;
 					}
 					free(strings[i]);
@@ -476,98 +477,102 @@ parseArrayWin32 (HKEY key, RZBConfKey_t *block)
 #else
 
 static bool 
-parseArray(config_setting_t *config, RZBConfKey_t *block)
-{
+parseArray(config_setting_t *config, RZBConfKey_t *block) {
     int size;
-    struct ConfArray *arrayConf = block->callback;
+    struct ConfArray *arrayConf;
     void *data;
-
     conf_int_t *ints;
     char **strings;
     const char *tmp;
     uuid_t *uuids;
     bool *bools;
 
+    ASSERT(config != NULL);
+    ASSERT(block != NULL);
+    if (config == NULL || block == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: config or block are NULL", __func__);
+        return false;
+    }
+
+    arrayConf = block->callback;
+
     size = config_setting_length(config);
 
-    rzb_log(LOG_INFO, "%s: Array found: %d", block->key, size);
-    if (size == 0)
-    {
+    rzb_log(LOG_INFO, LOG_C_CONFIG, "%s: Array found: %d", block->key, size);
+    if (size == 0) {
         *arrayConf->count = 0;
         return true;
     }
 
-    if (arrayConf->type == RZB_CONF_KEY_TYPE_INT)
-    {
-        if ((data = calloc(size, sizeof(conf_int_t)))== NULL)
+    if (arrayConf->type == RZB_CONF_KEY_TYPE_INT) {
+        if ((data = calloc(size, sizeof(conf_int_t))) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate memory for int array", __func__);
             return false;
+        }
         ints = data;
-        for (conf_int_t i = 0; i < size; i++)
+        for (conf_int_t i = 0; i < size; i++) {
             ints[i] = config_setting_get_int_elem(config, i);
+        }
 
-    }
-    else if (arrayConf->type == RZB_CONF_KEY_TYPE_STRING)
-    {
-        if ((data = calloc(size, sizeof(char *)))== NULL)
+    } else if (arrayConf->type == RZB_CONF_KEY_TYPE_STRING) {
+        if ((data = calloc(size, sizeof(char *))) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate memory for string array", __func__);
             return false;
+        }
         strings = data;
-        for (conf_int_t i = 0; i < size; i++)
-            strings[i] = (char *)config_setting_get_string_elem(config, i);
-    }
-    else if (arrayConf->type == RZB_CONF_KEY_TYPE_PARSED_STRING)
-    {
-        if ((data = calloc(size, sizeof(conf_int_t)))== NULL)
+        for (conf_int_t i = 0; i < size; i++) {
+            strings[i] = (char *) config_setting_get_string_elem(config, i);
+        }
+    } else if (arrayConf->type == RZB_CONF_KEY_TYPE_PARSED_STRING) {
+        if ((data = calloc(size, sizeof(conf_int_t))) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate memory for parsed string array", __func__);
             return false;
+        }
         ints = data;
-        for (conf_int_t i = 0; i < size; i++)
-        {
+        for (conf_int_t i = 0; i < size; i++) {
             tmp = config_setting_get_string_elem(config, i);
-            if (!(arrayConf->parseString (tmp, ints++)))
+            if (!(arrayConf->parseString(tmp, ints++))) {
+                rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse string: %s", __func__, tmp);
                 return false;
-            
+            }
+
         }
-    }
-    else if (arrayConf->type == RZB_CONF_KEY_TYPE_UUID)
-    {
-        if ((data = calloc(size, sizeof(uuid_t)))== NULL)
+    } else if (arrayConf->type == RZB_CONF_KEY_TYPE_UUID) {
+        if ((data = calloc(size, sizeof(uuid_t))) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate memory for uuid array", __func__);
             return false;
+        }
         uuids = data;
-        for (conf_int_t i = 0; i < size; i++)
-        {
+        for (conf_int_t i = 0; i < size; i++) {
             tmp = config_setting_get_string_elem(config, i);
-            if (uuid_parse (tmp, (uuids[i])) == -1)
-            {
-                rzb_log (LOG_ERR, "%s: Failed to parse UUID: %s", __func__, tmp);
+            if (uuid_parse(tmp, (uuids[i])) == -1) {
+                rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse UUID: %s", __func__, tmp);
                 free(data);
                 return false;
             }
         }
 
-    }
-    else if (arrayConf->type == RZB_CONF_KEY_TYPE_BOOL)
-    {
-        if ((data = calloc(size, sizeof(bool)))== NULL)
+    } else if (arrayConf->type == RZB_CONF_KEY_TYPE_BOOL) {
+        if ((data = calloc(size, sizeof(bool))) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate memory for bool array", __func__);
             return false;
+        }
         bools = data;
-        for (conf_int_t i = 0; i < size; i++)
-        {
+        for (conf_int_t i = 0; i < size; i++) {
             tmp = config_setting_get_string_elem(config, i);
-            if (strncasecmp(tmp,"true",4) == 0)
+            if (strncasecmp(tmp, "true", 4) == 0) {
                 bools[i] = true;
-            else if (strncasecmp(tmp,"false",5) == 0)
+            } else if (strncasecmp(tmp, "false", 5) == 0) {
                 bools[i] = false;
-            else
-            {
-                rzb_log (LOG_ERR, "%s: Failed to parse bool: %s", __func__, tmp);
+            } else {
+                rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse bool: %s", __func__, tmp);
                 free(data);
                 return false;
             }
         }
 
-    }
-    else
-    {
-        rzb_log (LOG_ERR, "%s: Unsupported array config attribute type.", __func__);
+    } else {
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Unsupported array config attribute type.", __func__);
         return false;
     }
 
@@ -607,7 +612,7 @@ parseListWin32(HKEY key,  RZBConfKey_t *block)
 
 	//If the subkey doesn't open, it may not exist.
 	if (lRet != ERROR_SUCCESS) {
-		rzb_log(LOG_ERR, "%s: Failed to open subkey", __func__);
+		rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to open subkey", __func__);
 		return false;
 	}
 
@@ -629,7 +634,7 @@ parseListWin32(HKEY key,  RZBConfKey_t *block)
 
 	//Again, this is a system call that shouldn't ever fail.
 	if (lRet != ERROR_SUCCESS) {
-		rzb_log(LOG_ERR, "%s: Failed to obtain number of values in subkey", __func__);
+		rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to obtain number of values in subkey", __func__);
 		return false;
 	}
 
@@ -664,7 +669,7 @@ parseListWin32(HKEY key,  RZBConfKey_t *block)
             itemSize += sizeof(bool);
         else
         {
-            rzb_log (LOG_ERR, "%s: Unsupported list member attribute type.", __func__);
+            rzb_log (LOG_ERR, LOG_C_CONFIG, "%s: Unsupported list member attribute type.", __func__);
             return false;
         }
     
@@ -688,7 +693,7 @@ parseListWin32(HKEY key,  RZBConfKey_t *block)
 			//Just like in the Array type, the names of our keys are the same as 
 			//their index, starting at value "1".
 			if (asprintf(&valuename, "%d", i+1) <= 0) {
-				rzb_log(LOG_ERR, "%s: Failed due to failure of asprintf()", __func__);
+				rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed due to failure of asprintf()", __func__);
 			    return false;
 			}
 			
@@ -708,13 +713,13 @@ parseListWin32(HKEY key,  RZBConfKey_t *block)
 	
 					//Shouldn't fail unless value in registry is longer than 4 bytes.
 					if (lRet != ERROR_SUCCESS) {
-						rzb_log(LOG_ERR, "%s: Failed to query registry value", __func__);
+						rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to query registry value", __func__);
 						return false;
 					}
 
 					//Make sure the Registry value we queried is of the right type.
 					if (type != REG_DWORD) {
-						rzb_log(LOG_ERR, "%s: Failed because registry key is not the right type", __func__);
+						rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed because registry key is not the right type", __func__);
 						return false;
 					}
 
@@ -743,13 +748,13 @@ parseListWin32(HKEY key,  RZBConfKey_t *block)
 
 					//Shouldn't fail.
 					if (lRet != ERROR_SUCCESS) {
-						rzb_log(LOG_ERR, "%s: Failed to query registry value length", __func__);
+						rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to query registry value length", __func__);
 						return false;
 					}
 
 					stringvalue = calloc(RegValueLen, sizeof(char));
 					if (stringvalue == NULL) {
-						rzb_log(LOG_ERR, "%s: Failed to allocate space for registry value.", __func__);
+						rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate space for registry value.", __func__);
 					}
 
 					//Get the actual content of the string
@@ -763,13 +768,13 @@ parseListWin32(HKEY key,  RZBConfKey_t *block)
 
 					//Shouldn't fail.
 					if (lRet != ERROR_SUCCESS) {
-						rzb_log(LOG_ERR, "%s: Failed to query registry value", __func__);
+						rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to query registry value", __func__);
 						return false;
 				    }
 
 					//Make sure what we got is indeed a string
 					if (type != REG_SZ) {
-						rzb_log(LOG_ERR, "%s: Failed because registry key is not the right type", __func__);
+						rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed because registry key is not the right type", __func__);
 						return false;
 					}
 
@@ -787,7 +792,7 @@ parseListWin32(HKEY key,  RZBConfKey_t *block)
 						//For uuids, use uuid_parse()
 						if (uuid_parse (stringvalue, *(uuid_t *)itemSize) == -1)
 						{
-							rzb_log (LOG_ERR, "%s: Failed to parse UUID: %s", __func__, stringvalue);
+							rzb_log (LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse UUID: %s", __func__, stringvalue);
 							return false;
 						}
 
@@ -804,7 +809,7 @@ parseListWin32(HKEY key,  RZBConfKey_t *block)
 							*(bool *)itemData = false;
 						}
 						else {
-							rzb_log (LOG_ERR, "%s: Failed to parse bool: %s", __func__, RegValue);
+							rzb_log (LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse bool: %s", __func__, RegValue);
 					     return false;
 						}
 
@@ -821,7 +826,7 @@ parseListWin32(HKEY key,  RZBConfKey_t *block)
 					break;
 				
 				default:
-					rzb_log (LOG_ERR, "%s: Unsupported list member attribute type.", __func__);
+					rzb_log (LOG_ERR, LOG_C_CONFIG, "%s: Unsupported list member attribute type.", __func__);
 					return false;
 			}
 			free(valuename);
@@ -842,117 +847,110 @@ parseListWin32(HKEY key,  RZBConfKey_t *block)
 static bool 
 parseList(config_setting_t *config, RZBConfKey_t *block)
 {
-    int size =0, itemSize =0;
-    struct ConfList *listConf = block->callback;
-    RZBConfKey_t * cur;
+    int size = 0, itemSize = 0;
+    struct ConfList *listConf;
+    RZBConfKey_t *cur;
     void *data;
     char **itemData;
     config_setting_t *item;
-	conf_int_t *intItem;
+    conf_int_t *intItem;
     const char *tmp;
     bool *boolItem;
     uuid_t *uuidItem;
-	conf_int_t i;
+    conf_int_t i;
+
+    ASSERT(config != NULL);
+    ASSERT(block != NULL);
+    if (config == NULL || block == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: config or block are NULL", __func__);
+        return false;
+    }
+
+    listConf = block->callback;
 
     size = config_setting_length(config);
 
-    rzb_log(LOG_INFO, "%s: List found: %d", block->key, size);
-    if (size == 0)
-    {
+    rzb_log(LOG_INFO, LOG_C_CONFIG, "%s: List found: %d", block->key, size);
+    if (size == 0) {
         *listConf->count = 0;
         return true;
     }
     cur = listConf->items;
-    while (cur->type != RZB_CONF_KEY_TYPE_END)
-    {
-        if (cur->type == RZB_CONF_KEY_TYPE_INT)
+    while (cur->type != RZB_CONF_KEY_TYPE_END) {
+        if (cur->type == RZB_CONF_KEY_TYPE_INT) {
             itemSize += sizeof(conf_int_t);
-        else if (cur->type == RZB_CONF_KEY_TYPE_STRING)
+        } else if (cur->type == RZB_CONF_KEY_TYPE_STRING) {
             itemSize += sizeof(char *);
-        else if (cur->type == RZB_CONF_KEY_TYPE_PARSED_STRING)
+        } else if (cur->type == RZB_CONF_KEY_TYPE_PARSED_STRING) {
             itemSize += sizeof(conf_int_t);
-        else if (cur->type == RZB_CONF_KEY_TYPE_UUID)
+        } else if (cur->type == RZB_CONF_KEY_TYPE_UUID) {
             itemSize += sizeof(uuid_t);
-        else if (cur->type == RZB_CONF_KEY_TYPE_BOOL)
+        } else if (cur->type == RZB_CONF_KEY_TYPE_BOOL) {
             itemSize += sizeof(bool);
-        else
-        {
-            rzb_log (LOG_ERR, "%s: Unsupported list member attribute type.", __func__);
+        } else {
+            rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Unsupported list member attribute type.", __func__);
             return false;
         }
-    
+
         cur++;
     }
-    if ((data = calloc(size, itemSize)) == NULL)
+    if ((data = calloc(size, itemSize)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate memory for list items", __func__);
         return false;
+    }
 
     
     itemData = data;
-    
-    for (i = 0; i < size; i++)
-    {
+
+    for (i = 0; i < size; i++) {
         cur = listConf->items;
         item = config_setting_get_elem(config, i);
-        while (cur->type != RZB_CONF_KEY_TYPE_END)
-        {
-            if (cur->type == RZB_CONF_KEY_TYPE_INT)
-            {
-                intItem= (conf_int_t*)itemData;
+        while (cur->type != RZB_CONF_KEY_TYPE_END) {
+            if (cur->type == RZB_CONF_KEY_TYPE_INT) {
+                intItem = (conf_int_t *) itemData;
                 config_setting_lookup_int(item, cur->key, intItem);
                 itemData += sizeof(conf_int_t);
-            }
-            else if (cur->type == RZB_CONF_KEY_TYPE_STRING)
-            {
+            } else if (cur->type == RZB_CONF_KEY_TYPE_STRING) {
                 config_setting_lookup_string(item, cur->key, &tmp);
                 // Filthy
-                memcpy(itemData, (char *)&tmp, sizeof(char *)); 
+                memcpy(itemData, (char *) &tmp, sizeof(char *));
                 itemData += sizeof(char *);
-            }
-            else if (cur->type == RZB_CONF_KEY_TYPE_PARSED_STRING)
-            {
+            } else if (cur->type == RZB_CONF_KEY_TYPE_PARSED_STRING) {
                 config_setting_lookup_string(item, cur->key, &tmp);
-                intItem= (conf_int_t*)itemData;
-                if (!((RZBConfCallBack *)cur->callback)->parseString (tmp, intItem)) {
+                intItem = (conf_int_t *) itemData;
+                if (!((RZBConfCallBack *) cur->callback)->parseString(tmp, intItem)) {
                     free(data);
                     return false;
                 }
-                itemData +=sizeof(conf_int_t);
-            }
-            else if (cur->type == RZB_CONF_KEY_TYPE_UUID)
-            {
+                itemData += sizeof(conf_int_t);
+            } else if (cur->type == RZB_CONF_KEY_TYPE_UUID) {
                 config_setting_lookup_string(item, cur->key, &tmp);
-                uuidItem = (uuid_t *)itemData;
-                if (uuid_parse (tmp, *uuidItem) == -1)
-                {
-                    rzb_log (LOG_ERR, "%s: Failed to parse UUID: %s", __func__, tmp);
+                uuidItem = (uuid_t *) itemData;
+                if (uuid_parse(tmp, *uuidItem) == -1) {
+                    rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse UUID: %s", __func__, tmp);
                     free(data);
                     return false;
                 }
 
                 itemData += sizeof(uuid_t);
-            }
-            else if (cur->type == RZB_CONF_KEY_TYPE_BOOL)
-            {
+            } else if (cur->type == RZB_CONF_KEY_TYPE_BOOL) {
                 config_setting_lookup_string(item, cur->key, &tmp);
-                boolItem= (bool*)itemData;
-                if (strncasecmp(tmp,"true",4) == 0)
+                boolItem = (bool *) itemData;
+                if (strncasecmp(tmp, "true", 4) == 0)
                     *boolItem = true;
-                else if (strncasecmp(tmp,"false",5) == 0)
+                else if (strncasecmp(tmp, "false", 5) == 0)
                     *boolItem = false;
-                else
-                {
-                    rzb_log (LOG_ERR, "%s: Failed to parse bool: %s", __func__, tmp);
+                else {
+                    rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse bool: %s", __func__, tmp);
                     free(data);
                     return false;
                 }
                 itemData += sizeof(bool);
-            }
-            else
-            {
-                rzb_log (LOG_ERR, "%s: Unsupported list member attribute type.", __func__);
+            } else {
+                rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Unsupported list member attribute type.", __func__);
                 return false;
             }
-        
+
             cur++;
         }
     }
@@ -997,12 +995,12 @@ parseBlockWin32 (HKEY RegKey, RZBConfKey_t * block)
 		            &RegValueLen);	
 
 		        if (lRet != ERROR_SUCCESS) {
-					rzb_log(LOG_ERR, "%s: Failed to retrieve registry value %s", __func__, block->key);
+					rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to retrieve registry value %s", __func__, block->key);
 					break;
 				}
 
 		        if (type != REG_DWORD) {
-            	    rzb_log(LOG_ERR, "%s: Failed because registry key is not the right type.", __func__);
+            	    rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed because registry key is not the right type.", __func__);
 		    	    return false;
 		        }
 
@@ -1023,13 +1021,13 @@ parseBlockWin32 (HKEY RegKey, RZBConfKey_t * block)
 		            &RegValueLen);
 
 				if (lRet != ERROR_SUCCESS) {
-					rzb_log(LOG_ERR, "%s: Failed to retrieve size of registry value. %S", __func__, block->key);
+					rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to retrieve size of registry value. %S", __func__, block->key);
 					break;
 				}
 
 				stringvalue = calloc(RegValueLen, sizeof(char));
 				if (stringvalue == NULL) {
-					rzb_log(LOG_ERR, "%s: Failed to allocate memory.", __func__);
+					rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate memory.", __func__);
 					return false;
 				}
 
@@ -1042,12 +1040,12 @@ parseBlockWin32 (HKEY RegKey, RZBConfKey_t * block)
 		            &RegValueLen);
 
 				if (lRet != ERROR_SUCCESS) {
-					rzb_log(LOG_ERR, "%s: Failed to retireve registry value.", __func__);
+					rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to retireve registry value.", __func__);
 					return false;
 				}
 
 		        if (type != REG_SZ) {
-            	    rzb_log(LOG_ERR, "%s: Failed because registry value is not the right type.", __func__);
+            	    rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed because registry value is not the right type.", __func__);
 					return false;
 		        }
 				
@@ -1056,7 +1054,7 @@ parseBlockWin32 (HKEY RegKey, RZBConfKey_t * block)
 					
 
 		        	if (!((RZBConfCallBack *)block->callback)->parseString (stringvalue, (conf_int_t *)&ParsedValue)) {
-						rzb_log(LOG_ERR, "%s: Failed because callback function parseString() failed. Key: %s, Value: %s", __func__, block->key, stringvalue);
+						rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed because callback function parseString() failed. Key: %s, Value: %s", __func__, block->key, stringvalue);
 						return false;
 			        }
 
@@ -1066,7 +1064,7 @@ parseBlockWin32 (HKEY RegKey, RZBConfKey_t * block)
 				else if (block->type == RZB_CONF_KEY_TYPE_UUID) {
 					if (uuid_parse (stringvalue, (unsigned char *)block->dest) == -1)
                     {
-                        rzb_log (LOG_ERR, "%s: Failed to parse UUID: %s", __func__, RegValue);
+                        rzb_log (LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse UUID: %s", __func__, RegValue);
                         return false;
                     }
 
@@ -1080,7 +1078,7 @@ parseBlockWin32 (HKEY RegKey, RZBConfKey_t * block)
 						*(bool *)block->dest = false;
 					}
 					else {
-						rzb_log (LOG_ERR, "%s: Failed to parse bool: %s", __func__, RegValue);
+						rzb_log (LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse bool: %s", __func__, RegValue);
                         return false;
 					}
 					free(stringvalue);
@@ -1101,7 +1099,7 @@ parseBlockWin32 (HKEY RegKey, RZBConfKey_t * block)
 				break;
 
 			default:
-				rzb_log (LOG_ERR, "%s: Unknown config attribute type.", __func__);
+				rzb_log (LOG_ERR, LOG_C_CONFIG, "%s: Unknown config attribute type.", __func__);
 				return false;
 				
 		}
@@ -1114,106 +1112,87 @@ parseBlockWin32 (HKEY RegKey, RZBConfKey_t * block)
 #else
 
 bool
-parseBlock (config_t * config, RZBConfKey_t * block)
-{
+parseBlock (config_t * config, RZBConfKey_t * block) {
     int status = CONFIG_TRUE;
     conf_int_t t;
     config_setting_t *tt;
     const char *type;
-    while (block->type != RZB_CONF_KEY_TYPE_END)
-    {
-        tt = config_lookup (config, block->key);
-        if (tt == NULL)
-        {
-            rzb_log (LOG_WARNING, "%s: Cant find key: %s", __func__, block->key);
+
+    ASSERT(config != NULL);
+    ASSERT(block != NULL);
+    if (config == NULL || block == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: config or block are NULL", __func__);
+        return false;
+    }
+    while (block->type != RZB_CONF_KEY_TYPE_END) {
+        tt = config_lookup(config, block->key);
+        if (tt == NULL) {
+            rzb_log(LOG_WARNING, LOG_C_CONFIG, "%s: Cant find key: %s", __func__, block->key);
             block++;
             continue;
         }
 
-        if (block->type == RZB_CONF_KEY_TYPE_INT)
-        {
-            status = config_lookup_int (config, block->key, &t);
-            *(conf_int_t *) (block->dest) = t;
-        }
-        else if (block->type == RZB_CONF_KEY_TYPE_STRING)
-        {
-            status = config_lookup_string (config, block->key, block->dest);
-        }
-        else if (block->type == RZB_CONF_KEY_TYPE_PARSED_STRING)
-        {
-            status = config_lookup_string (config, block->key, &type);
-            if (status != CONFIG_TRUE)
-            {
-                rzb_log (LOG_ERR, "%s: failed to lookup string: %s", __func__, config_error_text (config));
+        if (block->type == RZB_CONF_KEY_TYPE_INT) {
+            status = config_lookup_int(config, block->key, &t);
+            *(conf_int_t * )(block->dest) = t;
+        } else if (block->type == RZB_CONF_KEY_TYPE_STRING) {
+            status = config_lookup_string(config, block->key, block->dest);
+        } else if (block->type == RZB_CONF_KEY_TYPE_PARSED_STRING) {
+            status = config_lookup_string(config, block->key, &type);
+            if (status != CONFIG_TRUE) {
+                rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: failed to lookup string: %s", __func__, config_error_text(config));
                 return false;
             }
-            if (!((RZBConfCallBack *)block->callback)->parseString (type, &t))
+            if (!((RZBConfCallBack *) block->callback)->parseString(type, &t))
                 return false;
 
             *(int *) (block->dest) = (int) t;
-        }
-        else if (block->type == RZB_CONF_KEY_TYPE_UUID)
-        {
-            status = config_lookup_string (config, block->key, &type);
-            if (status != CONFIG_TRUE)
-            {
-                rzb_log (LOG_ERR, "%s: failed to lookup string", __func__, config_error_text (config));
+        } else if (block->type == RZB_CONF_KEY_TYPE_UUID) {
+            status = config_lookup_string(config, block->key, &type);
+            if (status != CONFIG_TRUE) {
+                rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: failed to lookup string", __func__, config_error_text(config));
                 return false;
             }
-            if (uuid_parse (type, block->dest) == -1)
-            {
-                rzb_log (LOG_ERR, "%s: Failed to parse UUID: %s", __func__, type);
+            if (uuid_parse(type, block->dest) == -1) {
+                rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse UUID: %s", __func__, type);
                 return false;
             }
 
-        }
-        else if (block->type == RZB_CONF_KEY_TYPE_BOOL)
-        {
-            status = config_lookup_string (config, block->key, &type);
-            if (status != CONFIG_TRUE)
-            {
-                rzb_log (LOG_ERR, "%s: failed to lookup string", __func__, config_error_text (config));
+        } else if (block->type == RZB_CONF_KEY_TYPE_BOOL) {
+            status = config_lookup_string(config, block->key, &type);
+            if (status != CONFIG_TRUE) {
+                rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: failed to lookup string", __func__, config_error_text(config));
                 return false;
             }
-            if (strncasecmp(type,"true",4) == 0)
-                *(bool *)block->dest = true;
-            else if (strncasecmp(type,"false",5) == 0)
-                *(bool *)block->dest = false;
-            else
-            {
-                rzb_log (LOG_ERR, "%s: Failed to parse bool: %s", __func__, type);
+            if (strncasecmp(type, "true", 4) == 0)
+                *(bool *) block->dest = true;
+            else if (strncasecmp(type, "false", 5) == 0)
+                *(bool *) block->dest = false;
+            else {
+                rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse bool: %s", __func__, type);
                 return false;
             }
 
-        }
-        else if (block->type == RZB_CONF_KEY_TYPE_ARRAY)
-        {
-            if (config_setting_is_array(tt) == CONFIG_FALSE)
-            {
-                rzb_log (LOG_ERR, "%s: Failed to parse array: %s", __func__, block->key);
+        } else if (block->type == RZB_CONF_KEY_TYPE_ARRAY) {
+            if (config_setting_is_array(tt) == CONFIG_FALSE) {
+                rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse array: %s", __func__, block->key);
                 return false;
             }
             if (!parseArray(tt, block))
                 return false;
-        }
-        else if (block->type == RZB_CONF_KEY_TYPE_LIST)
-        {
-            if (config_setting_is_list(tt) == CONFIG_FALSE)
-            {
-                rzb_log (LOG_ERR, "%s: Failed to parse list: %s", __func__, block->key);
+        } else if (block->type == RZB_CONF_KEY_TYPE_LIST) {
+            if (config_setting_is_list(tt) == CONFIG_FALSE) {
+                rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to parse list: %s", __func__, block->key);
                 return false;
             }
             if (!parseList(tt, block))
                 return false;
-        }
-        else
-        {
-            rzb_log (LOG_ERR, "%s: Unknown config attribute type.", __func__);
+        } else {
+            rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Unknown config attribute type.", __func__);
             return false;
         }
-        if (status != CONFIG_TRUE)
-        {
-            rzb_log (LOG_ERR, "%s: parsing failure: %s", __func__, config_error_text (config));
+        if (status != CONFIG_TRUE) {
+            rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: parsing failure: %s", __func__, config_error_text(config));
             return false;
         }
         block++;
@@ -1224,37 +1203,36 @@ parseBlock (config_t * config, RZBConfKey_t * block)
 #endif
 
 bool
-parseRoutingType (const char *string, conf_int_t * val)
-{
-    if (!strncasecmp (string, "opaque", 6))
-    {
+parseRoutingType (const char *string, conf_int_t * val) {
+    if (!strncasecmp(string, "opaque", 6)) {
         *val = 0;
         return true;
-    }
-    else if (!strncasecmp (string, "transparent", 11))
-    {
+    } else if (!strncasecmp(string, "transparent", 11)) {
         *val = 1;
         return true;
     }
     return false;
-
 }
 
 #ifndef _MSC_VER
 bool
-testFile (const char *configfile)
-{
+testFile (const char *configfile) {
     struct stat sb;
-    int fd = open (configfile, O_RDONLY);
-
-    if (fd == -1)
-    {
-        rzb_log (LOG_ERR, "%s: Failed to open (%s) in ", __func__, configfile);
+    int fd;
+    ASSERT(configfile != NULL);
+    if (configfile == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: configfile is NULL", __func__);
         return false;
     }
 
-    if (fstat (fd, &sb) == -1)
-    {
+    fd = open (configfile, O_RDONLY);
+
+    if (fd == -1) {
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to open (%s) in ", __func__, configfile);
+        return false;
+    }
+
+    if (fstat(fd, &sb) == -1) {
         return false;
     }
     close (fd);
@@ -1264,13 +1242,11 @@ testFile (const char *configfile)
 #endif
 
 SO_PUBLIC void
-rzbConfCleanUp (void)
-{
+rzbConfCleanUp (void) {
 #ifndef _MSC_VER
     config_destroy (&config);
 #endif
-    while (configList != NULL)
-    {
+    while (configList != NULL) {
 #ifndef _MSC_VER
         config_destroy (&configList->config);
 #endif

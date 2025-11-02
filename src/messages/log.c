@@ -40,19 +40,23 @@ MessageLog_Initialize (
     struct MessageLogSubmission *message;
     ASSERT (p_sMessage != NULL);
 
-    if (p_sMessage == NULL)
+    if (p_sMessage == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: p_sMessage is NULL", __func__);
         return NULL;
+    }
 
-    if ((msg = Message_Create(MESSAGE_TYPE_LOG, MESSAGE_VERSION_1, sizeof(struct MessageLogSubmission))) == NULL)
+    if ((msg = Message_Create(MESSAGE_TYPE_LOG, MESSAGE_VERSION_1, sizeof(struct MessageLogSubmission))) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: Failed to create message.", __func__);
         return NULL;
+    }
 
     message = msg->message;
 
-    if (p_pEventId != NULL)
-    {
-        if ((message->pEventId = EventId_Clone(p_pEventId)) == NULL)
-        {
-            rzb_log(LOG_ERR, "%s: Failed to clone event id.", __func__);
+    if (p_pEventId != NULL) {
+        if ((message->pEventId = EventId_Clone(p_pEventId)) == NULL) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to clone event id.", __func__);
             Log_Destroy(msg);
             return NULL;
         }
@@ -75,11 +79,12 @@ Log_Destroy (struct Message *msg)
     if (msg  == NULL)
         return;
     message = msg->message; 
-
-    // destroy any malloc'd components
-    if (message->pEventId != NULL)
-        EventId_Destroy (message->pEventId);
-
+    if (message != NULL) {
+        // destroy any malloc'd components
+        if (message->pEventId != NULL) {
+            EventId_Destroy(message->pEventId);
+        }
+    }
     Message_Destroy(msg);
 }
 
@@ -90,50 +95,54 @@ Log_Deserialize(struct Message *message)
     struct MessageLogSubmission *submit;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: message is NULL", __func__);
         return false;
+    }
 
-    if ((message->message = calloc(1,sizeof(struct MessageLogSubmission))) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageLogSubmission))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed to allocate message", __func__);
         return false;
+    }
 
-    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed to parse json", __func__);
         return false;
+    }
     
     submit = message->message;
 
-    if (!JsonBuffer_Get_UUID (msg, "Nugget_ID", submit->uuidNuggetId))
-    {
+    if (!JsonBuffer_Get_UUID(msg, "Nugget_ID", submit->uuidNuggetId)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
         return false;
     }
-    if (!JsonBuffer_Get_uint8_t (msg, "Priority", &submit->iPriority))
-    {
+    if (!JsonBuffer_Get_uint8_t(msg, "Priority", &submit->iPriority)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due failure of JsonBuffer_Get_uint8_t", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due failure of JsonBuffer_Get_uint8_t", __func__);
         return false;
     }
 
-    if (json_object_object_get(msg, "Event_ID") != NULL)
-    {
-        if (!JsonBuffer_Get_EventId (msg, "Event_ID", &submit->pEventId))
-        {
+    if (json_object_object_get(msg, "Event_ID") != NULL) {
+        if (!JsonBuffer_Get_EventId(msg, "Event_ID", &submit->pEventId)) {
             json_object_put(msg);
-            rzb_log (LOG_ERR,
-                     "%s: failed due to failure of JsonBuffer_Get_EventId", __func__);
+            rzb_log(LOG_ERR, LOG_C_CORE,
+                    "%s: failed due to failure of JsonBuffer_Get_EventId", __func__);
             return false;
         }
-    }
-    else
+    } else {
         submit->pEventId = NULL;
+    }
 
-    if ((submit->sMessage = (uint8_t *)JsonBuffer_Get_String(msg, "Message")) == NULL)
-    {
+    if ((submit->sMessage = (uint8_t *) JsonBuffer_Get_String(msg, "Message")) == NULL) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Get_String", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_String", __func__);
         return false;
     }
 
@@ -148,54 +157,54 @@ Log_Serialize(struct Message *message)
     const char * wire;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: message is NULL", __func__);
         return false;
+    }
 
     submit = message->message;
 
-    if ((msg = json_object_new_object()) == NULL)
-        return false;
-
-    if (!JsonBuffer_Put_UUID (msg, "Nugget_ID", submit->uuidNuggetId))
-    {
-        json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
-        return false;
-    }
-    if (!JsonBuffer_Put_uint8_t (msg, "Priority", submit->iPriority))
-    {
-        json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due failure of JsonBuffer_Put_uint8_t", __func__);
+    if ((msg = json_object_new_object()) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed to create new json object", __func__);
         return false;
     }
 
-    if (submit->pEventId != NULL)
-    {
-        if (!JsonBuffer_Put_EventId (msg, "Event_ID", submit->pEventId))
-        {
+    if (!JsonBuffer_Put_UUID(msg, "Nugget_ID", submit->uuidNuggetId)) {
+        json_object_put(msg);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
+        return false;
+    }
+    if (!JsonBuffer_Put_uint8_t(msg, "Priority", submit->iPriority)) {
+        json_object_put(msg);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due failure of JsonBuffer_Put_uint8_t", __func__);
+        return false;
+    }
+
+    if (submit->pEventId != NULL) {
+        if (!JsonBuffer_Put_EventId(msg, "Event_ID", submit->pEventId)) {
             json_object_put(msg);
-            rzb_log (LOG_ERR,
-                     "%s: failed due to failure of JsonBuffer_Put_BlockId", __func__);
+            rzb_log(LOG_ERR, LOG_C_CORE,
+                    "%s: failed due to failure of JsonBuffer_Put_BlockId", __func__);
             return false;
         }
     }
-    if (!JsonBuffer_Put_String (msg, "Message", (char *)submit->sMessage))
-    {
+    if (!JsonBuffer_Put_String(msg, "Message", (char *) submit->sMessage)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Put_String", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Put_String", __func__);
         return false;
     }
     wire = json_object_to_json_string(msg);
-    message->length=strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
-    {
+    message->length = strlen(wire);
+    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
         json_object_put(msg);
         return false;
     }
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *) message->serialized, wire);
     json_object_put(msg);
 
     return true;

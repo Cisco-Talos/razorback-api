@@ -126,7 +126,7 @@ Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
     thread = (Thread_t *)calloc (1, sizeof (Thread_t));
     if (thread == NULL)
     {
-        rzb_log (LOG_ERR,
+        rzb_log (LOG_ERR,LOG_C_CORE,
                  "%s: Failed to launch thread in Thread_Launch due to out of memory for Thread", __func__);
         return NULL;
     }
@@ -163,7 +163,7 @@ Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
     {
         Mutex_Destroy(thread->mMutex);
         free (thread);
-        rzb_log (LOG_ERR,
+        rzb_log (LOG_ERR,LOG_C_CORE,
                  "%s: Failed to launch thread in Thread_Launch due to pthread_create error (%i)", __func__,
                  errno);
         return NULL;
@@ -284,7 +284,7 @@ Thread_Join(Thread_t *thread)
     void *ret;
     int res =0;
     if ((res = pthread_join(thread->iThread, &ret)) != 0)
-        rzb_log(LOG_ERR, "%s: Failed to join: %i", __func__, res);
+        rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to join: %i", __func__, res);
 #endif //_MSC_VER
 }
 
@@ -337,7 +337,7 @@ Thread_GetCurrentContext(void)
     thread = Thread_GetCurrent();
     if (thread == NULL)
     {
-        rzb_log(LOG_ERR, "%s: Failed to get current thread", __func__);
+        rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to get current thread", __func__);
         return NULL;
     }
     cont = Thread_GetContext(thread);
@@ -476,12 +476,12 @@ initThreading_pthreads (void)
     act.sa_flags = 0;
     sigemptyset(&act.sa_mask);
     if (sigaction(SIGUSR1, &act, NULL) < 0)
-        rzb_log(LOG_ERR, "%s: Failed to install signal handler", __func__);
+        rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to install signal handler", __func__);
 }
 
 static void handler(int sig)
 {
-    rzb_log(LOG_DEBUG, "Thread Got Signal");
+    rzb_log(LOG_DEBUG,LOG_C_CORE, "Thread Got Signal");
     return;
 }
 

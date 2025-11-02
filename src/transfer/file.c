@@ -41,7 +41,7 @@ static char * File_mkdir(const char *fmt, ...)
     va_start (argp, fmt);
     if (vasprintf (&dir, fmt, argp) == -1)
     {
-        rzb_log (LOG_ERR, "%s: Could not allocate directory string",
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Could not allocate directory string",
                  __func__);
         return NULL;
     }
@@ -55,7 +55,7 @@ static char * File_mkdir(const char *fmt, ...)
                    S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1)	
 #endif
         {
-            rzb_log (LOG_ERR, "%s: Error creating directory %s", __func__,
+            rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Error creating directory %s", __func__,
                      dir);
             free (dir);
             return NULL;
@@ -109,7 +109,7 @@ writeWrap (int fd, uint8_t * data, uint64_t length)
         bytessofar = write (fd, data + totalbytes, SizeDword - totalbytes);
         if (bytessofar == -1)
         {
-            rzb_perror ("writeWrap: Could not write data to file: %s");
+            rzb_perror (LOG_C_TRANSFER,"writeWrap: Could not write data to file: %s");
             return 0;
         }
         totalbytes += bytessofar;
@@ -133,18 +133,18 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
 
     if ((filename = Transfer_generateFilename (item->pEvent->pBlock)) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: failed to generate file name", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file name", __func__);
         return TRANSFER_FAIL_LOCAL;
     }
     if ((dir = createDirectory(item->pEvent->pBlock, Config_getLocalityBlockStore())) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: failed to create storage dir", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to create storage dir", __func__);
         free(filename);
         return TRANSFER_FAIL_LOCAL;
     }
     if (asprintf(&path, "%s/%s", dir, filename) == -1)
     {
-        rzb_log (LOG_ERR, "%s: failed to generate file path", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file path", __func__);
         free(filename);
         free(dir);
         return TRANSFER_FAIL_LOCAL;
@@ -165,7 +165,7 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
                S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (fd == -1)
     {
-        rzb_perror ("StoreDataAsFile: Could not open file for writing: %s");
+        rzb_perror (LOG_C_TRANSFER,"StoreDataAsFile: Could not open file for writing: %s");
         free (path);
         return TRANSFER_FAIL_LOCAL;
     }
@@ -181,7 +181,7 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
             {
                 if (writeWrap(fd,data,len) == 0)
                 {
-                    rzb_log (LOG_ERR, "%s: Write failed.", __func__);
+                    rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Write failed.", __func__);
                     close (fd);
                     return TRANSFER_FAIL_LOCAL;
                 }
@@ -193,7 +193,7 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
         {
             if ((writeWrap (fd, dataItem->data.pointer, dataItem->iLength)) == 0)
             {
-                rzb_log (LOG_ERR, "%s: Write failed.", __func__);
+                rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Write failed.", __func__);
                 close (fd);
                 return TRANSFER_FAIL_LOCAL;
             }
@@ -222,13 +222,13 @@ Transfer_File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 
     if ((filename = Transfer_generateFilename (block)) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: failed to generate file name", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file name", __func__);
         return TRANSFER_FAIL_LOCAL;
     }
     if (asprintf(&path, "%s/%c/%c/%c/%c/%s", Config_getLocalityBlockStore(),
                 filename[0], filename[1], filename[2], filename[3], filename) == -1)
     {
-        rzb_log (LOG_ERR, "%s: failed to generate file path", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file path", __func__);
         return TRANSFER_FAIL_LOCAL;
     }
     free (filename); filename = NULL;
@@ -242,13 +242,13 @@ Transfer_File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     if (fd == -1)
     {
         rzb_perror
-            ("RetrieveDataAsFile: Could not open file for reading: %s");
+            (LOG_C_TRANSFER,"RetrieveDataAsFile: Could not open file for reading: %s");
         return TRANSFER_FAIL_LOCAL;
     }
 
     if (fstat (fd, &fs) == -1)
     {
-        rzb_perror ("RetrieveDataAsFile: Could not stat file: %s");
+        rzb_perror (LOG_C_TRANSFER,"RetrieveDataAsFile: Could not stat file: %s");
         close (fd);
         return TRANSFER_FAIL_LOCAL;
     }
@@ -271,13 +271,13 @@ File_Delete(struct Block *block)
 
     if ((filename = Transfer_generateFilename (block)) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: failed to generate file name", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file name", __func__);
         return false;
     }
     if (asprintf(&path, "%s/%c/%c/%c/%c/%s", Config_getLocalityBlockStore(),
                 filename[0], filename[1], filename[2], filename[3], filename) == -1)
     {
-        rzb_log (LOG_ERR, "%s: failed to generate file path", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file path", __func__);
         return false;
     }
     free (filename); filename = NULL;
@@ -288,7 +288,7 @@ File_Delete(struct Block *block)
 #endif
 
     if (remove(path) != 0)
-		rzb_perror("File_Remove: failed to delete file: %s");
+		rzb_perror(LOG_C_TRANSFER,"File_Remove: failed to delete file: %s");
 
 
 	return true;

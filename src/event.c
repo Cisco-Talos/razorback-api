@@ -5,6 +5,7 @@
 #include <razorback/block.h>
 #include <razorback/ntlv.h>
 #include <razorback/list.h>
+#include <razorback/debug.h>
 
 #include <time.h>
 #include <string.h>
@@ -14,20 +15,17 @@
 #endif
 
 SO_PUBLIC struct EventId *
-EventId_Create (void)
-{
+EventId_Create (void) {
     struct EventId *id;
     struct timespec l_tsTime;
 
     memset(&l_tsTime, 0, sizeof(struct timespec));
-    if (clock_gettime(CLOCK_REALTIME, &l_tsTime) == -1)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to get time stamp", __func__);
+    if (clock_gettime(CLOCK_REALTIME, &l_tsTime) == -1) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get time stamp", __func__);
         return NULL;
     }
-    if ((id = calloc(1, sizeof(struct EventId))) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed allocate event", __func__);
+    if ((id = calloc(1, sizeof(struct EventId))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed allocate event", __func__);
         return NULL;
     }
 
@@ -37,13 +35,17 @@ EventId_Create (void)
 }
 
 SO_PUBLIC struct EventId *
-EventId_Clone (struct EventId *in)
-{
+EventId_Clone (struct EventId *in) {
     struct EventId *id;
 
-    if ((id = calloc(1, sizeof(struct EventId))) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed allocate event", __func__);
+    ASSERT(in != NULL);
+    if (in == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL input id", __func__);
+        return NULL;
+    }
+
+    if ((id = calloc(1, sizeof(struct EventId))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed allocate event", __func__);
         return NULL;
     }
     uuid_copy(id->uuidNuggetId, in->uuidNuggetId); 
@@ -53,38 +55,37 @@ EventId_Clone (struct EventId *in)
 }
 
 SO_PUBLIC void
-EventId_Destroy (struct EventId *id)
-{
+EventId_Destroy (struct EventId *id) {
+    ASSERT(id != NULL);
+    if (id == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL id", __func__);
+        return;
+    }
     free(id);
 }
 
 SO_PUBLIC struct Event *
-Event_Create (void)
-{
+Event_Create (void) {
     struct Event *event = NULL;
 
-    if ((event = calloc(1, sizeof(struct Event))) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed allocate event", __func__);
+    if ((event = calloc(1, sizeof(struct Event))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed allocate event", __func__);
         return NULL;
     }
-    if ((event->pId = EventId_Create()) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to allocate event id data", __func__);
+    if ((event->pId = EventId_Create()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate event id data", __func__);
         Event_Destroy(event);
         return NULL;
     }
 
-    if ((event->pMetaDataList = NTLVList_Create()) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to allocate event meta data", __func__);
+    if ((event->pMetaDataList = NTLVList_Create()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate event meta data", __func__);
         Event_Destroy(event);
         return NULL;
     }
 
-    if ((event->pBlock = Block_Create()) == NULL)
-    {
-        rzb_log(LOG_ERR, "%s: Failed to allocate event block data", __func__);
+    if ((event->pBlock = Block_Create()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate event block data", __func__);
         Event_Destroy(event);
         return NULL;
     }
@@ -93,37 +94,32 @@ Event_Create (void)
 }
 
 SO_PUBLIC void
-Event_Destroy (struct Event *event)
-{
-    if (event->pId != NULL)
+Event_Destroy (struct Event *event) {
+    ASSERT(event != NULL);
+    if (event == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL event", __func__);
+        return;
+    }
+
+    if (event->pId != NULL) {
         EventId_Destroy(event->pId);
+    }
 
-    if (event->pBlock != NULL)
+    if (event->pBlock != NULL) {
         Block_Destroy(event->pBlock);
+    }
 
-    if (event->pMetaDataList != NULL)
+    if (event->pMetaDataList != NULL) {
         List_Destroy(event->pMetaDataList);
+    }
 
-    if (event->pParent != NULL)
+    if (event->pParent != NULL) {
         Event_Destroy(event->pParent);
+    }
 
-    if (event->pParentId != NULL)
+    if (event->pParentId != NULL) {
         EventId_Destroy(event->pParentId);
+    }
 
     free(event);
 }
-
-SO_PUBLIC uint32_t 
-Event_BinaryLength (struct Event *event)
-{
-    uint32_t size = Block_BinaryLength(event->pBlock) +
-        NTLVList_Size(event->pMetaDataList) +
-        (uint32_t) sizeof (struct EventId) +
-        (uint32_t) sizeof (event->uuidApplicationType);
-    if (event->pParentId != NULL)
-        size += sizeof (struct EventId);
-
-    return size;
-
-}
-

@@ -31,7 +31,7 @@ Transfer_generateFilename (struct Block *block)
     char *filename;
     if ((hash = Hash_ToText (block->pId->pHash)) == NULL)
     {
-        rzb_log (LOG_ERR, "%s: Could not convert hash to text", __func__);
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Could not convert hash to text", __func__);
         return NULL;
     }
 #ifdef _MSC_VER
@@ -56,7 +56,7 @@ Transfer_Init(void)
 {
     char * mode = Config_getTransferMode();
     if ((mode == NULL) || (strcmp(mode, "") ==0) ){
-        rzb_log(LOG_ERR, "%s: Global.TransferMode not set in API config file.", __func__);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Global.TransferMode not set in API config file.", __func__);
         return false;
     }
     sg_transportList = List_Create(LIST_MODE_GENERIC,
@@ -77,10 +77,10 @@ Transfer_Init(void)
         return false;
 
     if (strcmp(mode, "traditional") == 0) {
-        rzb_log(LOG_INFO, "%s: File transfers taking place in traditional mode", __func__);
+        rzb_log(LOG_INFO,LOG_C_TRANSFER, "%s: File transfers taking place in traditional mode", __func__);
         sg_bTraditionalMode = true;
     } else {
-        rzb_log(LOG_INFO, "%s: File transfers taking place using plugin: %s", __func__, mode);
+        rzb_log(LOG_INFO,LOG_C_TRANSFER, "%s: File transfers taking place using plugin: %s", __func__, mode);
         sg_bTraditionalMode = false;
         char * soVersion;
         int l_iIt, l_iLen;
@@ -100,7 +100,7 @@ Transfer_Init(void)
         if ((pluginDlHandle = dlopen(soFile, RTLD_LOCAL | RTLD_NOW)) == NULL) {
             char * errstr = dlerror();
 
-            rzb_log(LOG_ERR, "%s: Failed to open %s, %s", __func__, soFile, errstr);
+            rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to open %s, %s", __func__, soFile, errstr);
             free(soFile);
             return false;
         }
@@ -109,12 +109,12 @@ Transfer_Init(void)
 
         *(void **)&initPlugin = dlsym(pluginDlHandle, "transferInit");
        if (initPlugin == NULL) {
-            rzb_log(LOG_ERR, "%s: Failed find plugin init function", __func__);
+            rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed find plugin init function", __func__);
             return false;
         }
 
         if (!initPlugin()) {
-            rzb_log(LOG_ERR, "%s: Failed to initialize transfer plugin", __func__);
+            rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to initialize transfer plugin", __func__);
             return false;
         }
     }
@@ -143,11 +143,11 @@ Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
 	enum TransferStatus status;
 
     if ((trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol)) == NULL) {
-        rzb_log(LOG_ERR, "Failed to find transport descriptor for protocol: %u", dispatcher->dispatcher->protocol);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "Failed to find transport descriptor for protocol: %u", dispatcher->dispatcher->protocol);
         return TRANSFER_FAIL_LOCAL;
     }
-    rzb_log(LOG_DEBUG, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
-    rzb_log(LOG_DEBUG, "%s: Transport: %s", __func__, trans->name);
+    rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
+    rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Transport: %s", __func__, trans->name);
 
     for (i =0; i < RETRIES; i++)
 	{
@@ -166,11 +166,11 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 	enum TransferStatus status;
 
     if ((trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol)) == NULL) {
-        rzb_log(LOG_ERR, "%s: Failed to find transport descriptor", __func__);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to find transport descriptor", __func__);
         return TRANSFER_FAIL_LOCAL;
     }
-    rzb_log(LOG_DEBUG, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
-    rzb_log(LOG_DEBUG, "%s: Transport: %s", __func__, trans->name);
+    rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
+    rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Transport: %s", __func__, trans->name);
 
 
 	for (i = 0; i < RETRIES; i++)
@@ -178,7 +178,7 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 		status = trans->fetch(block, dispatcher);
 		if (status == TRANSFER_OK)
 			break;
-		rzb_log(LOG_ERR, "%s: Retrying transfer", __func__);
+		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Retrying transfer", __func__);
 	}
 	return status;
 }
@@ -189,12 +189,12 @@ Transfer_Prepare_File(struct Block *block, char *file, bool temp)
     ASSERT(file != NULL);
     if (file == NULL)
 	{
-		rzb_log(LOG_ERR, "%s: File is null", __func__);
+		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: File is null", __func__);
         return false;
 	}
 	if ((block->data.file=fopen(file, "r")) == NULL)
 	{
-		rzb_log(LOG_ERR, "%s: Failed to open file handle: %s, File: %s", strerror(errno), file);
+		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to open file handle: %s, File: %s", strerror(errno), file);
 		return false;
 	}
 	block->data.fileName = file;
@@ -212,14 +212,14 @@ again:
 			goto again;
 		}
 
-		rzb_log(LOG_ERR, "%s: Failed to create file handle: File: %s Error: %d", __func__, block->data.fileName, GetLastError());
+		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to create file handle: File: %s Error: %d", __func__, block->data.fileName, GetLastError());
 		return false;
 	}
 	block->data.mapHandle = CreateFileMapping(block->data.mfileHandle, NULL, PAGE_READONLY, 0,0, NULL); 
 	if (block->data.mapHandle == NULL)
 	{
 		CloseHandle(block->data.mfileHandle);
-		rzb_log(LOG_ERR, "%s: Failed to create file mapping: %d", __func__, GetLastError());
+		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to create file mapping: %d", __func__, GetLastError());
 		return false;
 	}
 	block->data.pointer = MapViewOfFile(block->data.mapHandle, FILE_MAP_READ, 0,0,0); 
@@ -227,14 +227,14 @@ again:
 	{
 		CloseHandle(block->data.mfileHandle);
 		CloseHandle(block->data.mapHandle);
-		rzb_log(LOG_ERR, "%s: Failed to create map view", __func__);
+		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to create map view", __func__);
 		return false;
 	}
 #else //_MSC_VER
     block->data.pointer = mmap (NULL, block->pId->iLength, PROT_READ, MAP_PRIVATE, fileno(block->data.file), 0);
     if (block->data.pointer == MAP_FAILED)
     {
-        rzb_perror("%s");
+        rzb_perror(LOG_C_TRANSFER,"%s");
         block->data.pointer = NULL;
 		fclose(block->data.file);
         return false;
@@ -246,15 +246,15 @@ again:
 void 
 Transfer_Free(struct Block *block, struct ConnectedEntity *dispatcher)
 {
-	//rzb_log(LOG_ERR, "%s: Called for %s", __func__, block->data.fileName);
+	//rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Called for %s", __func__, block->data.fileName);
     if (block->data.pointer != NULL)
     {
 #ifdef _MSC_VER
 		UnmapViewOfFile(block->data.pointer); 
 		if (CloseHandle(block->data.mapHandle) == 0)
-			rzb_log(LOG_ERR, "%s: Thread ID: %d Failed to close map handle: %d, File: %s", __func__, Thread_GetCurrent()->iThread, GetLastError(), block->data.fileName);
+			rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Thread ID: %d Failed to close map handle: %d, File: %s", __func__, Thread_GetCurrent()->iThread, GetLastError(), block->data.fileName);
 		if (CloseHandle(block->data.mfileHandle) == 0)
-			rzb_log(LOG_ERR, "%s: Thread ID: %d Failed to close file handle: %d, File: %s", __func__, Thread_GetCurrent()->iThread, GetLastError(), block->data.fileName);
+			rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Thread ID: %d Failed to close file handle: %d, File: %s", __func__, Thread_GetCurrent()->iThread, GetLastError(), block->data.fileName);
 
 #else //_MSC_VER
         munmap(block->data.pointer, block->pId->iLength);

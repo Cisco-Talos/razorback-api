@@ -12,12 +12,11 @@
 
 
 SO_PUBLIC bool 
-Metadata_Add_String (List_t *list, uuid_t name, const char *string)
-{
+Metadata_Add_String (List_t *list, uuid_t name, const char *string){
     uuid_t uuidType;
     if (!UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuidType))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup type uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup type uuid", __func__);
         return false;
     }
     return Metadata_Add(list, name, uuidType, strlen(string)+1, (uint8_t *)string);
@@ -29,7 +28,7 @@ Metadata_Get_String (List_t *list, uuid_t name, uint32_t *len, const char **stri
     uuid_t uuidType;
     if (!UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuidType))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup type uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup type uuid", __func__);
         return false;
     }
     return Metadata_Get(list, name, uuidType, len, (const uint8_t **)string);
@@ -41,7 +40,7 @@ Metadata_Add_IPv4 (List_t *list, uuid_t name, const uint8_t *addr)
     uuid_t uuidType;
     if (!UUID_Get_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, uuidType))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup type uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup type uuid", __func__);
         return false;
     }
     return Metadata_Add(list, name, uuidType, 4, addr);
@@ -54,7 +53,7 @@ Metadata_Get_IPv4 (List_t *list, uuid_t name, const uint8_t **addr)
     uint32_t size;
     if (!UUID_Get_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, uuidType))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup type uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup type uuid", __func__);
         return false;
     }
     return Metadata_Get(list, name, uuidType, &size, addr);
@@ -66,7 +65,7 @@ Metadata_Add_IPv6 (List_t *list, uuid_t name, const uint8_t *addr)
     uuid_t uuidType;
     if (!UUID_Get_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, uuidType))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup type uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup type uuid", __func__);
         return false;
     }
     return Metadata_Add(list, name, uuidType, (128/8), addr);
@@ -79,7 +78,7 @@ Metadata_Get_IPv6 (List_t *list, uuid_t name, const uint8_t **addr)
     uint32_t size;
     if (!UUID_Get_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, uuidType))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup type uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup type uuid", __func__);
         return false;
     }
     return Metadata_Get(list, name, uuidType, &size, addr);
@@ -91,7 +90,7 @@ Metadata_Add_Port (List_t *list, uuid_t name, const uint16_t port)
     uuid_t uuidType;
     if (!UUID_Get_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, uuidType))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup type uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup type uuid", __func__);
         return false;
     }
     return Metadata_Add(list, name, uuidType, 2, (uint8_t*)&port);
@@ -105,7 +104,7 @@ Metadata_Get_Port (List_t *list, uuid_t name, uint16_t *port)
     uint16_t *lPort;
     if (!UUID_Get_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, uuidType))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup type uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup type uuid", __func__);
         return false;
     }
     if (!Metadata_Get(list, name, uuidType, &size, (const uint8_t**)&lPort))
@@ -122,7 +121,7 @@ Metadata_Add_Filename (List_t *list, const char *name)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_FILENAME, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_String(list, uuidName, name);
@@ -134,7 +133,7 @@ Metadata_Add_Hostname (List_t *list, const char *name)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_HOSTNAME, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_String(list, uuidName, name);
@@ -146,7 +145,7 @@ Metadata_Add_URI (List_t *list, const char *name)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_URI, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_String(list, uuidName, name);
@@ -158,7 +157,7 @@ Metadata_Add_HttpRequest (List_t *list, const char *name)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_HTTP_REQUEST, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_String(list, uuidName, name);
@@ -170,7 +169,7 @@ Metadata_Add_HttpResponse (List_t *list, const char *name)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_HTTP_RESPONSE, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_String(list, uuidName, name);
@@ -185,7 +184,7 @@ Metadata_Add_MalwareName (List_t *list, const char *vendor, const char *name)
 
     if (!UUID_Get_UUID(NTLV_NAME_MALWARENAME, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     if (asprintf(&tmp, "%s:%s", vendor, name) == -1)
@@ -203,7 +202,7 @@ Metadata_Add_Report (List_t *list, const char *text)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_REPORT, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_String(list, uuidName, text);
@@ -215,7 +214,7 @@ Metadata_Add_CVE (List_t *list, const char *text)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_CVE, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_String(list, uuidName, text);
@@ -227,7 +226,7 @@ Metadata_Add_BID (List_t *list, const char *text)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_BID, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_String(list, uuidName, text);
@@ -238,7 +237,7 @@ Metadata_Add_OSVDB (List_t *list, const char *text)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_OSVDB, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_String(list, uuidName, text);
@@ -250,7 +249,7 @@ Metadata_Add_IPv4_Source (List_t *list, const uint8_t *addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_IPv4(list, uuidName, addr);
@@ -262,7 +261,7 @@ Metadata_Get_IPv4_Source (List_t *list, const uint8_t **addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Get_IPv4(list, uuidName, addr);
@@ -274,7 +273,7 @@ Metadata_Add_IPv4_Destination (List_t *list, const uint8_t *addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_IPv4(list, uuidName, addr);
@@ -286,7 +285,7 @@ Metadata_Get_IPv4_Destination (List_t *list, const uint8_t **addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Get_IPv4(list, uuidName, addr);
@@ -298,7 +297,7 @@ Metadata_Add_IPv6_Source (List_t *list, const uint8_t *addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_IPv6(list, uuidName, addr);
@@ -310,7 +309,7 @@ Metadata_Get_IPv6_Source (List_t *list, const uint8_t **addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Get_IPv6(list, uuidName, addr);
@@ -322,7 +321,7 @@ Metadata_Add_IPv6_Destination (List_t *list, const uint8_t *addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_IPv6(list, uuidName, addr);
@@ -334,7 +333,7 @@ Metadata_Get_IPv6_Destination (List_t *list, const uint8_t **addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Get_IPv6(list, uuidName, addr);
@@ -346,7 +345,7 @@ Metadata_Add_Port_Source (List_t *list, const uint16_t addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_Port(list, uuidName, addr);
@@ -358,7 +357,7 @@ Metadata_Get_Port_Source (List_t *list, uint16_t *addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_SOURCE, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Get_Port(list, uuidName, addr);
@@ -370,7 +369,7 @@ Metadata_Add_Port_Destination (List_t *list, const uint16_t addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Add_Port(list, uuidName, addr);
@@ -382,7 +381,7 @@ Metadata_Get_Port_Destination (List_t *list, uint16_t *addr)
     uuid_t uuidName;
     if (!UUID_Get_UUID(NTLV_NAME_DEST, UUID_TYPE_NTLV_NAME, uuidName))
     {
-        rzb_log(LOG_ERR, "%s: Failed to lookup name uuid", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup name uuid", __func__);
         return false;
     }
     return Metadata_Get_Port(list, uuidName, addr);

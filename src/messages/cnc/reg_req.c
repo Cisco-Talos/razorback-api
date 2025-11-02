@@ -52,7 +52,7 @@ MessageRegistrationRequest_Initialize (
         if ((message->pDataTypeList =
              malloc (sizeof (uuid_t) * p_iDataTypeCount)) == NULL)
         {
-            rzb_log (LOG_ERR,
+            rzb_log (LOG_ERR, LOG_C_CORE,
                      "%s: failed due to lack of memory", __func__);
             RegistrationRequest_Destroy(msg);
             return NULL;
@@ -81,17 +81,21 @@ Message_CnC_RegReq_Setup(struct Message *msg)
 }
 
 static void
-RegistrationRequest_Destroy (struct Message *msg)
-{
+RegistrationRequest_Destroy (struct Message *msg) {
     struct MessageRegistrationRequest *message;
 
     ASSERT (msg != NULL);
-    if (msg == NULL)
+    if (msg == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: called with NULL msg", __func__);
         return;
+    }
     message = msg->message;
-
-	if(message->pDataTypeList != NULL)
-	    free (message->pDataTypeList);
+    if (message != NULL) {
+        if(message->pDataTypeList != NULL) {
+            free(message->pDataTypeList);
+        }
+    }
 
     Message_Destroy(msg);
 }
@@ -106,59 +110,62 @@ RegistrationRequest_Deserialize(struct Message *message)
 	size_t i;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: called with NULL message", __func__);
         return false;
+    }
 
-    if ((message->message = calloc(1,sizeof(struct MessageRegistrationRequest))) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageRegistrationRequest))) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to lack of memory", __func__);
         return false;
+    }
 
-    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to failure of json_tokener_parse", __func__);
         return false;
+    }
  
     regReq = message->message;
 
-    if (!JsonBuffer_Get_UUID (msg, "Nugget_Type", regReq->uuidNuggetType))
-    {
+    if (!JsonBuffer_Get_UUID(msg, "Nugget_Type", regReq->uuidNuggetType)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
         return false;
     }
     if (!JsonBuffer_Get_UUID
-        (msg, "App_Type", regReq->uuidApplicationType))
-    {
+            (msg, "App_Type", regReq->uuidApplicationType)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
         return false;
     }
-    if ((object = json_object_object_get(msg, "Data_Types")) != NULL)
-    {
+    if ((object = json_object_object_get(msg, "Data_Types")) != NULL) {
         regReq->iDataTypeCount = json_object_array_length(object);
-        if((regReq->pDataTypeList = (uuid_t *) malloc (sizeof (uuid_t) * regReq->iDataTypeCount)) == NULL)
-        {
+        if ((regReq->pDataTypeList = (uuid_t *) malloc(sizeof(uuid_t) * regReq->iDataTypeCount)) == NULL) {
             json_object_put(msg);
-            rzb_log (LOG_ERR, "%s: failed due to lack of memory", __func__);
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed due to lack of memory", __func__);
             return false;
         }
-    
-        for (i = 0; i < regReq->iDataTypeCount; i++)
-        {
+
+        for (i = 0; i < regReq->iDataTypeCount; i++) {
             item = json_object_array_get_idx(object, i);
             if (((str = json_object_get_string(item)) == NULL) ||
-                    (uuid_parse(str,regReq->pDataTypeList[i])))
-            {
-                free (regReq->pDataTypeList);
+                (uuid_parse(str, regReq->pDataTypeList[i]))) {
+                free(regReq->pDataTypeList);
                 json_object_put(msg);
-                rzb_log (LOG_ERR, "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
+                rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
                 return false;
             }
 
         }
-    } 
-    else
+    } else {
         regReq->pDataTypeList = NULL;
-    
+    }
+
     json_object_put(msg);
     return true;
 }
@@ -172,41 +179,41 @@ RegistrationRequest_Serialize(struct Message *message)
     char uuid[UUID_STRING_LENGTH];
 	size_t i;
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: called with NULL message", __func__);
         return false;
+    }
 
     regReq = message->message;
 
-    if ((msg = json_object_new_object()) == NULL)
+    if ((msg = json_object_new_object()) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to failure of json_object_new_object", __func__);
         return false;
+    }
 
     if (!JsonBuffer_Put_UUID
-        (msg, "Nugget_Type", regReq->uuidNuggetType))
-    {
+            (msg, "Nugget_Type", regReq->uuidNuggetType)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
         return false;
     }
     if (!JsonBuffer_Put_UUID
-        (msg, "App_Type", regReq->uuidApplicationType))
-    {
+            (msg, "App_Type", regReq->uuidApplicationType)) {
         json_object_put(msg);
-        rzb_log (LOG_ERR,
-                 "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to failure of JsonBuffer_Put_UUID", __func__);
         return false;
     }
-    if ((object = json_object_new_array()) == NULL)
-    {
+    if ((object = json_object_new_array()) == NULL) {
         json_object_put(msg);
         return false;
     }
-    for (i = 0; i < regReq->iDataTypeCount;
-         i++)
-    {
+    for (i = 0; i < regReq->iDataTypeCount; i++) {
         uuid_unparse(regReq->pDataTypeList[i], uuid);
-        if ((item = json_object_new_string(uuid)) == NULL)
-        {
+        if ((item = json_object_new_string(uuid)) == NULL) {
             json_object_put(msg);
             return false;
         }
@@ -215,13 +222,14 @@ RegistrationRequest_Serialize(struct Message *message)
     json_object_object_add(msg, "Data_Types", object);
 
     wire = json_object_to_json_string(msg);
-    message->length=strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
-    {
+    message->length = strlen(wire);
+    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE,
+                 "%s: failed due to lack of memory", __func__);
         json_object_put(msg);
         return false;
     }
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *) message->serialized, wire);
     json_object_put(msg);
 
 

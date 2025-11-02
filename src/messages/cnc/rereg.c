@@ -13,8 +13,17 @@ MessageReReg_Initialize (
                          const uuid_t p_uuidDestNugget)
 {
     struct Message *msg;
-    if ((msg = Message_Create_Directed(MESSAGE_TYPE_REREG, MESSAGE_VERSION_1, 0, p_uuidSourceNugget, p_uuidDestNugget)) == NULL)
+    msg = Message_Create_Directed(
+        MESSAGE_TYPE_REREG,
+        MESSAGE_VERSION_1,
+        0,
+        p_uuidSourceNugget,
+        p_uuidDestNugget
+    );
+    if (msg == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message_Create_Directed failed", __func__);
         return NULL;
+    }
 
     msg->destroy = Message_Destroy;
     msg->deserialize = Message_Deserialize_Empty;

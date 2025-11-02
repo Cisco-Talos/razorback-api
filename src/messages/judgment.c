@@ -38,11 +38,15 @@ MessageJudgmentSubmission_Initialize (
     struct MessageJudgmentSubmission *message;
 
     ASSERT (p_pJudgment != NULL);
-    if (p_pJudgment == NULL)
+    if (p_pJudgment == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Judgment pointer is NULL", __func__);
         return NULL;
+    }
 
-    if ((msg = Message_Create(MESSAGE_TYPE_JUDGMENT, MESSAGE_VERSION_1, sizeof(struct MessageJudgmentSubmission))) == NULL)
+    if ((msg = Message_Create(MESSAGE_TYPE_JUDGMENT, MESSAGE_VERSION_1, sizeof(struct MessageJudgmentSubmission))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message_Create failed", __func__);
         return NULL;
+    }
 
     message = msg->message;
     message->pJudgment = p_pJudgment;
@@ -61,13 +65,17 @@ JudgmentSubmission_Destroy (struct Message
 {
     struct MessageJudgmentSubmission *msg;
     ASSERT (message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message pointer is NULL", __func__);
         return;
+    }
 
     msg = message->message;
-    
-    if (msg->pJudgment != NULL)
-        Judgment_Destroy(msg->pJudgment);
+    if (msg != NULL) {
+        if (msg->pJudgment != NULL) {
+            Judgment_Destroy(msg->pJudgment);
+        }
+    }
     Message_Destroy(message);
 }
 
@@ -78,24 +86,30 @@ JudgmentSubmission_Deserialize(struct Message *message)
     json_object *msg;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message pointer is NULL", __func__);
         return false;
+    }
 
-    if ((message->message = calloc(1,sizeof(struct MessageJudgmentSubmission))) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageJudgmentSubmission))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unable to allocate memory", __func__);
         return false;
+    }
 
-    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: json_tokener_parse failed", __func__);
         return false;
+    }
     
     submit = message->message;
 
-    if (!JsonBuffer_Get_uint8_t (msg, "Reason", &submit->iReason))
-    {
+    if (!JsonBuffer_Get_uint8_t(msg, "Reason", &submit->iReason)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: JsonBuffer_Get_uint8_t (Reason) failed", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Get_Judgment (msg, "Judgment", &submit->pJudgment))
-    {
+    if (!JsonBuffer_Get_Judgment(msg, "Judgment", &submit->pJudgment)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: JsonBuffer_Get_Judgment (Judgment) failed", __func__);
         json_object_put(msg);
         return false;
     }
@@ -112,33 +126,37 @@ JudgmentSubmission_Serialize(struct Message *message)
     const char * wire;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message pointer is NULL", __func__);
         return false;
+    }
 
     submit = message->message;
 
-    if ((msg = json_object_new_object()) == NULL)
+    if ((msg = json_object_new_object()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: json_object_new_object failed", __func__);
         return false;
+    }
 
 
-    if (!JsonBuffer_Put_uint8_t (msg, "Reason", submit->iReason))
-    {
+    if (!JsonBuffer_Put_uint8_t(msg, "Reason", submit->iReason)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: JsonBuffer_Put_uint8_t (Reason) failed", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Put_Judgment (msg, "Judgment", submit->pJudgment))
-    {
+    if (!JsonBuffer_Put_Judgment(msg, "Judgment", submit->pJudgment)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: JsonBuffer_Put_Judgment (Judgment) failed", __func__);
         json_object_put(msg);
         return false;
     }
     wire = json_object_to_json_string(msg);
-    message->length=strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
-    {
+    message->length = strlen(wire);
+    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unable to allocate serialized message", __func__);
         json_object_put(msg);
         return false;
     }
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *) message->serialized, wire);
     json_object_put(msg);
 
     return true;

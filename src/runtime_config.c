@@ -380,7 +380,7 @@ bool readApiConfig (void) {
     char *envVal;
 
     if (!readMyConfig (NULL, API_CONFIG_FILE, global_config)) {
-        rzb_log(LOG_ERR, "Failed to read api config. Exiting.");
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "Failed to read api config. Exiting.");
         return false;
     }
     sg_iMaxBlockSize = sg_iMaxBlockSize * 1024 * 1024;  // Convert to MB;
@@ -394,7 +394,7 @@ bool readApiConfig (void) {
             || (sg_sMqUser == NULL)
             || (sg_sMqPassword == NULL)
     ) {
-        rzb_log(LOG_ERR, "Message Queue configuration is incomplete,");
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "Message Queue configuration is incomplete,");
         return false;
     }
     return true;

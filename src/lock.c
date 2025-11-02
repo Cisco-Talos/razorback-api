@@ -13,8 +13,7 @@
 
 /** Mutex Control Structure
  */
-struct _Mutex
-{
+struct _Mutex {
 #ifdef _MSC_VER
     HANDLE recursiveLock;			///< Recursive lock handle (win32)
 	CRITICAL_SECTION cs;			///< None recursive lock handle (win32)
@@ -27,8 +26,7 @@ struct _Mutex
 
 /** RWLock Control Structure
  */
-struct _RWLock
-{
+struct _RWLock {
 #ifdef _MSC_VER
     HANDLE recursiveLock;			///< Recursive lock handle (win32)
 	CRITICAL_SECTION cs;			///< None recursive lock handle (win32)
@@ -43,8 +41,7 @@ struct _RWLock
 
 /** Semaphore Control Structure
  */
-struct _Semaphore
-{
+struct _Semaphore {
 #ifdef _MSC_VER
     HANDLE sem;	///< Semaphore handle (win32)
 #else
@@ -57,14 +54,14 @@ static bool Mutex_Init(Mutex_t *);
 static bool RWLock_Init(RWLock_t *);
 
 SO_PUBLIC Mutex_t *
-Mutex_Create(int mode)
-{
+Mutex_Create(int mode) {
     Mutex_t *ret;
-    if ((ret = (Mutex_t *)calloc(1,sizeof(Mutex_t))) == NULL)
+    if ((ret = (Mutex_t *)calloc(1,sizeof(Mutex_t))) == NULL) {
         return NULL;
+    }
     ret->mode = mode;
-    if (!Mutex_Init(ret))
-    {
+    if (!Mutex_Init(ret)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Mutex_Init failed", __func__);
         Mutex_Destroy(ret);
         return NULL;
     }
@@ -72,11 +69,12 @@ Mutex_Create(int mode)
 }
 
 SO_PUBLIC bool 
-Mutex_Lock(Mutex_t *mutex)
-{
+Mutex_Lock(Mutex_t *mutex) {
     ASSERT(mutex != NULL);
-    if (mutex == NULL)
+    if (mutex == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: mutex is NULL", __func__);
         return false;
+    }
 #ifdef _MSC_VER
 	switch (mutex->mode)
     {
@@ -87,22 +85,25 @@ Mutex_Lock(Mutex_t *mutex)
 		EnterCriticalSection(&mutex->cs);
         break;
     default:
-        rzb_log(LOG_ERR, "%s: Invalid mutex mode: %d", mutex->mode);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid mutex mode: %d", mutex->mode);
         return false;
     }
 #else //_MSC_VER
-    if (pthread_mutex_lock(&mutex->lock) != 0)
+    if (pthread_mutex_lock(&mutex->lock) != 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: pthread_mutex_lock failed", __func__);
         return false;
+    }
 #endif //_MSC_VER
     return true;
 }
 
 SO_PUBLIC bool 
-Mutex_Unlock(Mutex_t *mutex)
-{
+Mutex_Unlock(Mutex_t *mutex) {
     ASSERT(mutex != NULL);
-    if (mutex == NULL) 
+    if (mutex == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: mutex is NULL", __func__);
         return false;
+    }
 #ifdef _MSC_VER
 	switch (mutex->mode)
     {
@@ -113,22 +114,25 @@ Mutex_Unlock(Mutex_t *mutex)
 		LeaveCriticalSection(&mutex->cs);
         break;
     default:
-        rzb_log(LOG_ERR, "%s: Invalid mutex mode: %d", mutex->mode);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid mutex mode: %d", mutex->mode);
         return false;
     }
 #else //_MSC_VER
-    if (pthread_mutex_unlock(&mutex->lock) != 0)
+    if (pthread_mutex_unlock(&mutex->lock) != 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: pthread_mutex_unlock failed", __func__);
         return false;
+    }
 #endif //_MSC_VER
     return true;
 }
 
 SO_PUBLIC void 
-Mutex_Destroy(Mutex_t *mutex)
-{
+Mutex_Destroy(Mutex_t *mutex) {
     ASSERT(mutex != NULL);
-    if (mutex == NULL)
+    if (mutex == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: mutex is NULL", __func__);
         return;
+    }
 #ifdef _MSC_VER
 	switch (mutex->mode)
     {
@@ -139,7 +143,7 @@ Mutex_Destroy(Mutex_t *mutex)
 		DeleteCriticalSection(&mutex->cs);
         break;
     default:
-        rzb_log(LOG_ERR, "%s: Invalid mutex mode: %d", mutex->mode);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid mutex mode: %d", mutex->mode);
     }
 	
 #else //_MSC_VER
@@ -151,14 +155,15 @@ Mutex_Destroy(Mutex_t *mutex)
 
 
 SO_PUBLIC RWLock_t *
-RWLock_Create()
-{
+RWLock_Create() {
     RWLock_t *ret;
-    if ((ret = calloc(1,sizeof(RWLock_t))) == NULL)
+    if ((ret = calloc(1,sizeof(RWLock_t))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: calloc failed", __func__);
         return NULL;
+    }
 
-    if (!RWLock_Init(ret))
-    {
+    if (!RWLock_Init(ret)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: RWLock_Init failed", __func__);
         RWLock_Destroy(ret);
         return NULL;
     }
@@ -166,11 +171,12 @@ RWLock_Create()
 }
 
 SO_PUBLIC bool
-RWLock_ReadLock(RWLock_t *rwlock)
-{
+RWLock_ReadLock(RWLock_t *rwlock) {
     ASSERT(rwlock != NULL);
-    if (rwlock == NULL)
+    if (rwlock == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: rwlock is NULL", __func__);
         return false;
+    }
 #ifdef _MSC_VER
     switch (rwlock->mode)
     {
@@ -181,47 +187,54 @@ RWLock_ReadLock(RWLock_t *rwlock)
 		EnterCriticalSection(&rwlock->cs);
         break;
     default:
-        rzb_log(LOG_ERR, "%s: Invalid rwlock mode: %d", rwlock->mode);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid rwlock mode: %d", rwlock->mode);
         return false;
     }
 #else //_MSC_VER
-    if (pthread_rwlock_rdlock(&rwlock->lock) != 0)
-        return false;
-#endif //_MSC_VER
-    return true;
-}
-SO_PUBLIC bool
-RWLock_WriteLock(RWLock_t *rwlock)
-{
-    ASSERT(rwlock != NULL);
-    if (rwlock == NULL)
-        return false;
-#ifdef _MSC_VER
-    switch (rwlock->mode)
-    {
-    case MUTEX_MODE_RECURSIVE:
-		WaitForSingleObject(rwlock->recursiveLock, INFINITE);
-        break;
-    case MUTEX_MODE_NORMAL:
-		EnterCriticalSection(&rwlock->cs);
-        break;
-    default:
-        rzb_log(LOG_ERR, "%s: Invalid rwlock mode: %d", rwlock->mode);
+    if (pthread_rwlock_rdlock(&rwlock->lock) != 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: pthread_rwlock_rdlock failed", __func__);
         return false;
     }
-#else //_MSC_VER
-    if (pthread_rwlock_wrlock(&rwlock->lock) != 0)
-        return false;
 #endif //_MSC_VER
     return true;
 }
 
 SO_PUBLIC bool
-RWLock_Unlock(RWLock_t *rwlock)
-{
+RWLock_WriteLock(RWLock_t *rwlock) {
     ASSERT(rwlock != NULL);
-    if (rwlock == NULL)
+    if (rwlock == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: rwlock is NULL", __func__);
         return false;
+    }
+#ifdef _MSC_VER
+    switch (rwlock->mode)
+    {
+    case MUTEX_MODE_RECURSIVE:
+		WaitForSingleObject(rwlock->recursiveLock, INFINITE);
+        break;
+    case MUTEX_MODE_NORMAL:
+		EnterCriticalSection(&rwlock->cs);
+        break;
+    default:
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid rwlock mode: %d", rwlock->mode);
+        return false;
+    }
+#else //_MSC_VER
+    if (pthread_rwlock_wrlock(&rwlock->lock) != 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: pthread_rwlock_wrlock failed", __func__);
+        return false;
+    }
+#endif //_MSC_VER
+    return true;
+}
+
+SO_PUBLIC bool
+RWLock_Unlock(RWLock_t *rwlock) {
+    ASSERT(rwlock != NULL);
+    if (rwlock == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: rwlock is NULL", __func__);
+        return false;
+    }
 #ifdef _MSC_VER
     switch (rwlock->mode)
     {
@@ -232,22 +245,25 @@ RWLock_Unlock(RWLock_t *rwlock)
 		LeaveCriticalSection(&rwlock->cs);
         break;
     default:
-        rzb_log(LOG_ERR, "%s: Invalid rwlock mode: %d", rwlock->mode);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid rwlock mode: %d", rwlock->mode);
         return false;
     }
 #else //_MSC_VER
-    if (pthread_rwlock_unlock(&rwlock->lock) != 0)
+    if (pthread_rwlock_unlock(&rwlock->lock) != 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: pthread_rwlock_unlock failed", __func__);
         return false;
+    }
 #endif //_MSC_VER
     return true;
 }
 
 SO_PUBLIC void
-RWLock_Destroy(RWLock_t *rwlock)
-{
+RWLock_Destroy(RWLock_t *rwlock) {
     ASSERT(rwlock != NULL);
-    if (rwlock == NULL)
+    if (rwlock == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: rwlock is NULL", __func__);
         return;
+    }
 #ifdef _MSC_VER
     switch (rwlock->mode)
     {
@@ -258,7 +274,7 @@ RWLock_Destroy(RWLock_t *rwlock)
 		DeleteCriticalSection(&rwlock->cs);
         break;
     default:
-        rzb_log(LOG_ERR, "%s: Invalid rwlock mode: %d", rwlock->mode);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid rwlock mode: %d", rwlock->mode);
     }
 
 #else //_MSC_VER
@@ -270,11 +286,12 @@ RWLock_Destroy(RWLock_t *rwlock)
 
 
 SO_PUBLIC Semaphore_t *
-Semaphore_Create(bool shared, unsigned int value)
-{
+Semaphore_Create(bool shared, unsigned int value) {
     Semaphore_t *ret;
-    if (( ret = (Semaphore_t *)calloc(1,sizeof(Semaphore_t))) == NULL)
+    if (( ret = (Semaphore_t *)calloc(1,sizeof(Semaphore_t))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: calloc failed", __func__);
         return NULL;
+    }
 #ifdef _MSC_VER
 	ret->sem = CreateSemaphore(NULL,0,LONG_MAX,NULL);
 	if (!ret->sem)
@@ -290,57 +307,67 @@ Semaphore_Create(bool shared, unsigned int value)
 }
 
 SO_PUBLIC bool 
-Semaphore_Post(Semaphore_t *sem)
-{
+Semaphore_Post(Semaphore_t *sem) {
     ASSERT(sem != NULL);
-    if (sem == NULL)
+    if (sem == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem is NULL", __func__);
         return false;
+    }
 #ifdef _MSC_VER
 	ReleaseSemaphore(sem->sem, 1, NULL);
 #else //_MSC_VER
-    if (sem_post(&sem->sem) != 0)
+    if (sem_post(&sem->sem) != 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem_post failed", __func__);
         return false;
+    }
 #endif //_MSC_VER
     return true;
 }
 
 SO_PUBLIC bool 
-Semaphore_TimedWait(Semaphore_t *sem)
-{
+Semaphore_TimedWait(Semaphore_t *sem) {
     ASSERT(sem != NULL);
-    if (sem == NULL)
+    if (sem == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem is NULL", __func__);
         return false;
+    }
 	UNIMPLEMENTED();
 #ifdef _MSC_VER
 	UNIMPLEMENTED();
 #else //_MSC_VER
-    if (sem_wait(&sem->sem) != 0)
+    if (sem_wait(&sem->sem) != 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem_wait failed", __func__);
         return false;
+    }
 #endif //_MSC_VER
     return true;
 }
 
 SO_PUBLIC bool 
-Semaphore_Wait(Semaphore_t *sem)
-{
+Semaphore_Wait(Semaphore_t *sem) {
     ASSERT(sem != NULL);
-    if (sem == NULL)
+    if (sem == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem is NULL", __func__);
         return false;
+    }
 #ifdef _MSC_VER
 	WaitForSingleObject(sem->sem, INFINITE);
 #else //_MSC_VER
-    if (sem_wait(&sem->sem) != 0)
+    if (sem_wait(&sem->sem) != 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem_wait failed", __func__);
         return false;
+    }
 #endif //_MSC_VER
     return true;
 }
 
 SO_PUBLIC void 
-Semaphore_Destroy(Semaphore_t *sem)
-{
+Semaphore_Destroy(Semaphore_t *sem) {
     ASSERT(sem != NULL);
-    if (sem == NULL)
+    if (sem == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem is NULL", __func__);
         return;
+    }
 #ifdef _MSC_VER
 	CloseHandle(sem->sem);
 #else //_MSC_VER
@@ -371,40 +398,41 @@ static bool Mutex_Init(Mutex_t *mutex)
 		InitializeCriticalSection(&mutex->cs);
         break;
     default:
-        rzb_log(LOG_ERR, "%s: Invalid mutex mode: %d", mutex->mode);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid mutex mode: %d", mutex->mode);
         return false;
     }
 	
     return true;
 }
 #else //_MSC_VER
-static bool Mutex_Init(Mutex_t *mutex)
-{
+static bool Mutex_Init(Mutex_t *mutex) {
     ASSERT(mutex != NULL);
-    if (mutex == NULL)
+    if (mutex == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: mutex is NULL", __func__);
         return false;
+    }
     pthread_mutexattr_init(&mutex->attrs);
 
-    switch (mutex->mode)
-    {
+    switch (mutex->mode) {
         case MUTEX_MODE_RECURSIVE:
             pthread_mutexattr_settype(&mutex->attrs, PTHREAD_MUTEX_RECURSIVE);
             break;
         case MUTEX_MODE_NORMAL:
             break;
         default:
-            rzb_log(LOG_ERR, "%s: Invalid mutex mode: %d", mutex->mode);
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid mutex mode: %d", mutex->mode);
             return false;
     }
     pthread_mutex_init(&mutex->lock, &mutex->attrs);
     return true;
 }
 
-static bool RWLock_Init(RWLock_t *rwlock)
-{
+static bool RWLock_Init(RWLock_t *rwlock) {
     ASSERT(rwlock != NULL);
-    if (rwlock == NULL)
+    if (rwlock == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: rwlock is NULL", __func__);
         return false;
+    }
     pthread_rwlockattr_init(&rwlock->attrs);
     pthread_rwlock_init(&rwlock->lock, &rwlock->attrs);
     return true;

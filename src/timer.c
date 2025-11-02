@@ -90,12 +90,12 @@ Timer_Init_Posix(struct Timer *timer)
     if (timer_create (CLOCK_REALTIME, timer->props, &timer->timer) == -1)
     {
         rzb_perror
-            ("Timer_Init_Posix: Failed call to timer_create: %s");
+            (LOG_C_CORE,"Timer_Init_Posix: Failed call to timer_create: %s");
         return false;
     }
     if (timer_settime (timer->timer, 0, &timer->spec, NULL) == -1)
     {
-        rzb_log (LOG_ERR, "%s: C&C Arm Hello Timer: Failed to arm timer.", __func__);
+        rzb_log (LOG_ERR,LOG_C_CORE, "%s: C&C Arm Hello Timer: Failed to arm timer.", __func__);
         return false;
     }
 

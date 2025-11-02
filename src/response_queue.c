@@ -47,7 +47,7 @@ ResponseQueue_Initialize (uuid_t p_pCollectorId, int p_iFlags)
     // initialize the queue
     if ((l_pQueue = Queue_Create (l_sQueueName, p_iFlags)) == NULL)
     {
-        rzb_log (LOG_ERR,
+        rzb_log (LOG_ERR, LOG_C_QUEUE,
                  "%s: failed due to failure of Queue_Initialize", __func__);
         return NULL;
     }
@@ -55,7 +55,7 @@ ResponseQueue_Initialize (uuid_t p_pCollectorId, int p_iFlags)
     // find the queue
     if (!QueueList_Add (sg_qlResponseQueue, l_pQueue, p_pCollectorId))
     {
-        rzb_log (LOG_ERR,
+        rzb_log (LOG_ERR, LOG_C_QUEUE,
                  "%s: failed due to failure of QueueList_Add", __func__);
         return NULL;
     }

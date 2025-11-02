@@ -37,11 +37,6 @@ SO_PUBLIC extern bool NTLVList_Get (List_t *p_pList, uuid_t uuidName,
                           uuid_t uuidType, uint32_t *p_iSize,
                           const uint8_t ** p_pData);
 
-/** Get the size of the items in a list
- * @param *p_pList The list
- * @return The size of the items in the list.
- */
-SO_PUBLIC extern uint32_t NTLVList_Size (List_t *list);
 
 #ifdef __cplusplus
 }

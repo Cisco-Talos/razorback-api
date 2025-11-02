@@ -39,17 +39,22 @@ NTLVList_Add (List_t *list, uuid_t name,
     ASSERT (list != NULL);
     ASSERT (data != NULL);
     ASSERT (size > 0);
-    if (list == NULL)
+    if (list == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: failed due NULL list", __func__);
         return false;
-    if (data == NULL)
+    }
+    if (data == NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: failed due NULL data", __func__);
         return false;
-    if (size == 0)
+    }
+    if (size == 0) {
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: failed due to zero size", __func__);
         return false;
+    }
 
     // create new entry
-    if ((item = (struct NTLVItem *) calloc (1, sizeof (struct NTLVItem)))== NULL)
-    {
-        rzb_log (LOG_ERR, "%s: failed due to out of memory on item", __func__);
+    if ((item = (struct NTLVItem *) calloc (1, sizeof (struct NTLVItem)))== NULL) {
+        rzb_log (LOG_ERR, LOG_C_CORE, "%s: failed due to out of memory on item", __func__);
         return false;
     }
 
@@ -57,7 +62,7 @@ NTLVList_Add (List_t *list, uuid_t name,
     if (item->pData == NULL)
     {
         free (item);
-        rzb_log (LOG_ERR,
+        rzb_log (LOG_ERR, LOG_C_CORE,
                  "%s: failed due to out of memory on item data", __func__);
         return false;
     }
@@ -71,29 +76,6 @@ NTLVList_Add (List_t *list, uuid_t name,
 }
 
 static int
-NTLV_ItemSize(struct NTLVItem *item, uint32_t *counter)
-{
-    *counter += item->iLength;
-    *counter += 16 * 2;      // 2 UUID's
-    *counter += sizeof (uint32_t);   // Size field;
-    return LIST_EACH_OK;
-}
-
-SO_PUBLIC uint32_t
-NTLVList_Size (List_t * list)
-{
-    uint32_t size = 0;
-
-    ASSERT (list != NULL);
-    if (list == NULL)
-        return 0;
-
-    List_ForEach(list, (int (*)(void *, void *))NTLV_ItemSize, &size);
-
-    return size + sizeof (uint32_t);
-}
-
-static int 
 NTLV_KeyCmp(void *a, void *id)
 {
     struct NTLVItem *item = (struct NTLVItem *)a;
@@ -119,8 +101,8 @@ NTLV_Cmp(void *a, void *b)
         return 0;
     }
     return -1;
-
 }
+
 static void 
 NTLV_Delete(void *a)
 {
@@ -128,6 +110,7 @@ NTLV_Delete(void *a)
     free(item->pData);
     free(item);
 }
+
 void *
 NTLV_Clone(void *o)
 {
@@ -146,7 +129,6 @@ NTLV_Clone(void *o)
     memcpy (item->pData, orig->pData, orig->iLength);
     return item; 
 }
-
 
 SO_PUBLIC List_t *
 NTLVList_Create (void)

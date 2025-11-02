@@ -23,24 +23,26 @@ static struct MessageHandler handler = {
 
 // core.h
 void
-MessageBlockSubmission_Init(void)
-{
+MessageBlockSubmission_Init(void) {
     Message_Register_Handler(&handler);
 }
 
 SO_PUBLIC struct Message *
 MessageBlockSubmission_Initialize (
                                    struct Event *p_pEvent,
-                                   uint32_t p_iReason, uint8_t locality)
-{
+                                   uint32_t p_iReason, uint8_t locality) {
     struct Message *msg;
     struct MessageBlockSubmission *message;
     ASSERT (p_pEvent != NULL);
-    if (p_pEvent == NULL)
+    if (p_pEvent == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Event is NULL", __func__);
         return NULL;
+    }
 
-    if ((msg = Message_Create(MESSAGE_TYPE_BLOCK, MESSAGE_VERSION_1, sizeof(struct MessageBlockSubmission))) == NULL)
+    if ((msg = Message_Create(MESSAGE_TYPE_BLOCK, MESSAGE_VERSION_1, sizeof(struct MessageBlockSubmission))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);
         return NULL;
+    }
 
     message = msg->message;
 
@@ -56,56 +58,63 @@ MessageBlockSubmission_Initialize (
 }
 
 static void
-BlockSubmission_Destroy (struct Message *message)
-{
+BlockSubmission_Destroy (struct Message *message) {
     struct MessageBlockSubmission *msg;
     
     ASSERT (message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message is NULL", __func__);
         return;
-    msg = message->message;
+    }
 
-    // destroy any malloc'd components
-    if (msg->pEvent != NULL)
-        Event_Destroy (msg->pEvent);
+    msg = message->message;
+    if (msg != NULL) {
+        // destroy any malloc'd components
+        if (msg->pEvent != NULL) {
+            Event_Destroy(msg->pEvent);
+        }
+    }
 
     Message_Destroy(message);
 }
 
 
 static bool
-BlockSubmission_Deserialize(struct Message *message)
-{
+BlockSubmission_Deserialize(struct Message *message) {
     struct MessageBlockSubmission *submit;
     json_object *msg;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message is NULL", __func__);
         return false;
+    }
 
-    if ((message->message = calloc(1,sizeof(struct MessageBlockSubmission))) == NULL)
+    if ((message->message = calloc(1,sizeof(struct MessageBlockSubmission))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate message", __func__);
         return false;
+    }
 
-    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL)
+    if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to parse JSON", __func__);
         return false;
+    }
 
     submit = message->message;
 
-    if (!JsonBuffer_Get_uint32_t (msg, "Reason", &submit->iReason))
-    {
-        rzb_log(LOG_ERR, "%s: Failed to get Reason from JSON buffer", __func__);
+
+    if (!JsonBuffer_Get_uint32_t(msg, "Reason", &submit->iReason)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Reason from JSON buffer", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Get_Event (msg, "Event", &submit->pEvent))
-    {
-        rzb_log(LOG_ERR, "%s: Failed to get Event from JSON buffer", __func__);
+    if (!JsonBuffer_Get_Event(msg, "Event", &submit->pEvent)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Event from JSON buffer", __func__);
         json_object_put(msg);
         return false;
     }
-    if (!JsonBuffer_Get_uint8_t (msg, "Stored_Locality", &submit->storedLocality))
-    {
-        rzb_log(LOG_ERR, "%s: Failed to get Stored_Locality from JSON buffer", __func__);
+    if (!JsonBuffer_Get_uint8_t(msg, "Stored_Locality", &submit->storedLocality)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to get Stored_Locality from JSON buffer", __func__);
         json_object_put(msg);
         return false;
     }
@@ -115,47 +124,46 @@ BlockSubmission_Deserialize(struct Message *message)
 }
 
 static bool
-BlockSubmission_Serialize(struct Message *message)
-{
+BlockSubmission_Serialize(struct Message *message) {
     struct MessageBlockSubmission *submit;
     json_object *msg;
     const char * wire;
 
     ASSERT(message != NULL);
-    if (message == NULL)
+    if (message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message is NULL", __func__);
         return false;
+    }
 
     submit = message->message;
 
-    if ((msg = json_object_new_object()) == NULL)
+    if ((msg = json_object_new_object()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create JSON object", __func__);
         return false;
+    }
 
-    if (!JsonBuffer_Put_uint32_t (msg, "Reason", submit->iReason))
-    {
+    if (!JsonBuffer_Put_uint32_t(msg, "Reason", submit->iReason)) {
         json_object_put(msg);
         return false;
     }
 
-    if (!JsonBuffer_Put_Event (msg, "Event", submit->pEvent))
-    {
+    if (!JsonBuffer_Put_Event(msg, "Event", submit->pEvent)) {
         json_object_put(msg);
         return false;
     }
 
-    if (!JsonBuffer_Put_uint8_t (msg, "Stored_Locality", submit->storedLocality))
-    {
+    if (!JsonBuffer_Put_uint8_t(msg, "Stored_Locality", submit->storedLocality)) {
         json_object_put(msg);
         return false;
     }
 
     wire = json_object_to_json_string(msg);
-    message->length=strlen(wire);
-    if ((message->serialized = calloc(message->length+1, sizeof(uint8_t))) == NULL)
-    {
+    message->length = strlen(wire);
+    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
         json_object_put(msg);
         return false;
     }
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *) message->serialized, wire);
     json_object_put(msg);
 
     return true;
