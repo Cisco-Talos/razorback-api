@@ -16,7 +16,7 @@ static bool sg_bResponseInitialized = false;
 static void
 ResponseQueue_GetQueueName (uuid_t p_pCollectorId, char * p_sQueueName)
 {
-    Queue_GetQueueName ("/queue/RESPONSE", p_pCollectorId,
+    Queue_GetQueueName ("RESPONSE", p_pCollectorId,
                         p_sQueueName);
 }
 
@@ -45,7 +45,7 @@ ResponseQueue_Initialize (uuid_t p_pCollectorId, int p_iFlags)
         return l_pQueue;
 
     // initialize the queue
-    if ((l_pQueue = Queue_Create (l_sQueueName, p_iFlags)) == NULL)
+    if ((l_pQueue = Queue_Create (l_sQueueName, false, p_iFlags)) == NULL)
     {
         rzb_log (LOG_ERR, LOG_C_QUEUE,
                  "%s: failed due to failure of Queue_Initialize", __func__);

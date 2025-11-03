@@ -149,7 +149,7 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
         return NULL;
     }
 	
-    if ((context->inspector.judgmentQueue = Queue_Create(JUDGMENT_QUEUE, QUEUE_FLAG_SEND)) == NULL) {
+    if ((context->inspector.judgmentQueue = Queue_Create(JUDGMENT_QUEUE, false, QUEUE_FLAG_SEND)) == NULL) {
         rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to create judgment queue", __func__);
         Razorback_Remove_Context(context);
         return false;
@@ -397,16 +397,16 @@ Razorback_Output_Thread (Thread_t *thread)
 
     switch (hooks->messageType) {
         case MESSAGE_TYPE_ALERT_PRIMARY:
-            pat = "/topic/Alert.%s";
+            pat = "Alert.%s";
             break;
         case MESSAGE_TYPE_ALERT_CHILD:
-            pat = "/topic/ChildAlert.%s";
+            pat = "ChildAlert.%s";
             break;
         case MESSAGE_TYPE_OUTPUT_EVENT:
-            pat = "/topic/Event.%s";
+            pat = "Event.%s";
             break;
         case MESSAGE_TYPE_OUTPUT_LOG:
-            pat = "/topic/Log.%s";
+            pat = "Log.%s";
             break;
     }
 
@@ -415,7 +415,7 @@ Razorback_Output_Thread (Thread_t *thread)
         return;
     }
 
-    if ((hooks->queue = Queue_Create (name, QUEUE_FLAG_RECV)) == NULL){
+    if ((hooks->queue = Queue_Create (name, true, QUEUE_FLAG_RECV)) == NULL){
         rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to connect to MQ - Inspector Queue",
                  __func__);
         free(name);

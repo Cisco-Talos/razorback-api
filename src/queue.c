@@ -15,9 +15,14 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <time.h>
+#include <amqp.h>
+#include <amqp_tcp_socket.h>
+#include <amqp_ssl_socket.h>
+#include <amqp_framing.h>
 #include "runtime_config.h"
 #include "messages/core.h"
 #define MBUF_SIZE 1024
+#define AMQP_CHAN_ID 1
 
 struct StompMessage {
     char * sVerb;
@@ -26,382 +31,132 @@ struct StompMessage {
     size_t bodyLength;
 };
 
+struct _AMQP_Socket {
+    amqp_socket_t *pSocket;        ///< The socket to the broker
+    amqp_connection_state_t pConn; ///< The connection to the broker
+    amqp_bytes_t pQueueName;       ///< The name of the queue
+    bool bChannelOpen;             ///< Is the channel open
+};
+
 static bool
-StompMessage_Add_Header(struct StompMessage *message, const char *name, const char *value) {
-    struct MessageHeader * header;
-    if ((header = Message_HeaderList_Add(message->headers, name, value)) == NULL) {
-        return false;
-    }
-    header->pMessage = message;
-    return true;
-}
-static void 
-Queue_Destroy_Stomp_Message (struct StompMessage *message) 
-{
-    if (message->sVerb != NULL)
-        free(message->sVerb);
-   
-    if (message->headers != NULL)
-        List_Destroy(message->headers);
+AMQP_error(amqp_rpc_reply_t x, char const *context) {
+    switch (x.reply_type) {
+        case AMQP_RESPONSE_NORMAL:
+            return false;
 
-    if (message->pBody != NULL)
-        free(message->pBody);
-
-    free(message);
-}
-
-static struct StompMessage *
-Queue_Read_Message(struct Socket *socket) 
-{
-    struct StompMessage *message;
-    char *buffer;
-    ssize_t messageLen;
-    char *headerItem;
-
-	ASSERT (socket !=NULL);
-	if (socket == NULL)
-		return NULL;
-
-    if ((message = (struct StompMessage *)calloc (1, sizeof (struct StompMessage))) == NULL)
-    {
-        rzb_log(LOG_ERR, LOG_C_STOMP, "%s: Failed to allocate message struct", __func__);
-        return NULL;
-    }
-    message->headers= Message_Header_List_Create();
-   
-readverb:
-    // Read the VERB
-    messageLen = Socket_Rx_Until (socket, (uint8_t**)&buffer, '\n');
-
-    if (messageLen <= 0)
-    {
-        if (errno != EINTR) {
-            rzb_perror(LOG_C_STOMP, "Queue_Read_Message: Read VERB - Socket_Rx_Until failed: %s");
-        }
-
-        Queue_Destroy_Stomp_Message(message);
-        return NULL;
-    }
-    if (messageLen == 1 && buffer[0] == '\n')
-    {
-    	free(buffer);
-    	buffer = NULL;
-        goto readverb;
-    }
-    if ((message->sVerb = (char *)calloc(messageLen, sizeof(char))) == NULL)
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: failed due to failure of calloc", __func__);
-        Queue_Destroy_Stomp_Message(message);
-        free(buffer);
-        return NULL;
-    }
-    buffer[messageLen -1] = '\0';
-    // Copy the verb
-    strncpy(message->sVerb, buffer, messageLen);
-#ifdef STOMP_DEBUG
-    rzb_log(LOG_DEBUG, LOG_C_STOMP, "%s: (%p) Message Verb: %s - Len %u", __func__, message, message->sVerb, messageLen);
-#endif
-    free(buffer);
-    buffer = NULL;
-    if ((messageLen = Socket_Rx_Until (socket, (uint8_t**)&buffer, '\n')) <= 0)
-    {
-        rzb_perror(LOG_C_STOMP, "Queue_Read_Message: Read Header - Socket_Rx_Until failed: %s");
-        Queue_Destroy_Stomp_Message(message);
-        return NULL;
-    }
-    
-
-    while (messageLen != 1 && buffer[0] != '\n') // End of headers
-    {
-        buffer[messageLen -1] = '\0';
-        headerItem = strchr(buffer, ':');
-        if (headerItem == NULL) // No headers
+        case AMQP_RESPONSE_NONE:
+            rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: missing RPC reply type!", context);
             break;
 
-        *headerItem = '\0';
-        headerItem++;
+        case AMQP_RESPONSE_LIBRARY_EXCEPTION:
+            rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: %s", context, amqp_error_string2(x.library_error));
+            break;
 
-        // Add the item to the list
-        Message_HeaderList_Add(message->headers, buffer, headerItem);
-
-
-#ifdef STOMP_DEBUG
-        rzb_log(LOG_DEBUG, LOG_C_STOMP, "%s: (%p) Message Header: %s:%s", __func__, message, buffer, headerItem);
-#endif
-
-        if (strcasecmp(buffer, "content-length") == 0)
-        {
-            message->bodyLength =strtoul(headerItem, NULL, 10);
-            if (message->bodyLength == 0)
-            {
-                rzb_log(LOG_ERR, LOG_C_STOMP, "%s: Failed to parse message length: %s", __func__, headerItem);
-                Queue_Destroy_Stomp_Message(message);
-                free(buffer);
-                return NULL;
+        case AMQP_RESPONSE_SERVER_EXCEPTION:
+            switch (x.reply.id) {
+                case AMQP_CONNECTION_CLOSE_METHOD: {
+                    amqp_connection_close_t *m =
+                            (amqp_connection_close_t *)x.reply.decoded;
+                    rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: server connection error %uh, message: %.*s",
+                            context, m->reply_code, (int)m->reply_text.len,
+                            (char *)m->reply_text.bytes);
+                    break;
+                }
+                case AMQP_CHANNEL_CLOSE_METHOD: {
+                    amqp_channel_close_t *m = (amqp_channel_close_t *)x.reply.decoded;
+                    rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: server channel error %uh, message: %.*s",
+                            context, m->reply_code, (int)m->reply_text.len,
+                            (char *)m->reply_text.bytes);
+                    break;
+                }
+                default:
+                    rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: unknown server error, method id 0x%08X",
+                            context, x.reply.id);
+                    break;
             }
-#ifdef STOMP_DEBUG
-            rzb_log(LOG_DEBUG, LOG_C_STOMP, "%s: (%p) Found content length: %d", __func__, message, message->bodyLength);
-#endif
-        }
-
-        // Read the next line
-        free(buffer);
-        buffer = NULL;
-        if ((messageLen = Socket_Rx_Until (socket, (uint8_t**)&buffer, '\n')) <= 0)
-        {
-            rzb_perror(LOG_C_STOMP, "Queue_Read_Message: Read Header - Socket_Rx_Until failed: %s");
-            rzb_log (LOG_ERR,LOG_C_STOMP,
-                     "%s failed due to failure of Socket_Rx_Until", __func__);
-            Queue_Destroy_Stomp_Message(message);
-            free(buffer);
-            return NULL;
-        }
-    }
-    if (buffer != NULL)
-    {
-    	free(buffer);
-    	buffer = NULL;
+            break;
     }
 
-    if (message->bodyLength != 0) // Read the message body
-    {
-		if ((message->pBody = (uint8_t *)malloc(message->bodyLength+1)) == NULL) 
-        {
-			//Need to store it
-            rzb_log (LOG_ERR,LOG_C_STOMP,
-                     "%s: failed to allocate buffer", __func__);
-            Queue_Destroy_Stomp_Message(message);
-            return NULL;
-        }
-        if (Socket_Rx(socket, message->bodyLength, message->pBody) != (ssize_t)message->bodyLength)
-        {
-            rzb_log (LOG_ERR,LOG_C_STOMP,
-                     "%s: failed to read message body", __func__);
-            Queue_Destroy_Stomp_Message(message);
-            return NULL;
-        }
-        // read the final '\0'
-        if (Socket_Rx (socket, 1, (uint8_t *)&message->pBody[message->bodyLength]) != 1)
-        {
-            rzb_log (LOG_ERR,LOG_C_STOMP, "%s: failed due to Socket_Rx", __func__);
-            Queue_Destroy_Stomp_Message(message);
-            return NULL;
-        }
-    }
-    else
-    {
-        // Read until we get a null
-        messageLen = Socket_Rx_Until(socket, &message->pBody, '\0');
-        if (messageLen <= 0)
-        {
-            rzb_perror(LOG_C_STOMP, "Queue_Read_Message: Read Body - Socket_Rx_Until failed: %s");
-			Queue_Destroy_Stomp_Message(message);
-			return NULL;
-        }
-		message->bodyLength = messageLen;
-    }
-    return message;
-}
-
-static int
-Queue_Send_Header(void *vHeader, void *vSocket)
-{
-    struct MessageHeader *header = vHeader;
-    struct Socket *socket = vSocket;
-    char *line = NULL;
-#ifdef STOMP_DEBUG
-        rzb_log(LOG_DEBUG,LOG_C_STOMP, "%s: (%p) Message Header: '%s:%s'", __func__, header->pMessage, header->sName, header->sValue);
-#endif
-    if (asprintf(&line, "%s:%s\n", header->sName, header->sValue) == -1)
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to alloc header", __func__);
-        return LIST_EACH_ERROR;
-    }
-//    printf("'%s'\n", line);
-    if (Socket_Tx(socket, strlen(line), (uint8_t *)line) != (ssize_t)strlen(line))
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send header", __func__);
-        free(line);
-        return LIST_EACH_ERROR;
-    }
-    free(line);
-
-    return LIST_EACH_OK;
-}
-
-static bool 
-Queue_Send_Message(struct Socket *socket, struct StompMessage *message)
-{
-    char *line;
-#ifdef STOMP_DEBUG
-    rzb_log(LOG_DEBUG,LOG_C_STOMP, "%s: (%p) Message Verb: %s - %u", __func__, message, message->sVerb, message->bodyLength);
-#endif
-
-    if (asprintf(&line, "%s\n", message->sVerb) == -1)
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to allocate verb", __func__);
-        return false;
-    }
-
-    if (Socket_Tx(socket, strlen(line), (uint8_t *)line) != (ssize_t)strlen(line)) {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send verb", __func__);
-        free(line);
-        return false;
-    }
-
-    free(line);
-
-    List_ForEach(message->headers, Queue_Send_Header, socket);
-
-    if (Socket_Tx(socket, 1, (uint8_t *)"\n") != 1)
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send end of header", __func__);
-        return false;
-    }
-    if (message->pBody != NULL)
-    {
-        if (Socket_Tx(socket, message->bodyLength, message->pBody) != (ssize_t)message->bodyLength)
-        {
-            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send message body", __func__);
-            return false;
-        }
-    }
-    if (Socket_Tx(socket, 1, (uint8_t *)"\0") != 1)
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send end of message", __func__);
-        return false;
-    }
     return true;
 }
 
-static struct StompMessage *
-Queue_Message_Create(const char * verb)
+static void
+AMQP_Socket_Close (AMQP_Socket_t *socket)
 {
-    struct StompMessage *message;
-    if ((message = calloc(1, sizeof(struct StompMessage))) == NULL)
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to alloc message", __func__);
-        return NULL;
+    // TODO - Handle errors
+    if (socket == NULL)
+        return;
+
+    if (socket->pQueueName.bytes != NULL) {
+        amqp_bytes_free(socket->pQueueName);
     }
-    if ((message->sVerb = calloc(strlen(verb)+1, sizeof(char))) == NULL)
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to allocate verb", __func__);
-        free(message);
-        return NULL;
+
+    if (socket->bChannelOpen) {
+        amqp_channel_close(socket->pConn, AMQP_CHAN_ID, AMQP_REPLY_SUCCESS);
+        socket->bChannelOpen = false;
     }
-    strcpy(message->sVerb, verb);
-    message->headers = Message_Header_List_Create();
-    return message;
+
+    amqp_connection_close(socket->pConn, AMQP_REPLY_SUCCESS);
+    amqp_destroy_connection(socket->pConn);
+    free(socket);
 }
 
-
-static char *
-Queue_Message_Get_Header(struct StompMessage *message, const char *name)
-{
-    struct MessageHeader *header = NULL;
-    header = List_Find(message->headers, (void *)name);
-
-    if (header != NULL)
-        return header->sValue;
-    else 
-        return NULL;
-}
-
-
-
-static struct Socket *
+static AMQP_Socket_t *
 Queue_Connect_Socket(
     const char * address,
-    int16_t port,
+    uint32_t port,
     const char * username,
     const char * password,
     const char * vHost,
     bool useSSL
 ) {
-    struct Socket *socket;
-    struct StompMessage *message;
-	
+    int amqpErr;
+    AMQP_Socket_t *socket;
+    struct timeval tval;
+    tval.tv_sec = 5;
+    tval.tv_usec = 0;
+
 	ASSERT (address != NULL);
     ASSERT (username != NULL);
     ASSERT (password != NULL);
 
-    // open the socket
-    if (useSSL)
-        socket = SSL_Socket_Connect ((uint8_t *)address, port);
-    else
-        socket = Socket_Connect ((uint8_t *)address, port);
+    if ((socket = calloc(1, sizeof(AMQP_Socket_t))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating AMQP socket struct", __func__ );
+        return NULL;
+    }
+    socket->bChannelOpen = false;
 
-    if (socket == NULL )
-    {
-        if (useSSL)
-            rzb_log (LOG_ERR,LOG_C_STOMP,
-                     "%s: failed due to failure of SSL_Socket_Connect", __func__);
-        else 
-            rzb_log (LOG_ERR,LOG_C_STOMP,
-                     "%s: failed due to failure of Socket_Connect", __func__);
+    socket->pConn = amqp_new_connection();
+    if (useSSL) {
+        socket->pSocket = amqp_ssl_socket_new(socket->pConn);
+        amqp_ssl_socket_set_cacert(socket->pSocket, "/etc/ssl/certs/ca-certificates.crt");
+    } else {
+        socket->pSocket = amqp_tcp_socket_new(socket->pConn);
+
+    }
+    if (!socket->pSocket) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error creating socket", __func__ );
+        free(socket);
+        return NULL;
+    }
+    if ((amqpErr = amqp_socket_open_noblock(socket->pSocket, address, port, &tval)) < 0) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error opening TCP socket %s:%u - %s", __func__, address, port, amqp_error_string2(amqpErr));
+        free(socket);
+        return NULL;
+    }
+    if (AMQP_error(amqp_login(socket->pConn, vHost, 0, AMQP_DEFAULT_FRAME_SIZE, 10, AMQP_SASL_METHOD_PLAIN, username, password), __func__)) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error logging in", __func__ );
+        AMQP_Socket_Close(socket);
         return NULL;
     }
 
-    if ((message= Queue_Message_Create("CONNECT")) == NULL) 
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create connect message", __func__);
-        Socket_Close(socket);
+    amqp_channel_open(socket->pConn, AMQP_CHAN_ID);
+    if(AMQP_error(amqp_get_rpc_reply(socket->pConn), __func__)) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error opening channel", __func__ );
+        AMQP_Socket_Close(socket);
         return NULL;
     }
 
-    if (!
-         (
-            StompMessage_Add_Header(message, "passcode", password) &&
-            StompMessage_Add_Header(message, "login", username) &&
-            StompMessage_Add_Header(message, "accept-version", "1.2")
-            /* ActiveMQ does not support sending the host header even though
-             * it is defined as MUST in the stomp SPEC.
-             * https://stomp.github.io/stomp-specification-1.2.html#Connecting
-             *   Message_Add_Header(message->headers, "host", address)
-             */
-        )
-    ){
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add connect headers", __func__);
-        Queue_Destroy_Stomp_Message(message);
-        Socket_Close(socket);
-        return NULL;
-    }
-    if (vHost != NULL) {
-        rzb_log(LOG_DEBUG,LOG_C_STOMP, "%s: Adding vhost header: %s", __func__, vHost);
-        if (!StompMessage_Add_Header(message, "host", vHost)) {
-            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add vhost header", __func__);
-            Queue_Destroy_Stomp_Message(message);
-            Socket_Close(socket);
-            return NULL;
-        }
-    }
-
-    // send the Connect message
-    if (!Queue_Send_Message(socket, message))
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send connect message", __func__);
-        Socket_Close(socket);
-        Queue_Destroy_Stomp_Message(message);
-        return NULL;
-    }
-    Queue_Destroy_Stomp_Message(message); //< The Connect message
-
-    if ((message = Queue_Read_Message(socket)) == NULL)
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to read connection response", __func__);
-        Socket_Close(socket);
-        return NULL;
-    }
-    if (strcasecmp(message->sVerb, "CONNECTED") != 0)
-    {
-        rzb_log (LOG_ERR,LOG_C_STOMP,
-                 "%s: failed due to failure of strncasecmp ( CONNECTED )", __func__);
-        Queue_Destroy_Stomp_Message(message);
-        Socket_Close(socket);
-        return NULL;
-    }
-
-    Queue_Destroy_Stomp_Message(message);
 
     // done
     return socket;
@@ -410,62 +165,67 @@ Queue_Connect_Socket(
 static bool
 Queue_BeginReading (struct Queue *p_pQ)
 {
-    struct StompMessage *l_pMessage;
-    struct timeval tv;
-    char * prefetchCount;
+    amqp_bytes_t decQueuename;
+    const char *exchange = p_pQ->bTopic ? "amq.topic" : "amq.direct";
+    int autoDelete = p_pQ->bTopic ? 1 : 0;
 
 	ASSERT (p_pQ != NULL);
 
-    // Generate the subscription ID
-    if (p_pQ->sSubscriptionId == NULL) {
-        gettimeofday(&tv, NULL);
-        if (asprintf(
-                &p_pQ->sSubscriptionId,
-                "%s-%llu",
-                p_pQ->sName,
-                (((long long)tv.tv_sec)*1000)+(tv.tv_usec/1000))
-                == -1) {
-            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to generate subscription ID", __func__);
+    if (p_pQ->bTopic) {
+       decQueuename = amqp_empty_bytes;
+    } else {
+        decQueuename = amqp_cstring_bytes(p_pQ->sName);
+    }
+    amqp_queue_declare_ok_t *r = amqp_queue_declare(
+        p_pQ->pReadSocket->pConn,
+        AMQP_CHAN_ID,
+        decQueuename,
+        0,
+        1,
+        0,
+        autoDelete,
+        amqp_empty_table
+    );
+    if (AMQP_error(amqp_get_rpc_reply(p_pQ->pReadSocket->pConn), __func__)) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to declare queue", __func__);
+        return false;
+    }
+    p_pQ->pReadSocket->pQueueName = amqp_bytes_malloc_dup(r->queue);
+
+    if (p_pQ->pReadSocket->pQueueName.bytes == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Out of memory while copying queue name", __func__);
+        return false;
+    }
+    if (p_pQ->bTopic) {
+        amqp_queue_bind(
+            p_pQ->pReadSocket->pConn,
+            AMQP_CHAN_ID,
+            p_pQ->pReadSocket->pQueueName,
+            amqp_cstring_bytes(exchange),
+            amqp_cstring_bytes(p_pQ->sName),
+            amqp_empty_table
+        );
+        if (AMQP_error(amqp_get_rpc_reply(p_pQ->pReadSocket->pConn), __func__)) {
+            rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to bind to topic exchange", __func__);
+            return false;
         }
     }
-    // send the subscribe message
 
-    if ((l_pMessage= Queue_Message_Create("SUBSCRIBE")) == NULL) 
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create subscribe message", __func__);
+    amqp_basic_consume(
+        p_pQ->pReadSocket->pConn,
+        AMQP_CHAN_ID,
+        p_pQ->pReadSocket->pQueueName,
+        amqp_empty_bytes,
+        0,
+        0,
+        0,
+        amqp_empty_table
+    );
+
+    if (AMQP_error(amqp_get_rpc_reply(p_pQ->pReadSocket->pConn), __func__ )) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to start consuming from queue", __func__);
         return false;
     }
-
-    if (asprintf(&prefetchCount, "%u", p_pQ->iPrefetch) == -1) {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to allocate prefetch count header", __func__);
-        Queue_Destroy_Stomp_Message(l_pMessage);
-        return false;
-    }
-
-    if (!(
-            StompMessage_Add_Header(l_pMessage, "destination", p_pQ->sName) &&
-            StompMessage_Add_Header(l_pMessage, "ack", "client-individual")  &&
-            StompMessage_Add_Header(l_pMessage, "id", p_pQ->sSubscriptionId) &&
-            StompMessage_Add_Header(l_pMessage, "prefetch-count", prefetchCount)
-        ))
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add destination headers", __func__);
-        Queue_Destroy_Stomp_Message(l_pMessage);
-        free(prefetchCount);
-        return false;
-    }
-
-    // send the Connect message
-    if (!Queue_Send_Message(p_pQ->pReadSocket, l_pMessage))
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send subscribe message", __func__);
-        Queue_Destroy_Stomp_Message(l_pMessage);
-        free(prefetchCount);
-        return false;
-    }
-
-    Queue_Destroy_Stomp_Message(l_pMessage);
-    free(prefetchCount);
 
     return true;
 }
@@ -473,40 +233,31 @@ Queue_BeginReading (struct Queue *p_pQ)
 static bool
 Queue_EndReading (struct Queue *p_pQ)
 {
-    struct StompMessage *l_pMessage;
 
 	ASSERT (p_pQ != NULL);
 
-    // send the subscribe message
-
-    if ((l_pMessage= Queue_Message_Create("UNSUBSCRIBE")) == NULL) 
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create unsubscribe message", __func__);
-        return false;
-    }
-
-    if (!StompMessage_Add_Header(l_pMessage, "destination", p_pQ->sName))
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add destination headers", __func__);
-        Queue_Destroy_Stomp_Message(l_pMessage);
-        return false;
-    }
-
-    // send the Connect message
-    if (!Queue_Send_Message(p_pQ->pReadSocket, l_pMessage))
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send unsubscribe message", __func__);
-        Queue_Destroy_Stomp_Message(l_pMessage);
-        return false;
-    }
-    Queue_Destroy_Stomp_Message(l_pMessage);
-
     return true;
+}
+
+static void
+AMQP_Heartbeat(void *p_arg)
+{
+    struct Queue *queue = (struct Queue *)p_arg;
+    amqp_frame_t frame;
+    struct timeval tval;
+    tval.tv_sec = 0;
+    tval.tv_usec = 0;
+
+    Mutex_Lock(queue->mWriteMutex);
+    amqp_simple_wait_frame_noblock(queue->pWriteSocket->pConn, &frame, &tval);
+    Mutex_Unlock(queue->mWriteMutex);
+
 }
 
 static bool
 Queue_Connect(struct Queue *queue)
 {
+
     if ((queue->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV)
     {
         if ((queue->pReadSocket =
@@ -536,9 +287,11 @@ Queue_Connect(struct Queue *queue)
                      "%s: failed due to failure of Queue_Connect_Socket (Write)", __func__);
             return false;
         }
+        queue->pWriteHeartbeat = Timer_Create(2, AMQP_Heartbeat, queue);
     }
     return true;
 }
+#if 0
 static bool
 Queue_Reconnect(struct Queue *queue)
 {
@@ -547,7 +300,7 @@ Queue_Reconnect(struct Queue *queue)
     {
         if (queue->pReadSocket != NULL)
         {
-            Socket_Close (queue->pReadSocket);
+            AMQP_Socket_Close(queue->pReadSocket);
             queue->pReadSocket = NULL;
         }
     }
@@ -557,7 +310,7 @@ Queue_Reconnect(struct Queue *queue)
     {
         if (queue->pWriteSocket != NULL)
         {
-            Socket_Close (queue->pWriteSocket);
+            AMQP_Socket_Close (queue->pWriteSocket);
             queue->pWriteSocket = NULL;
         }
     }
@@ -565,11 +318,14 @@ Queue_Reconnect(struct Queue *queue)
 
     return Queue_Connect(queue);
 }
+#endif
+
 SO_PUBLIC struct Queue *
-Queue_Create (const char * p_sQueueName, int p_iFlags)
+Queue_Create (const char * p_sQueueName, bool p_bTopic, int p_iFlags)
 {
     return Queue_Create_With_Host(
         p_sQueueName,
+        p_bTopic,
         p_iFlags,
         Config_getMqHost(),
         Config_getMqPort(),
@@ -582,7 +338,9 @@ Queue_Create (const char * p_sQueueName, int p_iFlags)
 }
 
 SO_PUBLIC struct Queue *
-Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags,
+Queue_Create_With_Host (const char * p_sQueueName,
+                        bool p_bTopic,
+                        int p_iFlags,
                         const char * p_sHost,
                         uint32_t p_iPort,
                         const char * p_sUser,
@@ -608,6 +366,7 @@ Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags,
     l_pQueue->sVhost = (char*)p_sVhost;
     l_pQueue->bUseSSL = p_bUseSSL;
     l_pQueue->iPrefetch = p_iPrefetch;
+    l_pQueue->bTopic = p_bTopic;
 
     if ((l_pQueue->sName = (char *)calloc(strlen((char *)p_sQueueName)+1, sizeof(char))) == NULL)
     {
@@ -636,35 +395,23 @@ Queue_Create_With_Host (const char * p_sQueueName, int p_iFlags,
 SO_PUBLIC void
 Queue_Terminate (struct Queue *p_pQ)
 {
-    struct StompMessage *l_pMessage;
-
 	ASSERT (p_pQ != NULL);
 
     Mutex_Lock (p_pQ->mReadMutex);
     Mutex_Lock (p_pQ->mWriteMutex);
-    if ((l_pMessage= Queue_Message_Create("DISCONNECT")) == NULL) 
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create disconnect message", __func__);
-    }
- 
+
     if ((p_pQ->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
             p_pQ->pReadSocket != NULL)
     {
         Queue_EndReading (p_pQ);
-        if (l_pMessage != NULL)
-            Queue_Send_Message(p_pQ->pReadSocket, l_pMessage);
-        Socket_Close (p_pQ->pReadSocket);
+        AMQP_Socket_Close (p_pQ->pReadSocket);
     }
     if ((p_pQ->iFlags & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND &&
             p_pQ->pWriteSocket != NULL)
     {
-        if (l_pMessage != NULL)
-            Queue_Send_Message(p_pQ->pWriteSocket, l_pMessage);
-        Socket_Close (p_pQ->pWriteSocket);
+        AMQP_Socket_Close (p_pQ->pWriteSocket);
     }
 
-    if (l_pMessage != NULL)
-        Queue_Destroy_Stomp_Message(l_pMessage);
 
     Mutex_Unlock (p_pQ->mReadMutex);
     Mutex_Unlock (p_pQ->mWriteMutex);
@@ -678,130 +425,126 @@ SO_PUBLIC struct Message *
 Queue_Get (struct Queue *queue)
 {
     struct Message *ret = NULL;
-    struct StompMessage *message = NULL;
-    struct StompMessage *ack = NULL;
     struct MessageHeader *header = NULL;
-    char * messageId;
+    amqp_rpc_reply_t res;
+    amqp_envelope_t envelope;
+    int headerIndex = 0;
 
 	ASSERT (queue);
     Mutex_Lock (queue->mReadMutex);
 
-    if (( message = Queue_Read_Message (queue->pReadSocket)) == NULL)
-    {
-        if ( errno != EINTR )
-        {
-            rzb_perror (LOG_C_STOMP,"failed due to failure of Queue_Read_Message: %s");
-            while (!Queue_Reconnect(queue))
-                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Reconnecting", __func__);
-        }
-        Mutex_Unlock (queue->mReadMutex);
+    amqp_maybe_release_buffers(queue->pReadSocket->pConn);
+    res = amqp_consume_message(queue->pReadSocket->pConn, &envelope, NULL, 0);
+
+    if (AMQP_RESPONSE_NORMAL != res.reply_type) {
+        // TODO - Handle errors
+        Mutex_Unlock(queue->mReadMutex);
         return NULL;
     }
-    if (strcasecmp(message->sVerb, "MESSAGE") == 0)
+    if ((ret = (struct Message *)calloc(1,sizeof(struct Message))) == NULL)
     {
-        if ((messageId = Queue_Message_Get_Header(message, "ack")) == NULL)
-        {
-            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to get message-id", __func__);
-            Mutex_Unlock (queue->mReadMutex);
-            Queue_Destroy_Stomp_Message(message);
-            return NULL;
-        }
-
-        // Send Ack
-        if ((ack = Queue_Message_Create("ACK")) == NULL)
-        {
-            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create ACK", __func__);
-            Queue_Destroy_Stomp_Message(message);
-            Mutex_Unlock (queue->mReadMutex);
-            return NULL;
-        }
-        if (!StompMessage_Add_Header(ack, "id", messageId))
-        {
-            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add ack message-id headers", __func__);
-            Queue_Destroy_Stomp_Message(ack);
-            Queue_Destroy_Stomp_Message(message);
-            Mutex_Unlock (queue->mReadMutex);
-            return NULL;
-        }
-        if (!Queue_Send_Message(queue->pReadSocket, ack))
-        {
-            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send ack message", __func__);
-            Queue_Destroy_Stomp_Message(ack);
-            Queue_Destroy_Stomp_Message(message);
-            Mutex_Unlock (queue->mReadMutex);
-            return NULL;
-        }
-        Queue_Destroy_Stomp_Message(ack);
-
-        Mutex_Unlock (queue->mReadMutex);
-        if ((ret = (struct Message *)calloc(1,sizeof(struct Message))) == NULL)
-        {
-            Queue_Destroy_Stomp_Message(message);
-			return NULL;
-        }
-        if ((queue->iFlags & QUEUE_FLAG_EXTERNAL_MODE) != QUEUE_FLAG_EXTERNAL_MODE) {
-            if ((header = (struct MessageHeader *) List_Find(message->headers, (void *) "rzb-msg-type")) == NULL) {
-                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-type", __func__);
-                free(ret);
-                Queue_Destroy_Stomp_Message(message);
-                return NULL;
-            }
-            ret->type = strtoul(header->sValue, NULL, 10);
-
-            if ((header = (struct MessageHeader *) List_Find(message->headers, (void *) "rzb-msg-ver")) == NULL) {
-                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-ver", __func__);
-                free(ret);
-                Queue_Destroy_Stomp_Message(message);
-                return NULL;
-            }
-            ret->version = strtoul(header->sValue, NULL, 10);
-        }
-
-        ret->length = message->bodyLength;
-        ret->headers = message->headers;
-        ret->serialized = message->pBody;
-        message->headers = NULL;
-        message->pBody = NULL;
-        Queue_Destroy_Stomp_Message(message);
-        if ((queue->iFlags & QUEUE_FLAG_EXTERNAL_MODE) != QUEUE_FLAG_EXTERNAL_MODE) {
-            if (!Message_Setup(ret)) {
-                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message_Setup failed", __func__);
-                free(ret);
-                return NULL;
-            }
-            if(!ret->deserialize(ret)) {
-                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message deserialize failed: type %u body %s", __func__, ret->type, ret->serialized);
-                ret->destroy(ret);
-                return NULL;
-            }
-        }
-
-        return ret;
+        Mutex_Unlock(queue->mReadMutex);
+        return NULL;
+    }
+    if ((ret->headers = Message_Header_List_Create()) == NULL) {
+        free(ret);
+        Mutex_Unlock(queue->mReadMutex);
+        return NULL;
     }
 
-    errno = EAGAIN;
-    Queue_Destroy_Stomp_Message(message);
+    ret->serialized = (uint8_t *)calloc(1, envelope.message.body.len + 1);
+    if (ret->serialized == NULL) {
+        Message_Destroy(ret);
+        Mutex_Unlock(queue->mReadMutex);
+        return NULL;
+    }
+    memcpy(ret->serialized, envelope.message.body.bytes, envelope.message.body.len);
+    ret->length = envelope.message.body.len;
+    if (envelope.message.properties._flags & AMQP_BASIC_HEADERS_FLAG) {
+        //rzb_log(LOG_DEBUG, LOG_C_QUEUE, "%s: Message has %u headers", __func__, envelope.message.properties.headers.num_entries);
+        for (headerIndex = 0; headerIndex < envelope.message.properties.headers.num_entries; headerIndex++) {
+            amqp_table_entry_t entry = envelope.message.properties.headers.entries[headerIndex];
+            char * name = strndup((char *)entry.key.bytes, entry.key.len);
+            //rzb_log(LOG_DEBUG, LOG_C_QUEUE, "%s: Processing header %s - Kind: %u", __func__, name, entry.value.kind);
+            if (entry.value.kind == AMQP_FIELD_KIND_UTF8) {
+                //rzb_log(LOG_DEBUG, LOG_C_QUEUE, "%s: Header %s: %s", __func__, name, entry.value.value.bytes.bytes);
+                Message_HeaderList_Add(ret->headers, name, entry.value.value.bytes.bytes);
+            } else if (entry.value.kind == AMQP_FIELD_KIND_BYTES) {
+                // Copy header values into new strings to make sure they are null terminated
+                char * value = strndup((char *)entry.value.value.bytes.bytes, entry.value.value.bytes.len);
+                //rzb_log(LOG_DEBUG, LOG_C_QUEUE, "%s: Header %s: %s", __func__, name, value);
+                Message_HeaderList_Add(ret->headers, name, value);
+                free(value);
+            }
+            free(name);
+        }
+    }
+    amqp_basic_ack(queue->pReadSocket->pConn, 1, envelope.delivery_tag, 0);
+    amqp_destroy_envelope(&envelope);
     Mutex_Unlock (queue->mReadMutex);
-    return NULL;
+
+    if ((queue->iFlags & QUEUE_FLAG_EXTERNAL_MODE) != QUEUE_FLAG_EXTERNAL_MODE) {
+        if ((header = (struct MessageHeader *) List_Find(ret->headers, (void *) "rzb-msg-type")) == NULL) {
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-type", __func__);
+            Message_Destroy(ret);
+            return NULL;
+        }
+        ret->type = strtoul(header->sValue, NULL, 10);
+
+        if ((header = (struct MessageHeader *) List_Find(ret->headers, (void *) "rzb-msg-ver")) == NULL) {
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-ver", __func__);
+            Message_Destroy(ret);
+            return NULL;
+        }
+        ret->version = strtoul(header->sValue, NULL, 10);
+
+        if (!Message_Setup(ret)) {
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message_Setup failed", __func__);
+            Message_Destroy(ret);
+            return NULL;
+        }
+        if(!ret->deserialize(ret)) {
+            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message deserialize failed: type %u body %s", __func__, ret->type, ret->serialized);
+            ret->destroy(ret);
+            return NULL;
+        }
+    }
+
+    return ret;
 }
+
 SO_PUBLIC bool
 Queue_Put (struct Queue * queue,  struct Message * message)
 {
     return Queue_Put_Dest(queue, message, queue->sName);
 }
 
+struct HeaderIteratorContext {
+    amqp_table_entry_t *nextEntry;
+};
+
+static int
+Message_Header_To_AMQP_TableEntry(void *h, void *c)
+{
+    struct HeaderIteratorContext * ctx = (struct HeaderIteratorContext *)c;
+    struct MessageHeader * header = (struct MessageHeader *)h;
+    ctx->nextEntry->key = amqp_cstring_bytes(header->sName);
+    ctx->nextEntry->value.kind = AMQP_FIELD_KIND_UTF8;
+    ctx->nextEntry->value.value.bytes = amqp_cstring_bytes(header->sValue);
+    ctx->nextEntry++;
+    return LIST_EACH_OK;
+}
+
 SO_PUBLIC bool
 Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
 {
-    struct StompMessage *stompMessage;
-    char *messageId = NULL;
-    char *messageLen = NULL;
+    amqp_bytes_t message_bytes;
     char *messageType = NULL;
     char *messageVer = NULL;
-    char *l_pReceiptId = NULL;
-
-    time_t curTime = time(NULL);
-
+    amqp_bytes_t exchange;
+    int amqpErr;
+    struct HeaderIteratorContext ctx;
+    bool ret = true;
     ASSERT (queue != NULL);
     ASSERT (message != NULL);
 
@@ -823,118 +566,55 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
         }
     }
 
-
-    if ((stompMessage = Queue_Message_Create("SEND")) == NULL)
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to create SEND", __func__);
-        Mutex_Unlock (queue->mWriteMutex);
-        return false;
-    }
-    List_Destroy(stompMessage->headers);
-    stompMessage->headers = List_Clone(message->headers);
-    stompMessage->pBody = message->serialized;
-    stompMessage->bodyLength = message->length;
-#ifdef _MSC_VER
-#define STOMP_LEN_FMT "%Iu"
-#define STOMP_MID_FMT "message-%u"
-#else
-#define STOMP_LEN_FMT "%zu"
-#define STOMP_MID_FMT "message-%ju"
-#endif
-    if (asprintf(&messageId, STOMP_MID_FMT, (uintmax_t)curTime) == -1)
-    {
-        stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        Queue_Destroy_Stomp_Message(stompMessage);
-        Mutex_Unlock (queue->mWriteMutex);
-        return false;
-    }
-
-    if (asprintf(&messageLen, STOMP_LEN_FMT, stompMessage->bodyLength) == -1)
-    {
-        stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        Queue_Destroy_Stomp_Message(stompMessage);
-        Mutex_Unlock (queue->mWriteMutex);
-        return false;
-    }
     if (asprintf(&messageType, "%u", message->type) == -1)
     {
-        stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        Queue_Destroy_Stomp_Message(stompMessage);
         Mutex_Unlock (queue->mWriteMutex);
         return false;
     }
     if (asprintf(&messageVer, "%u", message->version) == -1)
     {
-        stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        Queue_Destroy_Stomp_Message(stompMessage);
+        free(messageType);
         Mutex_Unlock (queue->mWriteMutex);
         return false;
     }
 
-    if (!(StompMessage_Add_Header(stompMessage, "receipt", messageId) &&
-            StompMessage_Add_Header(stompMessage, "destination", dest) &&
-            StompMessage_Add_Header(stompMessage, "amq-msg-type", "bytes") &&
-            StompMessage_Add_Header(stompMessage, "content-length", messageLen) &&
-            StompMessage_Add_Header(stompMessage, "rzb-msg-type", messageType) &&
-            StompMessage_Add_Header(stompMessage, "rzb-msg-ver", messageVer)))
-    {
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to add ack message-id headers", __func__);
-        stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        Queue_Destroy_Stomp_Message(stompMessage);
-        Mutex_Unlock (queue->mWriteMutex);
-        return false;
+    message_bytes = amqp_cstring_bytes((char *)message->serialized);
+    if (queue->bTopic) {
+        // For topics the destination is the routing key
+        exchange = amqp_cstring_bytes("amq.topic");
+    } else {
+        exchange = amqp_empty_bytes;
     }
-    free(messageLen);
+    amqp_basic_properties_t props;
+    props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_HEADERS_FLAG;
+    props.content_type = amqp_cstring_bytes("application/json");
+    props.delivery_mode = 2; /* persistent delivery mode */
+    props.headers.num_entries = 2 + List_Length(message->headers);
+    props.headers.entries = (amqp_table_entry_t *)calloc(props.headers.num_entries, sizeof(amqp_table_entry_t));
+    props.headers.entries[0].key = amqp_cstring_bytes("rzb-msg-type");
+    props.headers.entries[0].value.kind = AMQP_FIELD_KIND_UTF8;
+    props.headers.entries[0].value.value.bytes = amqp_cstring_bytes(messageType);
+    props.headers.entries[1].key = amqp_cstring_bytes("rzb-msg-ver");
+    props.headers.entries[1].value.kind = AMQP_FIELD_KIND_UTF8;
+    props.headers.entries[1].value.value.bytes = amqp_cstring_bytes(messageVer);
+    ctx.nextEntry = &(props.headers.entries[2]);
+    List_ForEach(message->headers, Message_Header_To_AMQP_TableEntry, &ctx);
+
+    if (( amqpErr = amqp_basic_publish(
+            queue->pWriteSocket->pConn,
+            AMQP_CHAN_ID,
+            exchange,
+            amqp_cstring_bytes(dest),
+            0, 0, &props, message_bytes)) < 0) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to publish message: %s", __func__, amqp_error_string2(amqpErr));
+        ret = false;
+    }
+    free(props.headers.entries);
     free(messageType);
     free(messageVer);
 
-    while (!Queue_Send_Message(queue->pWriteSocket, stompMessage))
-    {
-		if (errno != EINTR)
-        {
-            while (!Queue_Reconnect(queue))
-                rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Reconnecting", __func__);
-            continue;
-        }
-        rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to send message", __func__);
-        stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-        Queue_Destroy_Stomp_Message(stompMessage);
-        Mutex_Unlock (queue->mWriteMutex);
-        return false;
-    }
-
-    stompMessage->pBody = NULL; // Wipe this so that the message code free's it.
-    Queue_Destroy_Stomp_Message(stompMessage);
-
-    if (( stompMessage = Queue_Read_Message (queue->pWriteSocket)) == NULL)
-    {
-        rzb_log (LOG_ERR,LOG_C_STOMP,
-                 "%s: failed due to failure of Queue_Read_Message", __func__);
-        Mutex_Unlock (queue->mWriteMutex);
-        return false;
-    }
-    if (strcasecmp(stompMessage->sVerb, "RECEIPT") == 0)
-    {
-        if ((l_pReceiptId = Queue_Message_Get_Header(stompMessage, "receipt-id")) == NULL)
-        {
-            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to get receipt-id", __func__);
-            Mutex_Unlock (queue->mWriteMutex);
-            Queue_Destroy_Stomp_Message(stompMessage);
-            return false;
-        }
-        if (strcmp(l_pReceiptId, messageId) != 0)
-        {
-            rzb_log(LOG_ERR,LOG_C_STOMP, "%s: receipt-id did not match sent message: %s, %s", __func__, l_pReceiptId, messageId);
-            Mutex_Unlock (queue->mWriteMutex);
-            Queue_Destroy_Stomp_Message(stompMessage);
-            return false;
-        }
-    }
-    free(messageId);
-    Queue_Destroy_Stomp_Message(stompMessage);
- 
     Mutex_Unlock (queue->mWriteMutex);
-    return true;
+    return ret;
 }
 
 SO_PUBLIC void

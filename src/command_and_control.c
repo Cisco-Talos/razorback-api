@@ -111,11 +111,11 @@ CommandAndControl_Start (struct RazorbackContext *p_pContext) {
             if ((processLock = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL)
                 return false;
 
-            if ((sg_readQueue = Queue_Create(COMMAND_QUEUE, QUEUE_FLAG_RECV)) == NULL) {
+            if ((sg_readQueue = Queue_Create(COMMAND_QUEUE, true, QUEUE_FLAG_RECV)) == NULL) {
                 rzb_log(LOG_ERR, LOG_C_CNC, "%s: C&C Error: Failed to connect to MQ.", __func__);
                 return false;
             }
-            if ((sg_writeQueue = Queue_Create(COMMAND_QUEUE, QUEUE_FLAG_SEND)) == NULL) {
+            if ((sg_writeQueue = Queue_Create(COMMAND_QUEUE, true, QUEUE_FLAG_SEND)) == NULL) {
                 rzb_log(LOG_ERR, LOG_C_CNC, "%s: C&C Error: Failed to connect to MQ.", __func__);
                 return false;
             }

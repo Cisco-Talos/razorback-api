@@ -362,13 +362,14 @@ Message_Serialize_Empty(struct Message *message) {
     }
 
 
-    if ((message->serialized = calloc(2, sizeof(uint8_t))) == NULL) {
+    if ((message->serialized = calloc(3, sizeof(uint8_t))) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc serialized data", __func__);
         return false;
     }
 
-    message->serialized[0]=' ';
-    message->serialized[1]='\0';
+    message->serialized[0]='{';
+    message->serialized[1]='}';
+    message->serialized[2]='\0';
     message->length=1;
 
     return true;

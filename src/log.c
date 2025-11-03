@@ -44,7 +44,7 @@ configureLogging (void)
         openlog (NULL, LOG_PID, Config_getLogFacility());
 #endif //_MSC_VER
 
-    if (( sg_logQueue = Queue_Create(LOG_QUEUE, QUEUE_FLAG_SEND)) == NULL)
+    if (( sg_logQueue = Queue_Create(LOG_QUEUE, false, QUEUE_FLAG_SEND)) == NULL)
     {
         return false;
     }

@@ -18,7 +18,7 @@ static void
 InspectorQueue_GetQueueName (uuid_t p_pApplicationType,
                              char * p_sQueueName)
 {
-    Queue_GetQueueName ( "/queue/INSPECTOR",
+    Queue_GetQueueName ( "INSPECTOR",
                         p_pApplicationType, p_sQueueName);
 }
 
@@ -48,7 +48,7 @@ InspectorQueue_Initialize (uuid_t p_pApplicationType, int p_iFlags)
         return l_pQueue;
 
     // initialize the queue
-    if ((l_pQueue = Queue_Create (l_sQueueName, p_iFlags)) == NULL)
+    if ((l_pQueue = Queue_Create (l_sQueueName, false, p_iFlags)) == NULL)
         return NULL;
 
     // find the queue

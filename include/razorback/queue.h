@@ -11,24 +11,26 @@
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 #include <razorback/socket.h>
-
+#include <razorback/timer.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define COMMAND_QUEUE "/topic/COMMAND"
-#define REQUEST_QUEUE "/queue/REQUEST"
-#define LOG_QUEUE "/queue/LOG"
-#define INPUT_QUEUE "/queue/INPUT"
-#define JUDGMENT_QUEUE "/queue/JUDGMENT"
+#define COMMAND_QUEUE "COMMAND"
+#define REQUEST_QUEUE "REQUEST"
+#define LOG_QUEUE "LOG"
+#define INPUT_QUEUE "INPUT"
+#define JUDGMENT_QUEUE "JUDGMENT"
+
+typedef struct _AMQP_Socket AMQP_Socket_t;
 
 /** Queue
  * an attachment to a distributed message queue
  */
 struct Queue
 {
-    struct Socket *pReadSocket;    ///< Read socket
-    struct Socket *pWriteSocket;   ///< Write socket
+    AMQP_Socket_t *pReadSocket;    ///< Socket for consuming messages
+    AMQP_Socket_t *pWriteSocket;   ///< Socket for sending messages
     char *sName;                   ///< Queue name
     int iFlags;                    ///< Flags (read/write/etc)
     Mutex_t *mReadMutex;           ///< Read Lock
@@ -39,8 +41,9 @@ struct Queue
     char *sUser;                   ///< Broker username
     char *sPassword;               ///< Broker password
     bool bUseSSL;                  ///< Use SSL connection to broker
-    char *sSubscriptionId;         ///< The subscription ID
     uint32_t iPrefetch;            ///< Prefetch count
+    bool bTopic;                   ///< Is this a topic (vs queue)
+    struct Timer *pWriteHeartbeat; ///< Write heartbeat timer
 };
 
 #define QUEUE_FLAG_SEND 0x01
@@ -50,14 +53,16 @@ struct Queue
 /** Initializes the queue
  * This method connects to the message broker provided in the API configuration file.
  * @param *p_sQueueName the name of the queue
+ * @param p_bTopic true if this is a topic, false if a queue
  * @param *p_iFlags Flags for the connection (read/write mode, etc)
  * @return a pointer to a new Queue Struct or NULL on error.
  */
-SO_PUBLIC extern struct Queue *Queue_Create (const char * p_sQueueName,
+SO_PUBLIC extern struct Queue *Queue_Create (const char * p_sQueueName, bool p_bTopic,
                                        int p_iFlags);
 /** Initializes the queue
  * This method allows connections to other external message brokers if required.
  * @param *p_sQueueName the name of the queue
+ * @param p_bTopic true if this is a topic, false if a queue
  * @param *p_iFlags Flags for the connection (read/write mode, etc)
  * @param *p_sHost Host name of the broker
  * @param p_iPort Port number to connect to
@@ -69,6 +74,7 @@ SO_PUBLIC extern struct Queue *Queue_Create (const char * p_sQueueName,
  */
 SO_PUBLIC extern struct Queue *Queue_Create_With_Host (
     const char * p_sQueueName,
+    bool p_bTopic,
     int p_iFlags,
     const char * p_sHost,
     uint32_t p_iPort,

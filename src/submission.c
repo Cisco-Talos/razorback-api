@@ -174,7 +174,7 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
     struct timespec l_tsTimeOut;
     l_tsTimeOut.tv_sec=1;
 #endif
-    if ((queue = Queue_Create(REQUEST_QUEUE, QUEUE_FLAG_SEND)) == NULL)
+    if ((queue = Queue_Create(REQUEST_QUEUE, false, QUEUE_FLAG_SEND)) == NULL)
         return;
 
     while (!Thread_IsStopped(p_pThread))
@@ -303,7 +303,7 @@ Submission_SubmitThread(Thread_t *p_pThread)
     struct timespec l_tsTimeOut;
     l_tsTimeOut.tv_sec=1;
 #endif
-    if ((queue = Queue_Create(INPUT_QUEUE, QUEUE_FLAG_SEND)) == NULL)
+    if ((queue = Queue_Create(INPUT_QUEUE, false, QUEUE_FLAG_SEND)) == NULL)
         return;
 
     while (!Thread_IsStopped(p_pThread))
