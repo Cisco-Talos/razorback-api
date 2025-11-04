@@ -23,6 +23,6 @@ target "api" {
         VERSION    = "${VERSION}"
     }
     tags = [
-        "${REPO}pyrazorback:${VERSION}",
+        "${REPO}razorback-api:${VERSION}",
     ]
 }
