@@ -24,7 +24,7 @@ ENV DEBIAN_FRONTEND=noninteractive
     COPY . /src/api
 
     WORKDIR /src/api
-    RUN ./configure --prefix=/razorback --enable-debug --enable-assert  && make && make install
+    RUN ./autojunk.sh && ./configure --prefix=/razorback --enable-debug --enable-assert  && make && make install
 
 FROM ${BASE_IMAGE}
     ENV DEBIAN_FRONTEND=noninteractive
