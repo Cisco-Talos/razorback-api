@@ -258,7 +258,7 @@ static bool
 Queue_Connect(struct Queue *queue)
 {
 
-    if ((queue->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV)
+    if (((queue->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV) && (queue->pReadSocket == NULL))
     {
         if ((queue->pReadSocket =
              Queue_Connect_Socket(queue->sHostname, queue->iPort,
@@ -277,7 +277,7 @@ Queue_Connect(struct Queue *queue)
         }
     }
 
-    if ((queue->iFlags & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND)
+    if (((queue->iFlags & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND) && (queue->pWriteSocket == NULL))
     {
         if ((queue->pWriteSocket = 
                     Queue_Connect_Socket(queue->sHostname, queue->iPort,
@@ -291,12 +291,11 @@ Queue_Connect(struct Queue *queue)
     }
     return true;
 }
-#if 0
+
 static bool
-Queue_Reconnect(struct Queue *queue)
+Queue_Reconnect(struct Queue *queue, int p_iSide)
 {
-    if ((queue->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
-            queue->pReadSocket != NULL)
+    if (p_iSide == QUEUE_FLAG_RECV && queue->pReadSocket != NULL)
     {
         if (queue->pReadSocket != NULL)
         {
@@ -305,7 +304,7 @@ Queue_Reconnect(struct Queue *queue)
         }
     }
 
-    if ((queue->iFlags & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND &&
+    if (p_iSide == QUEUE_FLAG_SEND &&
             queue->pWriteSocket != NULL)
     {
         if (queue->pWriteSocket != NULL)
@@ -318,7 +317,6 @@ Queue_Reconnect(struct Queue *queue)
 
     return Queue_Connect(queue);
 }
-#endif
 
 SO_PUBLIC struct Queue *
 Queue_Create (const char * p_sQueueName, bool p_bTopic, int p_iFlags)
@@ -409,6 +407,7 @@ Queue_Terminate (struct Queue *p_pQ)
     if ((p_pQ->iFlags & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND &&
             p_pQ->pWriteSocket != NULL)
     {
+        Timer_Destroy (p_pQ->pWriteHeartbeat);
         AMQP_Socket_Close (p_pQ->pWriteSocket);
     }
 
@@ -438,15 +437,19 @@ Queue_Get (struct Queue *queue)
 
     if (AMQP_RESPONSE_NORMAL != res.reply_type) {
         // TODO - Handle errors
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error consuming message (reconnecting): %d", __func__, res.reply_type);
+        Queue_Reconnect(queue, QUEUE_FLAG_RECV);
         Mutex_Unlock(queue->mReadMutex);
         return NULL;
     }
     if ((ret = (struct Message *)calloc(1,sizeof(struct Message))) == NULL)
     {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating message struct", __func__);
         Mutex_Unlock(queue->mReadMutex);
         return NULL;
     }
     if ((ret->headers = Message_Header_List_Create()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating message header list", __func__);
         free(ret);
         Mutex_Unlock(queue->mReadMutex);
         return NULL;
@@ -454,6 +457,7 @@ Queue_Get (struct Queue *queue)
 
     ret->serialized = (uint8_t *)calloc(1, envelope.message.body.len + 1);
     if (ret->serialized == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating message body", __func__);
         Message_Destroy(ret);
         Mutex_Unlock(queue->mReadMutex);
         return NULL;
