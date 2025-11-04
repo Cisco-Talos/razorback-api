@@ -4,6 +4,7 @@
 #include <stdarg.h>
 #include <string.h>
 #include <errno.h>
+#include <stdlib.h>
 #ifdef _MSC_VER
 #include <varargs.h>
 #include "bobins.h"
@@ -38,11 +39,23 @@ static uint64_t sg_logMask = LOG_C_ALL;
 bool
 configureLogging (void)
 {
+    char *logMask = NULL;
+    char *parseEnd = NULL;
 #ifdef _MSC_VER
 #else //_MSC_VER
     if (Config_getLogDest() == RZB_LOG_DEST_SYSLOG)
         openlog (NULL, LOG_PID, Config_getLogFacility());
 #endif //_MSC_VER
+
+    logMask = getenv("RZB_LOG_MASK");
+    if (logMask != NULL) {
+        sg_logMask = strtoull(logMask, &parseEnd, 16);
+        if (*parseEnd != '\0') {
+            rzb_log(LOG_ERR, LOG_C_CONFIG,
+                "Invalid RZB_LOG_MASK value '%s', using default", logMask);
+            sg_logMask = LOG_C_ALL;
+        }
+    }
 
     if (( sg_logQueue = Queue_Create(LOG_QUEUE, false, QUEUE_FLAG_SEND)) == NULL)
     {
