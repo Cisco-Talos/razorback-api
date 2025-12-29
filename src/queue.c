@@ -38,6 +38,8 @@ struct _AMQP_Socket {
     bool bChannelOpen;             ///< Is the channel open
 };
 
+static bool Queue_Reconnect(struct Queue *queue, int p_iSide);
+
 static bool
 AMQP_error(amqp_rpc_reply_t x, char const *context) {
     switch (x.reply_type) {
@@ -244,12 +246,24 @@ AMQP_Heartbeat(void *p_arg)
 {
     struct Queue *queue = (struct Queue *)p_arg;
     amqp_frame_t frame;
+    int status;
     struct timeval tval;
     tval.tv_sec = 0;
     tval.tv_usec = 0;
 
     Mutex_Lock(queue->mWriteMutex);
-    amqp_simple_wait_frame_noblock(queue->pWriteSocket->pConn, &frame, &tval);
+    if (queue->pWriteSocket == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Write socket missing during heartbeat, reconnecting", __func__);
+        Queue_Reconnect(queue, QUEUE_FLAG_SEND);
+        Mutex_Unlock(queue->mWriteMutex);
+        return;
+    }
+
+    status = amqp_simple_wait_frame_noblock(queue->pWriteSocket->pConn, &frame, &tval);
+    if (status != AMQP_STATUS_OK && status != AMQP_STATUS_TIMEOUT) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Heartbeat failed (%s), reconnecting", __func__, amqp_error_string2(status));
+        Queue_Reconnect(queue, QUEUE_FLAG_SEND);
+    }
     Mutex_Unlock(queue->mWriteMutex);
 
 }
@@ -287,7 +301,8 @@ Queue_Connect(struct Queue *queue)
                      "%s: failed due to failure of Queue_Connect_Socket (Write)", __func__);
             return false;
         }
-        queue->pWriteHeartbeat = Timer_Create(2, AMQP_Heartbeat, queue);
+        if (queue->pWriteHeartbeat == NULL)
+            queue->pWriteHeartbeat = Timer_Create(2, AMQP_Heartbeat, queue);
     }
     return true;
 }
@@ -558,6 +573,13 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
         return false;
     
     Mutex_Lock (queue->mWriteMutex);
+    if (queue->pWriteSocket == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Write socket unavailable, attempting reconnect", __func__);
+        if (!Queue_Reconnect(queue, QUEUE_FLAG_SEND) || queue->pWriteSocket == NULL) {
+            Mutex_Unlock(queue->mWriteMutex);
+            return false;
+        }
+    }
 
     // Don't serialize the message more than once.
     if (message->serialized == NULL)
@@ -612,6 +634,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
             0, 0, &props, message_bytes)) < 0) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to publish message: %s", __func__, amqp_error_string2(amqpErr));
         ret = false;
+        Queue_Reconnect(queue, QUEUE_FLAG_SEND);
     }
     free(props.headers.entries);
     free(messageType);
