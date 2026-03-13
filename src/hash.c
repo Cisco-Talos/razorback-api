@@ -109,9 +109,28 @@ Hash_Create (void) {
     return Hash_Create_Type(Config_getHashType());
 }
 
+static const char *
+Hash_Get_OpenSSL_Name(uint32_t type)
+{
+    switch (type) {
+        case HASH_TYPE_MD5:
+            return "MD5";
+        case HASH_TYPE_SHA1:
+            return "SHA1";
+        case HASH_TYPE_SHA224:
+            return "SHA224";
+        case HASH_TYPE_SHA256:
+            return "SHA256";
+        case HASH_TYPE_SHA512:
+            return "SHA512";
+        default:
+            return NULL;
+    }
+}
+
 static bool
 Hash_Init_OpenSSL(struct Hash *hash) {
-    const EVP_MD *m;
+    const char *algorithmName;
     ASSERT(hash != NULL);
     if (hash == NULL) {
         rzb_log (LOG_ERR, LOG_C_CORE, "%s: failed due to NULL hash", __func__);
@@ -122,29 +141,28 @@ Hash_Init_OpenSSL(struct Hash *hash) {
         rzb_log (LOG_ERR, LOG_C_CORE, "%s: failed due to lack of memory", __func__);
         return false;
     }
-    switch (hash->iType) {
-        case HASH_TYPE_MD5:
-            m = EVP_get_digestbyname("md5");
-            break;
-        case HASH_TYPE_SHA1:
-            m = EVP_get_digestbyname("sha1");
-            break;
-        case HASH_TYPE_SHA224:
-            m = EVP_get_digestbyname("sha224");
-            break;
-        case HASH_TYPE_SHA256:
-            m = EVP_get_digestbyname("sha256");
-            break;
-        case HASH_TYPE_SHA512:
-            m = EVP_get_digestbyname("sha512");
-            break;
-        default:
-            m = NULL;
-            rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed due to invalid type", __func__);
-            return false;
+
+    algorithmName = Hash_Get_OpenSSL_Name(hash->iType);
+    if (algorithmName == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed due to invalid type", __func__);
+        return false;
     }
-    hash->CTX = EVP_MD_CTX_new();
-    EVP_DigestInit(hash->CTX, m);
+
+    if ((hash->md = EVP_MD_fetch(NULL, algorithmName, NULL)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to fetch digest %s", __func__, algorithmName);
+        return false;
+    }
+
+    if ((hash->CTX = EVP_MD_CTX_new()) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate digest context", __func__);
+        return false;
+    }
+
+    if (EVP_DigestInit_ex2(hash->CTX, hash->md, NULL) != 1) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize digest context", __func__);
+        return false;
+    }
+
     return true;
 }
 
@@ -230,7 +248,10 @@ Hash_Update (struct Hash * p_pHash, uint8_t * p_pData, uint32_t p_iLength)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pHash is already finalized", __func__);
         return false;
     }
-    EVP_DigestUpdate(p_pHash->CTX, p_pData, p_iLength);
+    if (EVP_DigestUpdate(p_pHash->CTX, p_pData, p_iLength) != 1) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to update digest", __func__);
+        return false;
+    }
     return true;
 }
 
@@ -267,7 +288,11 @@ Hash_Update_File (struct Hash * p_pHash, FILE *file)
 
     while((len = fread(data,1,4096, file)) > 0)
     {
-        EVP_DigestUpdate(p_pHash->CTX, data, len);
+        if (EVP_DigestUpdate(p_pHash->CTX, data, len) != 1) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to update digest from file", __func__);
+            rewind(file);
+            return false;
+        }
     }
     rewind(file);
     return true;
@@ -275,6 +300,8 @@ Hash_Update_File (struct Hash * p_pHash, FILE *file)
 
 SO_PUBLIC bool
 Hash_Finalize (struct Hash * p_pHash) {
+    unsigned int digestSize;
+
     ASSERT (p_pHash != NULL);
     if (p_pHash == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pHash is NULL", __func__);
@@ -295,7 +322,13 @@ Hash_Finalize (struct Hash * p_pHash) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pHash is already finalized", __func__);
         return false;
     }
-    EVP_DigestFinal(p_pHash->CTX, p_pHash->pData, &p_pHash->iSize);
+
+    if (EVP_DigestFinal_ex(p_pHash->CTX, p_pHash->pData, &digestSize) != 1) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to finalize digest", __func__);
+        return false;
+    }
+
+    p_pHash->iSize = digestSize;
     p_pHash->iFlags = p_pHash->iFlags | HASH_FLAG_FINAL;
     return true;
 }
@@ -345,6 +378,9 @@ Hash_Destroy (struct Hash *p_pHash) {
     if (p_pHash->CTX != NULL) {
         EVP_MD_CTX_free(p_pHash->CTX);
     }
+    if (p_pHash->md != NULL) {
+        EVP_MD_free(p_pHash->md);
+    }
     free(p_pHash);
 }
 
@@ -381,6 +417,5 @@ Hash_Clone (const struct Hash *p_pSource) {
 
     return l_pDestination;
 }
-
 
 

@@ -23,17 +23,13 @@
 
 
 #include <openssl/ssl.h>
-#include <openssl/err.h>
-
-
-
-
 static bool Crypto_Initialize_OpenSSL(void)
 {
-
-    SSL_load_error_strings ();
-    SSL_library_init();
-    OpenSSL_add_all_digests();
+    if (OPENSSL_init_ssl(OPENSSL_INIT_SSL_DEFAULT, NULL) != 1)
+    {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize OpenSSL", __func__);
+        return false;
+    }
     return true;
 }
 

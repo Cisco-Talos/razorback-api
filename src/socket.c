@@ -56,16 +56,11 @@ Socket_TLS_ConfigureContext(SSL_CTX *context, bool insecureMode)
     if (context == NULL)
         return false;
 
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
     if (SSL_CTX_set_min_proto_version(context, TLS1_2_VERSION) != 1)
     {
         rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to enforce minimum TLS version", __func__);
         return false;
     }
-#else
-    SSL_CTX_set_options(context, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 |
-                                 SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1);
-#endif
 
     if (insecureMode)
     {
