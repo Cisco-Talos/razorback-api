@@ -73,11 +73,13 @@ SO_PUBLIC extern struct Socket * Socket_Listen_Unix(const char * path);
  * Starts a socket listening.
  * @param destinationAddress The address.
  * @param port The port.
+ * @param insecureMode When true, disables certificate and hostname verification.
  * @return A new socket or NULL on error.
  */
 SO_PUBLIC extern struct Socket * SSL_Socket_Connect(
     const uint8_t * destinationAddress,
-    uint16_t port
+    uint16_t port,
+    bool insecureMode
 );
 
 /**

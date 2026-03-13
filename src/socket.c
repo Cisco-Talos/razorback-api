@@ -49,6 +49,101 @@
 /* controls the amount sent per call to read or write */
 #define MAXRWSIZE   1024
 
+static bool
+Socket_TLS_ConfigureContext(SSL_CTX *context, bool insecureMode)
+{
+    ASSERT(context != NULL);
+    if (context == NULL)
+        return false;
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    if (SSL_CTX_set_min_proto_version(context, TLS1_2_VERSION) != 1)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to enforce minimum TLS version", __func__);
+        return false;
+    }
+#else
+    SSL_CTX_set_options(context, SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 |
+                                 SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1);
+#endif
+
+    if (insecureMode)
+    {
+        SSL_CTX_set_verify(context, SSL_VERIFY_NONE, NULL);
+        return true;
+    }
+
+    if (SSL_CTX_set_default_verify_paths(context) != 1)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to load default certificate authorities", __func__);
+        return false;
+    }
+
+    SSL_CTX_set_verify(context, SSL_VERIFY_PEER, NULL);
+    return true;
+}
+
+static bool
+Socket_TLS_SetExpectedPeer(SSL *handle, const char *destination, bool insecureMode)
+{
+    unsigned char ipv4[sizeof(struct in_addr)];
+    unsigned char ipv6[sizeof(struct in6_addr)];
+    X509_VERIFY_PARAM *verifyParams;
+
+    ASSERT(handle != NULL);
+    if (handle == NULL)
+        return false;
+
+    ASSERT(destination != NULL);
+    if (destination == NULL)
+        return false;
+
+    if ((inet_pton(AF_INET, destination, ipv4) == 1) ||
+        (inet_pton(AF_INET6, destination, ipv6) == 1))
+    {
+        if (insecureMode)
+            return true;
+
+        verifyParams = SSL_get0_param(handle);
+        if (verifyParams == NULL)
+        {
+            rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to retrieve verification parameters", __func__);
+            return false;
+        }
+
+        if (X509_VERIFY_PARAM_set1_ip_asc(verifyParams, destination) != 1)
+        {
+            rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to configure peer IP verification", __func__);
+            return false;
+        }
+        return true;
+    }
+
+    if (SSL_set_tlsext_host_name(handle, destination) != 1)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to configure TLS SNI", __func__);
+        return false;
+    }
+
+    if (insecureMode)
+        return true;
+
+    verifyParams = SSL_get0_param(handle);
+    if (verifyParams == NULL)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to retrieve verification parameters", __func__);
+        return false;
+    }
+
+    if (X509_VERIFY_PARAM_set1_host(verifyParams, destination, 0) != 1)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to configure peer hostname verification", __func__);
+        return false;
+    }
+
+    return true;
+}
+
 static void
 Socket_Destroy (struct Socket *sock)
 {
@@ -393,9 +488,11 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
 }
 
 SO_PUBLIC struct Socket *
-SSL_Socket_Connect ( const uint8_t * destination, uint16_t port)
+SSL_Socket_Connect ( const uint8_t * destination, uint16_t port, bool insecureMode)
 {
     struct Socket *sock;
+    const char *peerName = (const char *)destination;
+    long verifyResult;
 
     ASSERT (destination != NULL);
     if (destination == NULL)
@@ -410,19 +507,40 @@ SSL_Socket_Connect ( const uint8_t * destination, uint16_t port)
         return NULL;
     }
 
+    if (insecureMode)
+    {
+        rzb_log(LOG_WARNING, LOG_C_NETWORK,
+                "%s: TLS certificate verification disabled for %s:%u",
+                __func__, peerName, port);
+    }
+
     sock->ssl =true;
-    if ((sock->sslContext = SSL_CTX_new(SSLv23_client_method())) == NULL)
+    if ((sock->sslContext = SSL_CTX_new(TLS_client_method())) == NULL)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to allocate SSL context", __func__);
+        Socket_Close(sock);
+        return NULL;
+    }
+    if (!Socket_TLS_ConfigureContext(sock->sslContext, insecureMode))
     {
         Socket_Close(sock);
         return NULL;
     }
     if ((sock->sslHandle = SSL_new (sock->sslContext)) == NULL)
     {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to allocate SSL handle", __func__);
         Socket_Close(sock);
         return NULL;
     }
 
     if (!SSL_set_fd (sock->sslHandle, sock->iSocket))
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to attach socket to SSL handle", __func__);
+        Socket_Close(sock);
+        return NULL;
+    }
+
+    if (!Socket_TLS_SetExpectedPeer(sock->sslHandle, peerName, insecureMode))
     {
         Socket_Close(sock);
         return NULL;
@@ -431,6 +549,26 @@ SSL_Socket_Connect ( const uint8_t * destination, uint16_t port)
     // Initiate SSL handshake
     if (SSL_connect (sock->sslHandle) != 1)
     {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: TLS handshake failed", __func__);
+        Socket_Close(sock);
+        return NULL;
+    }
+
+    if (insecureMode)
+        return sock;
+
+    if (SSL_get0_peer_certificate(sock->sslHandle) == NULL)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Server did not provide a certificate", __func__);
+        Socket_Close(sock);
+        return NULL;
+    }
+
+    verifyResult = SSL_get_verify_result(sock->sslHandle);
+    if (verifyResult != X509_V_OK)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: TLS certificate verification failed: %s",
+                __func__, X509_verify_cert_error_string(verifyResult));
         Socket_Close(sock);
         return NULL;
     }
