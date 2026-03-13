@@ -30,6 +30,11 @@ static bool Crypto_Initialize_OpenSSL(void)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize OpenSSL", __func__);
         return false;
     }
+    if (!Socket_TLS_InitializeSharedState())
+    {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize shared TLS state", __func__);
+        return false;
+    }
     return true;
 }
 
