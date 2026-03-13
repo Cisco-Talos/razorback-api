@@ -18,6 +18,7 @@
 
 #include "config.h"
 #include <razorback/debug.h>
+#include <razorback/lock.h>
 #include <razorback/socket.h>
 #include <razorback/log.h>
 
@@ -50,6 +51,17 @@
 /* controls the amount sent per call to read or write */
 #define MAXRWSIZE   1024
 
+/*
+ * Shared client contexts are configured once per mode and then treated as
+ * immutable. Each connection takes an extra reference to the selected context.
+ */
+static Mutex_t *sg_pTlsContextMutex = NULL;
+static SSL_CTX *sg_pTlsSecureClientContext = NULL;
+static SSL_CTX *sg_pTlsInsecureClientContext = NULL;
+
+static SSL_CTX *Socket_TLS_GetSharedContextLocked(bool insecureMode);
+static bool Socket_TLS_CreateHandle(struct Socket *sock, bool insecureMode);
+
 static bool
 Socket_TLS_ConfigureContext(SSL_CTX *context, bool insecureMode)
 {
@@ -76,6 +88,96 @@ Socket_TLS_ConfigureContext(SSL_CTX *context, bool insecureMode)
     }
 
     SSL_CTX_set_verify(context, SSL_VERIFY_PEER, NULL);
+    return true;
+}
+
+bool
+Socket_TLS_InitializeSharedState(void)
+{
+    if (sg_pTlsContextMutex != NULL)
+        return true;
+
+    if ((sg_pTlsContextMutex = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to create TLS context mutex", __func__);
+        return false;
+    }
+
+    return true;
+}
+
+static SSL_CTX *
+Socket_TLS_GetSharedContextLocked(bool insecureMode)
+{
+    SSL_CTX **sharedContext;
+    SSL_CTX *context;
+
+    sharedContext = insecureMode ? &sg_pTlsInsecureClientContext : &sg_pTlsSecureClientContext;
+    if (*sharedContext == NULL)
+    {
+        if ((context = SSL_CTX_new(TLS_client_method())) == NULL)
+        {
+            rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to allocate shared SSL context", __func__);
+            return NULL;
+        }
+
+        if (!Socket_TLS_ConfigureContext(context, insecureMode))
+        {
+            SSL_CTX_free(context);
+            return NULL;
+        }
+
+        *sharedContext = context;
+    }
+
+    return *sharedContext;
+}
+
+static bool
+Socket_TLS_CreateHandle(struct Socket *sock, bool insecureMode)
+{
+    SSL_CTX *sharedContext;
+
+    ASSERT(sock != NULL);
+    if (sock == NULL)
+        return false;
+
+    ASSERT(sg_pTlsContextMutex != NULL);
+    if (sg_pTlsContextMutex == NULL)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Shared TLS state is not initialized", __func__);
+        return false;
+    }
+
+    if (!Mutex_Lock(sg_pTlsContextMutex))
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to lock TLS context mutex", __func__);
+        return false;
+    }
+
+    if ((sharedContext = Socket_TLS_GetSharedContextLocked(insecureMode)) == NULL)
+    {
+        Mutex_Unlock(sg_pTlsContextMutex);
+        return false;
+    }
+
+    if (SSL_CTX_up_ref(sharedContext) != 1)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to reference shared SSL context", __func__);
+        Mutex_Unlock(sg_pTlsContextMutex);
+        return false;
+    }
+
+    if ((sock->sslHandle = SSL_new(sharedContext)) == NULL)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to allocate SSL handle", __func__);
+        SSL_CTX_free(sharedContext);
+        Mutex_Unlock(sg_pTlsContextMutex);
+        return false;
+    }
+
+    sock->sslContext = sharedContext;
+    Mutex_Unlock(sg_pTlsContextMutex);
     return true;
 }
 
@@ -511,20 +613,8 @@ SSL_Socket_Connect ( const char * destination, uint16_t port, bool insecureMode)
     }
 
     sock->ssl =true;
-    if ((sock->sslContext = SSL_CTX_new(TLS_client_method())) == NULL)
+    if (!Socket_TLS_CreateHandle(sock, insecureMode))
     {
-        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to allocate SSL context", __func__);
-        Socket_Close(sock);
-        return NULL;
-    }
-    if (!Socket_TLS_ConfigureContext(sock->sslContext, insecureMode))
-    {
-        Socket_Close(sock);
-        return NULL;
-    }
-    if ((sock->sslHandle = SSL_new (sock->sslContext)) == NULL)
-    {
-        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to allocate SSL handle", __func__);
         Socket_Close(sock);
         return NULL;
     }
@@ -606,7 +696,24 @@ Socket_Close (struct Socket *sock)
             SSL_free (sock->sslHandle);
         }
         if (sock->sslContext)
-            SSL_CTX_free (sock->sslContext);
+        {
+            if (sg_pTlsContextMutex != NULL)
+            {
+                if (Mutex_Lock(sg_pTlsContextMutex))
+                {
+                    SSL_CTX_free (sock->sslContext);
+                    Mutex_Unlock(sg_pTlsContextMutex);
+                }
+                else
+                {
+                    SSL_CTX_free (sock->sslContext);
+                }
+            }
+            else
+            {
+                SSL_CTX_free (sock->sslContext);
+            }
+        }
     }
     Socket_Destroy (sock);
 }

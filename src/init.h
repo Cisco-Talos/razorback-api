@@ -38,6 +38,7 @@ bool readApiConfig (void);
 void initApi (void);
 
 bool Crypto_Initialize(void);
+bool Socket_TLS_InitializeSharedState(void);
 
 //magic.c
 bool Magic_Init(void);
