@@ -111,7 +111,11 @@ Transfer_Init(void)
                 soVersion[l_iIt] = '.';
 
         char * soFile;
-        asprintf(&soFile, "%s/razorback_transfer_%s.so.%s",LIB_DIR, mode, soVersion);
+        if (asprintf(&soFile, "%s/razorback_transfer_%s.so.%s", LIB_DIR, mode, soVersion) == -1) {
+            rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: Failed to allocate plugin path", __func__);
+            free(soVersion);
+            return false;
+        }
         free(soVersion);
         soVersion = NULL;
 
@@ -306,4 +310,3 @@ Transport_KeyCmp(void *a, void *key)
     uint8_t *id = key;
     return (dA->id - *id);
 }
-
