@@ -40,8 +40,28 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 
 #include <uuid/uuid.h>
+
+static const char *
+format_time_string(time_t value, char *buffer, size_t size)
+{
+#ifdef _MSC_VER
+	if (ctime_s(buffer, size, &value) != 0)
+		return "invalid time";
+#else
+	if (ctime_r(&value, buffer) == NULL)
+		return "invalid time";
+#endif
+	if (buffer[0] != '\0') {
+		size_t len = strlen(buffer);
+		if (len > 0 && buffer[len - 1] == '\n')
+			buffer[len - 1] = '\0';
+	}
+	return buffer;
+}
 
 static int test_uuid(const char * uuid, int isValid)
 {
@@ -73,6 +93,7 @@ main(int argc ATTR((unused)) , char **argv ATTR((unused)))
 	char		str[100];
 	struct timeval	tv;
 	time_t		time_reg;
+	char		time_buf[32];
 	unsigned char	*cp;
 	int i;
 	int failed = 0;
@@ -138,7 +159,7 @@ main(int argc ATTR((unused)) , char **argv ATTR((unused)))
 	tv.tv_usec = 0;
 	time_reg = uuid_time(buf, &tv);
 	printf("UUID time is: (%ld, %ld): %s\n", tv.tv_sec, tv.tv_usec,
-	       ctime(&time_reg));
+	       format_time_string(time_reg, time_buf, sizeof(time_buf)));
 	uuid_parse(str, tst);
 	if (!uuid_compare(buf, tst))
 		printf("UUID parse and compare succeeded.\n");

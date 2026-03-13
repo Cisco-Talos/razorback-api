@@ -913,12 +913,13 @@ Socket_Rx_Until (const struct Socket * sock, uint8_t ** r_buffer,
             return total;
         }
         if (total == bufSize) {
-            tmp = buffer;
-            if ((buffer = realloc(buffer, bufSize + MAXRWSIZE)) == NULL) {
+            if ((tmp = realloc(buffer, bufSize + MAXRWSIZE)) == NULL) {
                 rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to realloc buffer", __func__);
-                free(tmp);
+                free(buffer);
                 return -1;
             }
+            buffer = tmp;
+            bufSize += MAXRWSIZE;
         }
 
     } while (now > 0);

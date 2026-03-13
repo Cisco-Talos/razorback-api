@@ -7,7 +7,7 @@ int
 main()
 {
         struct json_object *jobj;
-        char *input = (char*)malloc(1024);
+        char input[1024];
 
         while (fgets(input, 1024, stdin) != NULL) {
                 jobj = json_tokener_parse(input);

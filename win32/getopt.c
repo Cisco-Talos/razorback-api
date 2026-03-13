@@ -91,26 +91,35 @@ getopt(int nargc, char * const nargv[], const char *ostr)
         __progname = __progname?__progname:_progname(*nargv);
 
 	_DIAGASSERT(nargv != NULL);
-	_DIAGASSERT(ostr != NULL);
+		_DIAGASSERT(ostr != NULL);
 
-	if (optreset || !*place) {		/* update scanning pointer */
-		optreset = 0;
-		if (optind >= nargc || *(place = nargv[optind]) != '-') {
-			place = EMSG;
-			return (-1);
-		}
-		if (place[1] && *++place == '-'	/* found "--" */
-		    && place[1] == '\0') {
-			++optind;
-			place = EMSG;
-			return (-1);
-		}
-	}					/* option letter okay? */
-	if ((optopt = (int)*place++) == (int)':' ||
-	    !(oli = strchr(ostr, optopt))) {
-		/*
-		 * if the user didn't specify '-' as an option,
-		 * assume it means -1.
+		if (optreset || !*place) {		/* update scanning pointer */
+			optreset = 0;
+			if (optind >= nargc) {
+				place = EMSG;
+				return (-1);
+			}
+			place = nargv[optind];
+			if (*place != '-') {
+				place = EMSG;
+				return (-1);
+			}
+			if (place[1]) {
+				++place;
+				if (*place == '-'	/* found "--" */
+				    && place[1] == '\0') {
+					++optind;
+					place = EMSG;
+					return (-1);
+				}
+			}
+		}					/* option letter okay? */
+		optopt = (int)*place++;
+		oli = strchr(ostr, optopt);
+		if (optopt == (int)':' || oli == NULL) {
+			/*
+			 * if the user didn't specify '-' as an option,
+			 * assume it means -1.
 		 */
 		if (optopt == (int)'-')
 			return (-1);
