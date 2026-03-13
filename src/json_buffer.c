@@ -47,18 +47,115 @@
 #include <errno.h>
 #include <string.h>
 
+static const char *
+JsonBuffer_FieldName(const char *name)
+{
+    return (name != NULL) ? name : "<null>";
+}
+
+static const char *
+JsonBuffer_TypeName(json_type type)
+{
+    switch (type) {
+    case json_type_null:
+        return "null";
+    case json_type_boolean:
+        return "boolean";
+    case json_type_double:
+        return "double";
+    case json_type_int:
+        return "integer";
+    case json_type_object:
+        return "object";
+    case json_type_array:
+        return "array";
+    case json_type_string:
+        return "string";
+    default:
+        return "unknown";
+    }
+}
+
+static void
+JsonBuffer_LogSerializationError(const char *func, const char *field,
+                                 const char *detail)
+{
+    rzb_log(LOG_ERR, LOG_C_JSON,
+            "%s: Failed to serialize field '%s': %s",
+            func, JsonBuffer_FieldName(field), detail);
+}
+
+static void
+JsonBuffer_LogDeserializationError(const char *func, const char *field,
+                                   const char *detail)
+{
+    rzb_log(LOG_ERR, LOG_C_JSON,
+            "%s: Failed to deserialize field '%s': %s",
+            func, JsonBuffer_FieldName(field), detail);
+}
+
+static void
+JsonBuffer_LogTypeMismatch(const char *func, const char *field,
+                           const char *expected, json_object *object,
+                           bool serializing)
+{
+    rzb_log(LOG_ERR, LOG_C_JSON,
+            "%s: Failed to %s field '%s': expected %s, got %s",
+            func,
+            serializing ? "serialize" : "deserialize",
+            JsonBuffer_FieldName(field),
+            expected,
+            (object == NULL) ? "missing" : JsonBuffer_TypeName(json_object_get_type(object)));
+}
+
+#define JSONBUFFER_RETURN_PUT(field, detail, expr) \
+    do { \
+        if (!(expr)) { \
+            JsonBuffer_LogSerializationError(__func__, field, detail); \
+            return false; \
+        } \
+    } while (0)
+
+#define JSONBUFFER_RETURN_GET(field, detail, expr) \
+    do { \
+        if (!(expr)) { \
+            JsonBuffer_LogDeserializationError(__func__, field, detail); \
+            return false; \
+        } \
+    } while (0)
+
+#define JSONBUFFER_GOTO_GET(field, detail, expr) \
+    do { \
+        if (!(expr)) { \
+            JsonBuffer_LogDeserializationError(__func__, field, detail); \
+            goto cleanup; \
+        } \
+    } while (0)
+
+#define JSONBUFFER_RETURN_LIST_PUT(field, detail, expr) \
+    do { \
+        if (!(expr)) { \
+            JsonBuffer_LogSerializationError(__func__, field, detail); \
+            return LIST_EACH_ERROR; \
+        } \
+    } while (0)
+
 SO_PUBLIC bool JsonBuffer_Put_bool (json_object * parent,
                                         const char *name, bool p_iValue) {
     json_object *new;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
     if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
     }
-    if (name == NULL)
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
+    }
 
     if ((new = json_object_new_boolean(p_iValue)) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate boolean value");
         return false;
     }
 
@@ -69,14 +166,18 @@ SO_PUBLIC bool JsonBuffer_Put_bool (json_object * parent,
 SO_PUBLIC bool JsonBuffer_Put_uint8_t (json_object * parent,
                                     const char *name, uint8_t p_iValue)
 {
-    return JsonBuffer_Put_uint64_t(parent,name,p_iValue);
+    JSONBUFFER_RETURN_PUT(name, "failed to serialize integer value",
+                          JsonBuffer_Put_uint64_t(parent, name, p_iValue));
+    return true;
 }
 
 SO_PUBLIC bool JsonBuffer_Put_uint16_t (json_object * parent, const char * name, uint16_t p_iValue)
 {
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    return JsonBuffer_Put_uint64_t(parent,name,p_iValue);
+    JSONBUFFER_RETURN_PUT(name, "failed to serialize integer value",
+                          JsonBuffer_Put_uint64_t(parent, name, p_iValue));
+    return true;
 }
 
 SO_PUBLIC bool JsonBuffer_Put_uint32_t (json_object * parent, const char * name, uint32_t p_iValue)
@@ -84,7 +185,9 @@ SO_PUBLIC bool JsonBuffer_Put_uint32_t (json_object * parent, const char * name,
 
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    return JsonBuffer_Put_uint64_t(parent,name,p_iValue);
+    JSONBUFFER_RETURN_PUT(name, "failed to serialize integer value",
+                          JsonBuffer_Put_uint64_t(parent, name, p_iValue));
+    return true;
 }
 
 SO_PUBLIC bool JsonBuffer_Put_uint64_t (json_object * parent, const char * name, uint64_t p_iValue)
@@ -92,15 +195,21 @@ SO_PUBLIC bool JsonBuffer_Put_uint64_t (json_object * parent, const char * name,
     json_object *new;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
+    }
 
 
 
-    if ((new = json_object_new_uint64(p_iValue)) == NULL)
+    if ((new = json_object_new_uint64(p_iValue)) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate integer value");
         return false;
+    }
 
     json_object_object_add(parent, name, new);
     return true;
@@ -116,27 +225,49 @@ SO_PUBLIC bool JsonBuffer_Put_ByteArray (json_object * parent, const char *name,
     bool ret;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
+    }
 
     b64 = BIO_new(BIO_f_base64());
+    if (b64 == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate base64 BIO");
+        return false;
+    }
     BIO_set_flags(b64, BIO_FLAGS_BASE64_NO_NL);
 
     bmem = BIO_new(BIO_s_mem());
+    if (bmem == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate memory BIO");
+        BIO_free_all(b64);
+        return false;
+    }
     BIO_push(b64, bmem);
     BIO_write(b64, p_pByteArray, p_iSize);
     //BIO_flush(b64);
     BIO_get_mem_ptr(b64, &bptr);
 
     buff = (char *)malloc(bptr->length+1);
+    if (buff == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate encoded byte buffer");
+        BIO_free_all(b64);
+        return false;
+    }
     memcpy(buff, bptr->data, bptr->length);
     buff[bptr->length] = '\0';
 
     BIO_free_all(b64);
 
     ret = JsonBuffer_Put_String(parent, name, buff);
+    if (!ret) {
+        JsonBuffer_LogSerializationError(__func__, name,
+                                         "failed to serialize encoded byte array");
+    }
 
     free(buff);
 
@@ -149,13 +280,19 @@ SO_PUBLIC bool JsonBuffer_Put_String (json_object * parent, const char * name,
     json_object *new;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
+    }
 
-    if ((new = json_object_new_string((const char *)p_sString)) == NULL)
+    if ((new = json_object_new_string((const char *)p_sString)) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate string value");
         return false;
+    }
 
     json_object_object_add(parent, name, new);
 
@@ -169,12 +306,18 @@ SO_PUBLIC bool JsonBuffer_Get_bool (json_object * parent, const char * name, boo
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_object_get(parent, name))  == NULL)
+    }
+    if ((object = json_object_object_get(parent, name))  == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
+    }
 
     json_type type = json_object_get_type(object);
     if (type == json_type_boolean) {
@@ -183,12 +326,14 @@ SO_PUBLIC bool JsonBuffer_Get_bool (json_object * parent, const char * name, boo
         tmpS = json_object_get_string(object);
         if (strcmp(tmpS, "true") == 0) {
             tmp = true;
-        } else if (strcmp(tmpS, "true") == 0) {
+        } else if (strcmp(tmpS, "false") == 0) {
             tmp = false;
         } else {
+            JsonBuffer_LogDeserializationError(__func__, name, "invalid boolean string");
             return false;
         }
     } else {
+        JsonBuffer_LogTypeMismatch(__func__, name, "boolean or string", object, false);
         return false;
     }
 
@@ -202,14 +347,22 @@ SO_PUBLIC bool JsonBuffer_Get_uint8_t (json_object * parent, const char * name, 
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_object_get(parent, name))  == NULL)
+    }
+    if ((object = json_object_object_get(parent, name))  == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_int)
+    }
+    if (json_object_get_type(object) != json_type_int) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "integer", object, false);
         return false;
+    }
 
     tmp = json_object_get_int(object);
     *p_pValue = (uint8_t) tmp;
@@ -223,14 +376,22 @@ SO_PUBLIC bool JsonBuffer_Get_uint16_t (json_object * parent, const char * name,
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_object_get(parent, name))  == NULL)
+    }
+    if ((object = json_object_object_get(parent, name))  == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_int)
+    }
+    if (json_object_get_type(object) != json_type_int) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "integer", object, false);
         return false;
+    }
 
     tmp = json_object_get_int(object);
     *p_pValue = (uint16_t) tmp;
@@ -244,8 +405,8 @@ SO_PUBLIC bool JsonBuffer_Get_uint32_t (json_object * parent, const char *name,
     uint64_t val;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (!JsonBuffer_Get_uint64_t(parent, name, &val))
-        return false;
+    JSONBUFFER_RETURN_GET(name, "failed to deserialize integer value",
+                          JsonBuffer_Get_uint64_t(parent, name, &val));
 
     // TODO Bounds checking
     *p_pValue = (uint32_t)val;
@@ -260,28 +421,35 @@ SO_PUBLIC bool JsonBuffer_Get_uint64_t (json_object * parent, const char *name,
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_object_get(parent, name))  == NULL)
+    }
+    if ((object = json_object_object_get(parent, name))  == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
+    }
 
     json_type type = json_object_get_type(object);
     if (type == json_type_string) {
         tmp = json_object_get_string(object);
         if (sscanf(tmp,NUM_FMT, &val) != 1) {
+            JsonBuffer_LogDeserializationError(__func__, name, "invalid integer string");
             return false;
         }
     } else if (type == json_type_int) {
         errno = 0;
         val = json_object_get_uint64(object);
         if (errno != 0) {
+            JsonBuffer_LogDeserializationError(__func__, name, "failed to convert integer value");
             return false;
         }
     } else {
-        // Not a string or int
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Invalid json object type for %s", __func__, name);
+        JsonBuffer_LogTypeMismatch(__func__, name, "integer or string", object, false);
         return false;
     }
 
@@ -297,17 +465,27 @@ SO_PUBLIC char * JsonBuffer_Get_String (json_object * parent, const char * name)
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return NULL;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return NULL;
-    if ((object = json_object_object_get(parent, name))  == NULL)
-        return false;
-    if (json_object_get_type(object) != json_type_string)
-        return false;
+    }
+    if ((object = json_object_object_get(parent, name))  == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
+        return NULL;
+    }
+    if (json_object_get_type(object) != json_type_string) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "string", object, false);
+        return NULL;
+    }
     tmp = json_object_get_string(object);
-    if (asprintf(&ret, "%s", tmp) == -1)
+    if (asprintf(&ret, "%s", tmp) == -1) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate string copy");
         return NULL;
+    }
     return ret;
 }
 
@@ -320,27 +498,56 @@ SO_PUBLIC bool JsonBuffer_Get_ByteArray (json_object * parent, const char * name
     uint8_t *output;
     BIO *bmem, *b64;
     size_t length;
+    int decodedLength;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_object_get(parent, name)) == NULL)
+    }
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_string)
+    }
+    if (json_object_get_type(object) != json_type_string) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "string", object, false);
         return false;
+    }
     input = (char *)json_object_get_string(object);
     length = strlen(input);
-    if ((output = calloc(length, sizeof(uint8_t))) == NULL)
+    if ((output = calloc(length, sizeof(uint8_t))) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate byte array");
         return false;
+    }
 
     b64 = BIO_new (BIO_f_base64());
+    if (b64 == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate base64 BIO");
+        free(output);
+        return false;
+    }
     BIO_set_flags (b64, BIO_FLAGS_BASE64_NO_NL);
     bmem = BIO_new_mem_buf (input, strlen(input));
+    if (bmem == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate memory BIO");
+        BIO_free_all(b64);
+        free(output);
+        return false;
+    }
     bmem = BIO_push (b64, bmem);
-    *p_iSize = BIO_read (bmem, output, length);
+    decodedLength = BIO_read (bmem, output, length);
+    if (decodedLength < 0) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to decode byte array");
+        BIO_free_all (bmem);
+        free(output);
+        return false;
+    }
     BIO_free_all (bmem);
+    *p_iSize = (uint32_t)decodedLength;
     *p_pByteArray = output;
     return true;
 }
@@ -351,17 +558,25 @@ SO_PUBLIC bool JsonBuffer_Get_UUID (json_object * parent, const char *name, uuid
     char *tmp;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
+    }
     // get the container
-    if ((object = json_object_object_get(parent, name))  == NULL)
+    if ((object = json_object_object_get(parent, name))  == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_object)
+    }
+    if (json_object_get_type(object) != json_type_object) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "object", object, false);
         return false;
-    if ((tmp =(char *) JsonBuffer_Get_String(object, "id")) == NULL)
-        return false;
+    }
+    JSONBUFFER_RETURN_GET("id", "failed to deserialize UUID string",
+                          (tmp = (char *)JsonBuffer_Get_String(object, "id")) != NULL);
 
     uuid_parse(tmp, p_uuid);
     free(tmp);
@@ -374,18 +589,24 @@ SO_PUBLIC bool JsonBuffer_Put_UUID (json_object * parent, const char * name, uui
     json_object *new;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((new = json_object_new_object()) == NULL)
+    }
+    if ((new = json_object_new_object()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate object value");
         return false;
+    }
 
     json_object_object_add(parent, name, new);
     uuid_unparse(p_uuid, uuid);
 
-    if (!JsonBuffer_Put_String(new, "id", uuid))
-        return false;
+    JSONBUFFER_RETURN_PUT("id", "failed to serialize UUID string",
+                          JsonBuffer_Put_String(new, "id", uuid));
     // TODO: Add other UUID attributes
 
     return true;
@@ -401,17 +622,21 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
     uint16_t port =0;
     uint8_t proto =0;
 
-    if (!JsonBuffer_Get_UUID(parent, "Name", name))
-        return false;
+    JSONBUFFER_RETURN_GET("Name", "failed to deserialize NTLV name",
+                          JsonBuffer_Get_UUID(parent, "Name", name));
 
-    if (!JsonBuffer_Get_UUID(parent, "Type", type))
-        return false;
+    JSONBUFFER_RETURN_GET("Type", "failed to deserialize NTLV type",
+                          JsonBuffer_Get_UUID(parent, "Type", type));
 
-    if (json_object_object_get(parent, "String_Value") != NULL)
-        str = JsonBuffer_Get_String(parent, "String_Value");
+    if (json_object_object_get(parent, "String_Value") != NULL) {
+        JSONBUFFER_RETURN_GET("String_Value", "failed to deserialize string NTLV value",
+                              (str = JsonBuffer_Get_String(parent, "String_Value")) != NULL);
+    }
 
-    if (json_object_object_get(parent, "Bin_Value") != NULL)
-        JsonBuffer_Get_ByteArray(parent, "Bin_Value", &size, &byteData);
+    if (json_object_object_get(parent, "Bin_Value") != NULL) {
+        JSONBUFFER_RETURN_GET("Bin_Value", "failed to deserialize binary NTLV value",
+                              JsonBuffer_Get_ByteArray(parent, "Bin_Value", &size, &byteData));
+    }
 
 
     if (str != NULL) {
@@ -437,22 +662,30 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
 
         UUID_Get_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
         if (uuid_compare(type, uuid) == 0) {
-            if ((byteData = calloc(4, sizeof(uint8_t))) == NULL)
+            if ((byteData = calloc(4, sizeof(uint8_t))) == NULL) {
+                JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                                  "failed to allocate IPv4 buffer");
                 return false;
+            }
             inet_pton(AF_INET, str, byteData);
             NTLVList_Add(list, name, type, 4, byteData);
         }
 
         UUID_Get_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
         if (uuid_compare(type, uuid) == 0) {
-            if ((str = calloc(16, sizeof(char))) == NULL)
+            if ((str = calloc(16, sizeof(char))) == NULL) {
+                JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                                  "failed to allocate IPv6 buffer");
                 return false;
+            }
             inet_pton(AF_INET6, str, byteData);
             NTLVList_Add(list, name, type, 16, byteData);
         }
     } else if (byteData != NULL) {
         NTLVList_Add(list, name, type, size, byteData);
     } else {
+        JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                          "no supported NTLV value representation was found");
         return false;
     }
 
@@ -475,16 +708,19 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
     uint16_t port =0;
     uint8_t proto =0;
 
-    if ((object = json_object_new_object()) == NULL)
+    if ((object = json_object_new_object()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, "<ntlv-item>",
+                                         "failed to allocate object value");
         return false;
+    }
 
     json_object_array_add(parent, object);
 
-    if (!JsonBuffer_Put_UUID(object, "Name", p_pItem->uuidName))
-        return LIST_EACH_ERROR;
+    JSONBUFFER_RETURN_LIST_PUT("Name", "failed to serialize NTLV name",
+                               JsonBuffer_Put_UUID(object, "Name", p_pItem->uuidName));
 
-    if (!JsonBuffer_Put_UUID(object, "Type", p_pItem->uuidType))
-        return LIST_EACH_ERROR;
+    JSONBUFFER_RETURN_LIST_PUT("Type", "failed to serialize NTLV type",
+                               JsonBuffer_Put_UUID(object, "Type", p_pItem->uuidType));
 
     UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuid);
     if (uuid_compare(uuid, p_pItem->uuidType) == 0)
@@ -495,8 +731,11 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
     {
         memcpy(&port, p_pItem->pData, 2);
 
-        if (asprintf(&str, "%hu", port) == -1)
+        if (asprintf(&str, "%hu", port) == -1) {
+            JsonBuffer_LogSerializationError(__func__, "String_Value",
+                                             "failed to format port value");
             return LIST_EACH_ERROR;
+        }
 
         doFree = true;
         goto type_processed;
@@ -506,8 +745,11 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
     {
         memcpy(&proto, p_pItem->pData, 1);
 
-        if (asprintf(&str, "%hhu", port) == -1)
+        if (asprintf(&str, "%hhu", port) == -1) {
+            JsonBuffer_LogSerializationError(__func__, "String_Value",
+                                             "failed to format protocol value");
             return LIST_EACH_ERROR;
+        }
 
         doFree = true;
         goto type_processed;
@@ -515,8 +757,11 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
     UUID_Get_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
     if (uuid_compare(uuid, p_pItem->uuidType) == 0)
     {
-        if ((str = calloc(1, INET_ADDRSTRLEN)) == NULL)
+        if ((str = calloc(1, INET_ADDRSTRLEN)) == NULL) {
+            JsonBuffer_LogSerializationError(__func__, "String_Value",
+                                             "failed to allocate IPv4 string buffer");
             return LIST_EACH_ERROR;
+        }
         doFree=true;
         inet_ntop(AF_INET, p_pItem->pData, str, INET_ADDRSTRLEN);
         goto type_processed;
@@ -526,6 +771,8 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
     if (uuid_compare(uuid, p_pItem->uuidType) == 0)
     {
         if ((str = calloc(1, INET_ADDRSTRLEN)) == NULL) {
+            JsonBuffer_LogSerializationError(__func__, "String_Value",
+                                             "failed to allocate IPv6 string buffer");
             return LIST_EACH_ERROR;
         }
         doFree=true;
@@ -536,12 +783,15 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
 type_processed:
     if (str == NULL)
     {
-        if (!JsonBuffer_Put_ByteArray(object, "Bin_Value", p_pItem->iLength, p_pItem->pData))
-            return LIST_EACH_ERROR;
+        JSONBUFFER_RETURN_LIST_PUT("Bin_Value", "failed to serialize binary NTLV value",
+                                   JsonBuffer_Put_ByteArray(object, "Bin_Value",
+                                                            p_pItem->iLength, p_pItem->pData));
     }
     else
         if (!JsonBuffer_Put_String(object, "String_Value", str)) {
             free(str);
+            JsonBuffer_LogSerializationError(__func__, "String_Value",
+                                             "failed to serialize string NTLV value");
             return LIST_EACH_ERROR;
         }
 
@@ -557,17 +807,25 @@ SO_PUBLIC bool JsonBuffer_Put_NTLVList (json_object * parent, const char * name,
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_new_array()) == NULL)
+    }
+    if ((object = json_object_new_array()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate array value");
         return false;
+    }
 
     json_object_object_add(parent, name, object);
 
-    if (!List_ForEach(p_pList, (int (*)(void*,void*))JsonBuffer_Put_NTLVItem, object))
+    if (!List_ForEach(p_pList, (int (*)(void*,void*))JsonBuffer_Put_NTLVItem, object)) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to serialize one or more NTLV items");
         return false;
+    }
 
     return true;
 }
@@ -581,17 +839,27 @@ SO_PUBLIC bool JsonBuffer_Get_NTLVList (json_object * parent, const char * name,
 
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_object_get(parent, name)) == NULL)
+    }
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_array)
+    }
+    if (json_object_get_type(object) != json_type_array) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "array", object, false);
         return false;
+    }
     parent = object;
-    if ((list = NTLVList_Create()) == NULL)
+    if ((list = NTLVList_Create()) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate NTLV list");
         return false;
+    }
 
     //rzb_log(LOG_DEBUG, "%s: Processing NTLV list %s Length %zu", __func__, name, json_object_array_length(parent));
     for (i = 0; i < json_object_array_length(parent); i++)
@@ -600,11 +868,15 @@ SO_PUBLIC bool JsonBuffer_Get_NTLVList (json_object * parent, const char * name,
         if (((object = json_object_array_get_idx(parent, i)) == NULL) ||
                 (json_object_get_type(object) != json_type_object) )
         {
+            JsonBuffer_LogDeserializationError(__func__, name,
+                                              "encountered invalid NTLV list entry");
             List_Destroy(list);
             return false;
         }
         if (!JsonBuffer_Get_NTLVItem(list, object))
         {
+            JsonBuffer_LogDeserializationError(__func__, name,
+                                              "failed to deserialize one or more NTLV items");
             List_Destroy(list);
             return false;
         }
@@ -620,12 +892,18 @@ SO_PUBLIC bool JsonBuffer_Put_Hash (json_object * parent, const char * name,
     const char *str = NULL;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_new_object()) == NULL)
+    }
+    if ((object = json_object_new_object()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate object value");
         return false;
+    }
     json_object_object_add(parent, name, object);
     parent = object;
     switch (p_pHash->iType)
@@ -646,14 +924,20 @@ SO_PUBLIC bool JsonBuffer_Put_Hash (json_object * parent, const char * name,
         str= "SHA512";
         break;
     default:
+        JsonBuffer_LogSerializationError(__func__, name, "unsupported hash type");
         return false;
     }
-    if (!JsonBuffer_Put_String(parent, "Type", str))
+    JSONBUFFER_RETURN_PUT("Type", "failed to serialize hash type",
+                          JsonBuffer_Put_String(parent, "Type", str));
+    if ((str = Hash_ToText(p_pHash)) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to render hash value");
         return false;
-    if ((str = Hash_ToText(p_pHash)) == NULL)
+    }
+    if (!JsonBuffer_Put_String(parent, "Value", str)) {
+        JsonBuffer_LogSerializationError(__func__, "Value", "failed to serialize hash value");
+        free((void *)str);
         return false;
-    if (!JsonBuffer_Put_String(parent, "Value", str))
-        return false;
+    }
     free((void *)str);
     return true;
 }
@@ -670,26 +954,42 @@ SO_PUBLIC bool JsonBuffer_Get_Hash (json_object * parent, const char *name, stru
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
 
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
+    }
     // Get the container
-    if ((object = json_object_object_get(parent, name)) == NULL)
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_object)
+    }
+    if (json_object_get_type(object) != json_type_object) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "object", object, false);
         return false;
+    }
     parent = object;
 
-    if ((object = json_object_object_get(parent, "Type")) == NULL)
+    if ((object = json_object_object_get(parent, "Type")) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, "Type", "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_string)
+    }
+    if (json_object_get_type(object) != json_type_string) {
+        JsonBuffer_LogTypeMismatch(__func__, "Type", "string", object, false);
         return false;
+    }
     type = json_object_get_string(object);
-    if ((object2 = json_object_object_get(parent, "Value")) == NULL)
+    if ((object2 = json_object_object_get(parent, "Value")) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, "Value", "field not found");
         return false;
-    if (json_object_get_type(object2) != json_type_string)
+    }
+    if (json_object_get_type(object2) != json_type_string) {
+        JsonBuffer_LogTypeMismatch(__func__, "Value", "string", object2, false);
         return false;
+    }
     data = json_object_get_string(object2);
 
 
@@ -705,6 +1005,7 @@ SO_PUBLIC bool JsonBuffer_Get_Hash (json_object * parent, const char *name, stru
         hash = Hash_Create_From_String(HASH_TYPE_SHA512, data);
 
     if (hash == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to construct hash value");
         return false;
     }
     *p_pHash = hash;
@@ -718,20 +1019,26 @@ SO_PUBLIC bool JsonBuffer_Put_BlockId (json_object * parent, const char *name,
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_new_object()) == NULL)
+    }
+    if ((object = json_object_new_object()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate object value");
         return false;
+    }
     json_object_object_add(parent, name, object);
     parent = object;
-    if (!JsonBuffer_Put_Hash(parent, "Hash", p_pId->pHash))
-        return false;
-    if (!JsonBuffer_Put_uint64_t(parent, "Size", p_pId->iLength))
-        return false;
-    if (!JsonBuffer_Put_UUID(parent, "Data_Type", p_pId->uuidDataType))
-        return false;
+    JSONBUFFER_RETURN_PUT("Hash", "failed to serialize BlockId hash",
+                          JsonBuffer_Put_Hash(parent, "Hash", p_pId->pHash));
+    JSONBUFFER_RETURN_PUT("Size", "failed to serialize BlockId size",
+                          JsonBuffer_Put_uint64_t(parent, "Size", p_pId->iLength));
+    JSONBUFFER_RETURN_PUT("Data_Type", "failed to serialize BlockId data type",
+                          JsonBuffer_Put_UUID(parent, "Data_Type", p_pId->uuidDataType));
     return true;
 }
 
@@ -739,40 +1046,48 @@ SO_PUBLIC bool JsonBuffer_Put_BlockId (json_object * parent, const char *name,
 SO_PUBLIC bool JsonBuffer_Get_BlockId (json_object * parent, const char * name,
                                     struct BlockId **p_pId)
 {
-    struct BlockId *id;
+    struct BlockId *id = NULL;
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
+    }
     // Get the container
-    if ((object = json_object_object_get(parent, name)) == NULL)
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_object)
+    }
+    if (json_object_get_type(object) != json_type_object) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "object", object, false);
         return false;
+    }
     parent = object;
-    if ((id = calloc(1, sizeof(struct BlockId))) == NULL)
+    if ((id = calloc(1, sizeof(struct BlockId))) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate BlockId");
         return false;
+    }
 
-    if (!JsonBuffer_Get_Hash(parent, "Hash", &id->pHash))
-    {
-        BlockId_Destroy(id);
-        return false;
-    }
-    if (!JsonBuffer_Get_uint64_t(parent, "Size", &id->iLength))
-    {
-        BlockId_Destroy(id);
-        return false;
-    }
-    if (!JsonBuffer_Get_UUID(parent, "Data_Type", id->uuidDataType))
-    {
-        BlockId_Destroy(id);
-        return false;
-    }
+    JSONBUFFER_GOTO_GET("Hash", "failed to deserialize nested BlockId hash",
+                        JsonBuffer_Get_Hash(parent, "Hash", &id->pHash));
+    JSONBUFFER_GOTO_GET("Size", "failed to deserialize BlockId size",
+                        JsonBuffer_Get_uint64_t(parent, "Size", &id->iLength));
+    JSONBUFFER_GOTO_GET("Data_Type", "failed to deserialize BlockId data type",
+                        JsonBuffer_Get_UUID(parent, "Data_Type", id->uuidDataType));
+
     *p_pId = id;
+    id = NULL;
     return true;
+
+cleanup:
+    if (id != NULL)
+        BlockId_Destroy(id);
+    return false;
 }
 
 SO_PUBLIC bool JsonBuffer_Put_Block (json_object * parent, const char * name,
@@ -781,29 +1096,35 @@ SO_PUBLIC bool JsonBuffer_Put_Block (json_object * parent, const char * name,
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_new_object()) == NULL)
+    }
+    if ((object = json_object_new_object()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate object value");
         return false;
+    }
     json_object_object_add(parent, name, object);
     parent = object;
 
-    if (!JsonBuffer_Put_BlockId(parent, "Id", p_pBlock->pId))
-        return false;
+    JSONBUFFER_RETURN_PUT("Id", "failed to serialize nested BlockId",
+                          JsonBuffer_Put_BlockId(parent, "Id", p_pBlock->pId));
 
     if (p_pBlock->pParentId != NULL)
-        if (!JsonBuffer_Put_BlockId(parent, "Parent_Id", p_pBlock->pParentId))
-            return false;
+        JSONBUFFER_RETURN_PUT("Parent_Id", "failed to serialize nested BlockId",
+                              JsonBuffer_Put_BlockId(parent, "Parent_Id", p_pBlock->pParentId));
 
     if (p_pBlock->pParentBlock != NULL)
-        if (!JsonBuffer_Put_Block(parent, "Parent", p_pBlock->pParentBlock))
-            return false;
+        JSONBUFFER_RETURN_PUT("Parent", "failed to serialize nested Block",
+                              JsonBuffer_Put_Block(parent, "Parent", p_pBlock->pParentBlock));
 
     if (p_pBlock->pMetaDataList != NULL)
-        if (!JsonBuffer_Put_NTLVList(parent, "Metadata", p_pBlock->pMetaDataList))
-            return false;
+        JSONBUFFER_RETURN_PUT("Metadata", "failed to serialize nested NTLV list",
+                              JsonBuffer_Put_NTLVList(parent, "Metadata", p_pBlock->pMetaDataList));
 
 
     return true;
@@ -812,57 +1133,62 @@ SO_PUBLIC bool JsonBuffer_Put_Block (json_object * parent, const char * name,
 SO_PUBLIC bool JsonBuffer_Get_Block (json_object * parent, const char * name,
                                   struct Block **p_pBlock)
 {
-    struct Block *block;
+    struct Block *block = NULL;
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
-        return false;
-    if (name == NULL)
-        return false;
-    // Get the container
-    if ((object = json_object_object_get(parent, name)) == NULL)
-        return false;
-    if (json_object_get_type(object) != json_type_object)
-        return false;
-    parent = object;
-    if ((block = calloc(1, sizeof(struct Block))) == NULL)
-        return false;
-
-    if (!JsonBuffer_Get_BlockId(parent, "Id", &block->pId))
-    {
-        Block_Destroy(block);
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
     }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
+        return false;
+    }
+    // Get the container
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
+        return false;
+    }
+    if (json_object_get_type(object) != json_type_object) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "object", object, false);
+        return false;
+    }
+    parent = object;
+    if ((block = calloc(1, sizeof(struct Block))) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate Block");
+        return false;
+    }
+
+    JSONBUFFER_GOTO_GET("Id", "failed to deserialize nested BlockId",
+                        JsonBuffer_Get_BlockId(parent, "Id", &block->pId));
 
     if (json_object_object_get(parent, "Parent_Id") != NULL)
     {
-        if (!JsonBuffer_Get_BlockId(parent, "Parent_Id", &block->pParentId))
-        {
-            Block_Destroy(block);
-            return false;
-        }
+        JSONBUFFER_GOTO_GET("Parent_Id", "failed to deserialize nested BlockId",
+                            JsonBuffer_Get_BlockId(parent, "Parent_Id", &block->pParentId));
     }
     if (json_object_object_get(parent, "Parent") != NULL)
     {
-        if (!JsonBuffer_Get_Block(parent, "Parent", &block->pParentBlock))
-        {
-            Block_Destroy(block);
-            return false;
-        }
+        JSONBUFFER_GOTO_GET("Parent", "failed to deserialize nested Block",
+                            JsonBuffer_Get_Block(parent, "Parent", &block->pParentBlock));
     }
     if (json_object_object_get(parent, "Metadata") != NULL) {
-        if (!JsonBuffer_Get_NTLVList(parent, "Metadata", &block->pMetaDataList))
-        {
-            Block_Destroy(block);
-            return false;
-        }
+        JSONBUFFER_GOTO_GET("Metadata", "failed to deserialize nested NTLV list",
+                            JsonBuffer_Get_NTLVList(parent, "Metadata", &block->pMetaDataList));
     } else {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Metadata not found in Block", __func__);
+        JsonBuffer_LogDeserializationError(__func__, "Metadata",
+                                           "field not found in Block");
     }
 
     *p_pBlock = block;
+    block = NULL;
     return true;
+
+cleanup:
+    if (block != NULL)
+        Block_Destroy(block);
+    return false;
 }
 
 SO_PUBLIC bool JsonBuffer_Put_Event (json_object * parent, const char * name,
@@ -871,115 +1197,109 @@ SO_PUBLIC bool JsonBuffer_Put_Event (json_object * parent, const char * name,
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_new_object()) == NULL)
+    }
+    if ((object = json_object_new_object()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate object value");
         return false;
+    }
     json_object_object_add(parent, name, object);
     parent = object;
-    if (!JsonBuffer_Put_EventId(parent, "Id", p_pEvent->pId))
-        return false;
+    JSONBUFFER_RETURN_PUT("Id", "failed to serialize nested EventId",
+                          JsonBuffer_Put_EventId(parent, "Id", p_pEvent->pId));
 
     if (p_pEvent->pParentId != NULL)
-        if (!JsonBuffer_Put_EventId(parent, "Parent_Id", p_pEvent->pParentId))
-            return false;
+        JSONBUFFER_RETURN_PUT("Parent_Id", "failed to serialize nested EventId",
+                              JsonBuffer_Put_EventId(parent, "Parent_Id", p_pEvent->pParentId));
 
     if (p_pEvent->pParent != NULL)
-        if (!JsonBuffer_Put_Event(parent, "Parent", p_pEvent->pParent))
-            return false;
+        JSONBUFFER_RETURN_PUT("Parent", "failed to serialize nested Event",
+                              JsonBuffer_Put_Event(parent, "Parent", p_pEvent->pParent));
 
     if (p_pEvent->pMetaDataList != NULL)
-        if (!JsonBuffer_Put_NTLVList(parent, "Metadata", p_pEvent->pMetaDataList))
-            return false;
+        JSONBUFFER_RETURN_PUT("Metadata", "failed to serialize nested NTLV list",
+                              JsonBuffer_Put_NTLVList(parent, "Metadata", p_pEvent->pMetaDataList));
 
     if (p_pEvent->pBlock != NULL)
-        if (!JsonBuffer_Put_Block(parent, "Block", p_pEvent->pBlock))
-            return false;
+        JSONBUFFER_RETURN_PUT("Block", "failed to serialize nested Block",
+                              JsonBuffer_Put_Block(parent, "Block", p_pEvent->pBlock));
     return true;
 }
 
 SO_PUBLIC bool JsonBuffer_Get_Event (json_object * parent, const char * name,
                                   struct Event **p_pEvent)
 {
-    struct Event *event;
+    struct Event *event = NULL;
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
+    }
     // Get the container
     if ((object = json_object_object_get(parent, name)) == NULL) {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Event field: %s", __func__, name);
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
     }
     if (json_object_get_type(object) != json_type_object) {
-        rzb_log(LOG_ERR, LOG_C_JSON, "$%s: Invalid json object type for %s", __func__, name);
+        JsonBuffer_LogTypeMismatch(__func__, name, "object", object, false);
         return false;
     }
     parent = object;
     if ((event = calloc(1, sizeof(struct Event))) == NULL) {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to allocate Event", __func__);
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate Event");
         return false;
     }
-    if (!JsonBuffer_Get_EventId(parent, "Id", &event->pId)) {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get EventId", __func__);
-        Event_Destroy(event);
-        return false;
-    }
+    JSONBUFFER_GOTO_GET("Id", "failed to deserialize nested EventId",
+                        JsonBuffer_Get_EventId(parent, "Id", &event->pId));
 
     if (json_object_object_get(parent, "Parent_Id") != NULL)
     {
-        if (!JsonBuffer_Get_EventId(parent, "Parent_Id", &event->pParentId))
-        {
-            rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Parent_Id", __func__);
-            Event_Destroy(event);
-            return false;
-        }
+        JSONBUFFER_GOTO_GET("Parent_Id", "failed to deserialize nested EventId",
+                            JsonBuffer_Get_EventId(parent, "Parent_Id", &event->pParentId));
     }
 
     if (json_object_object_get(parent, "Parent") != NULL)
     {
-        if (!JsonBuffer_Get_Event(parent, "Parent", &event->pParent))
-        {
-            rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Parent", __func__);
-            Event_Destroy(event);
-            return false;
-        }
+        JSONBUFFER_GOTO_GET("Parent", "failed to deserialize nested Event",
+                            JsonBuffer_Get_Event(parent, "Parent", &event->pParent));
     }
     if (json_object_object_get(parent, "Metadata") != NULL)
     {
-        if (!JsonBuffer_Get_NTLVList(parent, "Metadata", &event->pMetaDataList))
-        {
-            rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Metadata", __func__);
-            Event_Destroy(event);
-            return false;
-        }
+        JSONBUFFER_GOTO_GET("Metadata", "failed to deserialize nested NTLV list",
+                            JsonBuffer_Get_NTLVList(parent, "Metadata", &event->pMetaDataList));
     }
     else
     {
         if ((event->pMetaDataList = NTLVList_Create()) == NULL)
-        {
-            Event_Destroy(event);
-            return false;
-        }
+            goto cleanup;
 
     }
     if (json_object_object_get(parent, "Block") != NULL)
     {
-        if (!JsonBuffer_Get_Block(parent, "Block", &event->pBlock))
-        {
-            rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Block", __func__);
-            Event_Destroy(event);
-            return false;
-        }
+        JSONBUFFER_GOTO_GET("Block", "failed to deserialize nested Block",
+                            JsonBuffer_Get_Block(parent, "Block", &event->pBlock));
     }
 
     *p_pEvent = event;
+    event = NULL;
     return true;
+
+cleanup:
+    if (event != NULL)
+        Event_Destroy(event);
+    return false;
 }
 
 
@@ -989,27 +1309,35 @@ SO_PUBLIC bool JsonBuffer_Put_EventId (json_object * parent, const char * name,
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_new_object()) == NULL)
+    }
+    if ((object = json_object_new_object()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate object value");
         return false;
+    }
     json_object_object_add(parent, name, object);
     parent = object;
     // XXX: Refactor this!!
-    if ((object = json_object_new_object()) == NULL)
+    if ((object = json_object_new_object()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, "Nugget", "failed to allocate object value");
         return false;
+    }
     json_object_object_add(parent, "Nugget", object);
-    if (!JsonBuffer_Put_UUID(object, "Id", p_pEventId->uuidNuggetId))
-        return false;
+    JSONBUFFER_RETURN_PUT("Nugget.Id", "failed to serialize EventId nugget UUID",
+                          JsonBuffer_Put_UUID(object, "Id", p_pEventId->uuidNuggetId));
     // XXX: End
 
-    if (!JsonBuffer_Put_uint64_t(parent, "Seconds", p_pEventId->iSeconds))
-        return false;
+    JSONBUFFER_RETURN_PUT("Seconds", "failed to serialize EventId seconds",
+                          JsonBuffer_Put_uint64_t(parent, "Seconds", p_pEventId->iSeconds));
 
-    if (!JsonBuffer_Put_uint64_t(parent, "Nano_Seconds", p_pEventId->iNanoSecs))
-        return false;
+    JSONBUFFER_RETURN_PUT("Nano_Seconds", "failed to serialize EventId nanoseconds",
+                          JsonBuffer_Put_uint64_t(parent, "Nano_Seconds", p_pEventId->iNanoSecs));
 
     return true;
 }
@@ -1017,57 +1345,63 @@ SO_PUBLIC bool JsonBuffer_Put_EventId (json_object * parent, const char * name,
 SO_PUBLIC bool JsonBuffer_Get_EventId (json_object * parent, const char * name,
                                     struct EventId **p_pEventId)
 {
-    struct EventId *eventId;
+    struct EventId *eventId = NULL;
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
+    }
 
     // Get the container
-    if ((object = json_object_object_get(parent, name)) == NULL)
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_object)
+    }
+    if (json_object_get_type(object) != json_type_object) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "object", object, false);
         return false;
+    }
     parent = object;
     // XXX: Refactor this!!
     if ((object = json_object_object_get(parent, "Nugget")) == NULL) {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Nugget", __func__);
+        JsonBuffer_LogDeserializationError(__func__, "Nugget", "field not found");
         return false;
     }
-    if (json_object_get_type(object) != json_type_object)
+    if (json_object_get_type(object) != json_type_object) {
+        JsonBuffer_LogTypeMismatch(__func__, "Nugget", "object", object, false);
         return false;
+    }
     // XXX: End
 
-    if ((eventId = calloc(1, sizeof(struct EventId))) == NULL)
+    if ((eventId = calloc(1, sizeof(struct EventId))) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate EventId");
         return false;
+    }
 
     // XXX: Refactor this!!
-    if (!JsonBuffer_Get_UUID(object, "Id", eventId->uuidNuggetId))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Nugget ID", __func__);
-        EventId_Destroy(eventId);
-        return false;
-    }
+    JSONBUFFER_GOTO_GET("Nugget.Id", "failed to deserialize EventId nugget UUID",
+                        JsonBuffer_Get_UUID(object, "Id", eventId->uuidNuggetId));
     // XXX: End
 
-    if (!JsonBuffer_Get_uint64_t(parent, "Seconds", &eventId->iSeconds))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Seconds", __func__);
-        EventId_Destroy(eventId);
-        return false;
-    }
+    JSONBUFFER_GOTO_GET("Seconds", "failed to deserialize EventId seconds",
+                        JsonBuffer_Get_uint64_t(parent, "Seconds", &eventId->iSeconds));
 
-    if (!JsonBuffer_Get_uint64_t(parent, "Nano_Seconds", &eventId->iNanoSecs))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Nano_Seconds", __func__);
-        EventId_Destroy(eventId);
-        return false;
-    }
+    JSONBUFFER_GOTO_GET("Nano_Seconds", "failed to deserialize EventId nanoseconds",
+                        JsonBuffer_Get_uint64_t(parent, "Nano_Seconds", &eventId->iNanoSecs));
     *p_pEventId = eventId;
+    eventId = NULL;
     return true;
+
+cleanup:
+    if (eventId != NULL)
+        EventId_Destroy(eventId);
+    return false;
 }
 
 SO_PUBLIC bool JsonBuffer_Put_Judgment (json_object * parent, const char * name,
@@ -1076,56 +1410,62 @@ SO_PUBLIC bool JsonBuffer_Put_Judgment (json_object * parent, const char * name,
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_new_object()) == NULL)
+    }
+    if ((object = json_object_new_object()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate object value");
         return false;
+    }
     json_object_object_add(parent, name, object);
     parent = object;
-    if (!JsonBuffer_Put_UUID(parent, "Nugget_ID", p_pJudgment->uuidNuggetId))
-        return false;
+    JSONBUFFER_RETURN_PUT("Nugget_ID", "failed to serialize judgment field",
+                          JsonBuffer_Put_UUID(parent, "Nugget_ID", p_pJudgment->uuidNuggetId));
 
-    if (!JsonBuffer_Put_uint64_t(parent, "Seconds", p_pJudgment->iSeconds))
-        return false;
+    JSONBUFFER_RETURN_PUT("Seconds", "failed to serialize judgment field",
+                          JsonBuffer_Put_uint64_t(parent, "Seconds", p_pJudgment->iSeconds));
 
-    if (!JsonBuffer_Put_uint64_t(parent, "Nano_Seconds", p_pJudgment->iNanoSecs))
-        return false;
+    JSONBUFFER_RETURN_PUT("Nano_Seconds", "failed to serialize judgment field",
+                          JsonBuffer_Put_uint64_t(parent, "Nano_Seconds", p_pJudgment->iNanoSecs));
 
-    if (!JsonBuffer_Put_EventId(parent, "Event_ID", p_pJudgment->pEventId))
-        return false;
+    JSONBUFFER_RETURN_PUT("Event_ID", "failed to serialize nested EventId",
+                          JsonBuffer_Put_EventId(parent, "Event_ID", p_pJudgment->pEventId));
 
-    if (!JsonBuffer_Put_BlockId(parent, "Block_ID", p_pJudgment->pBlockId))
-        return false;
+    JSONBUFFER_RETURN_PUT("Block_ID", "failed to serialize nested BlockId",
+                          JsonBuffer_Put_BlockId(parent, "Block_ID", p_pJudgment->pBlockId));
 
-    if (!JsonBuffer_Put_uint8_t(parent, "Priority", p_pJudgment->iPriority))
-        return false;
+    JSONBUFFER_RETURN_PUT("Priority", "failed to serialize judgment field",
+                          JsonBuffer_Put_uint8_t(parent, "Priority", p_pJudgment->iPriority));
 
-    if (!JsonBuffer_Put_NTLVList(parent, "Metadata", p_pJudgment->pMetaDataList))
-        return false;
+    JSONBUFFER_RETURN_PUT("Metadata", "failed to serialize nested NTLV list",
+                          JsonBuffer_Put_NTLVList(parent, "Metadata", p_pJudgment->pMetaDataList));
 
-    if (!JsonBuffer_Put_uint32_t(parent, "GID", p_pJudgment->iGID))
-        return false;
+    JSONBUFFER_RETURN_PUT("GID", "failed to serialize judgment field",
+                          JsonBuffer_Put_uint32_t(parent, "GID", p_pJudgment->iGID));
 
-    if (!JsonBuffer_Put_uint32_t(parent, "SID", p_pJudgment->iSID))
-        return false;
+    JSONBUFFER_RETURN_PUT("SID", "failed to serialize judgment field",
+                          JsonBuffer_Put_uint32_t(parent, "SID", p_pJudgment->iSID));
 
-    if (!JsonBuffer_Put_uint32_t(parent, "Set_SF_Flags", p_pJudgment->Set_SfFlags))
-        return false;
+    JSONBUFFER_RETURN_PUT("Set_SF_Flags", "failed to serialize judgment field",
+                          JsonBuffer_Put_uint32_t(parent, "Set_SF_Flags", p_pJudgment->Set_SfFlags));
 
-    if (!JsonBuffer_Put_uint32_t(parent, "Set_Ent_Flags", p_pJudgment->Set_EntFlags))
-        return false;
+    JSONBUFFER_RETURN_PUT("Set_Ent_Flags", "failed to serialize judgment field",
+                          JsonBuffer_Put_uint32_t(parent, "Set_Ent_Flags", p_pJudgment->Set_EntFlags));
 
-    if (!JsonBuffer_Put_uint32_t(parent, "Unset_SF_Flags", p_pJudgment->Unset_SfFlags))
-        return false;
+    JSONBUFFER_RETURN_PUT("Unset_SF_Flags", "failed to serialize judgment field",
+                          JsonBuffer_Put_uint32_t(parent, "Unset_SF_Flags", p_pJudgment->Unset_SfFlags));
 
-    if (!JsonBuffer_Put_uint32_t(parent, "Unset_Ent_Flags", p_pJudgment->Unset_EntFlags))
-        return false;
+    JSONBUFFER_RETURN_PUT("Unset_Ent_Flags", "failed to serialize judgment field",
+                          JsonBuffer_Put_uint32_t(parent, "Unset_Ent_Flags", p_pJudgment->Unset_EntFlags));
 
     if (p_pJudgment->sMessage != NULL)
-        if (!JsonBuffer_Put_String(parent, "Message", (char *)p_pJudgment->sMessage))
-            return false;
+        JSONBUFFER_RETURN_PUT("Message", "failed to serialize judgment field",
+                              JsonBuffer_Put_String(parent, "Message", (char *)p_pJudgment->sMessage));
 
     return true;
 }
@@ -1133,125 +1473,127 @@ SO_PUBLIC bool JsonBuffer_Put_Judgment (json_object * parent, const char * name,
 SO_PUBLIC bool JsonBuffer_Get_Judgment (json_object * parent, const char * name,
                                      struct Judgment **p_pJudgment)
 {
-    struct Judgment *judgment;
+    struct Judgment *judgment = NULL;
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
+    }
     // Get the container
-    if ((object = json_object_object_get(parent, name)) == NULL)
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_object)
+    }
+    if (json_object_get_type(object) != json_type_object) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "object", object, false);
         return false;
+    }
     parent = object;
-    if ((judgment = calloc(1, sizeof(struct Judgment))) == NULL)
-        return false;
-
-    if (!JsonBuffer_Get_UUID(parent, "Nugget_ID", judgment->uuidNuggetId))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Nugget_ID", __func__);
-        Judgment_Destroy(judgment);
+    if ((judgment = calloc(1, sizeof(struct Judgment))) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate Judgment");
         return false;
     }
 
-    if (!JsonBuffer_Get_uint64_t(parent, "Seconds", &judgment->iSeconds))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Seconds", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_UUID(parent, "Nugget_ID", judgment->uuidNuggetId)) {
+        JsonBuffer_LogDeserializationError(__func__, "Nugget_ID",
+                                           "failed to deserialize judgment field");
+        goto cleanup;
     }
 
-    if (!JsonBuffer_Get_uint64_t(parent, "Nano_Seconds", &judgment->iNanoSecs))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Nano_Seconds", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_uint64_t(parent, "Seconds", &judgment->iSeconds)) {
+        JsonBuffer_LogDeserializationError(__func__, "Seconds",
+                                           "failed to deserialize judgment field");
+        goto cleanup;
     }
 
-    if (!JsonBuffer_Get_EventId(parent, "Event_ID", &judgment->pEventId))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Event_ID", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_uint64_t(parent, "Nano_Seconds", &judgment->iNanoSecs)) {
+        JsonBuffer_LogDeserializationError(__func__, "Nano_Seconds",
+                                           "failed to deserialize judgment field");
+        goto cleanup;
     }
 
-    if (!JsonBuffer_Get_BlockId(parent, "Block_ID", &judgment->pBlockId))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Block_ID", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_EventId(parent, "Event_ID", &judgment->pEventId)) {
+        JsonBuffer_LogDeserializationError(__func__, "Event_ID",
+                                           "failed to deserialize nested EventId");
+        goto cleanup;
     }
 
-    if (!JsonBuffer_Get_uint8_t(parent, "Priority", &judgment->iPriority))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Priority", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_BlockId(parent, "Block_ID", &judgment->pBlockId)) {
+        JsonBuffer_LogDeserializationError(__func__, "Block_ID",
+                                           "failed to deserialize nested BlockId");
+        goto cleanup;
     }
 
-    if (!JsonBuffer_Get_NTLVList(parent, "Metadata", &judgment->pMetaDataList))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Metadata", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_uint8_t(parent, "Priority", &judgment->iPriority)) {
+        JsonBuffer_LogDeserializationError(__func__, "Priority",
+                                           "failed to deserialize judgment field");
+        goto cleanup;
     }
 
-    if (!JsonBuffer_Get_uint32_t(parent, "GID", &judgment->iGID))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get GID", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_NTLVList(parent, "Metadata", &judgment->pMetaDataList)) {
+        JsonBuffer_LogDeserializationError(__func__, "Metadata",
+                                           "failed to deserialize nested NTLV list");
+        goto cleanup;
     }
 
-    if (!JsonBuffer_Get_uint32_t(parent, "SID", &judgment->iSID))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get SID", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_uint32_t(parent, "GID", &judgment->iGID)) {
+        JsonBuffer_LogDeserializationError(__func__, "GID",
+                                           "failed to deserialize judgment field");
+        goto cleanup;
     }
 
-    if (!JsonBuffer_Get_uint32_t(parent, "Set_SF_Flags", &judgment->Set_SfFlags))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Set_SF_Flags", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_uint32_t(parent, "SID", &judgment->iSID)) {
+        JsonBuffer_LogDeserializationError(__func__, "SID",
+                                           "failed to deserialize judgment field");
+        goto cleanup;
     }
 
-    if (!JsonBuffer_Get_uint32_t(parent, "Set_Ent_Flags", &judgment->Set_EntFlags))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Set_Ent_Flags", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_uint32_t(parent, "Set_SF_Flags", &judgment->Set_SfFlags)) {
+        JsonBuffer_LogDeserializationError(__func__, "Set_SF_Flags",
+                                           "failed to deserialize judgment field");
+        goto cleanup;
     }
 
-    if (!JsonBuffer_Get_uint32_t(parent, "Unset_SF_Flags", &judgment->Unset_SfFlags))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Unset_SF_Flags", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_uint32_t(parent, "Set_Ent_Flags", &judgment->Set_EntFlags)) {
+        JsonBuffer_LogDeserializationError(__func__, "Set_Ent_Flags",
+                                           "failed to deserialize judgment field");
+        goto cleanup;
     }
 
-    if (!JsonBuffer_Get_uint32_t(parent, "Unset_Ent_Flags", &judgment->Unset_EntFlags))
-    {
-        rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Unset_Ent_Flags", __func__);
-        Judgment_Destroy(judgment);
-        return false;
+    if (!JsonBuffer_Get_uint32_t(parent, "Unset_SF_Flags", &judgment->Unset_SfFlags)) {
+        JsonBuffer_LogDeserializationError(__func__, "Unset_SF_Flags",
+                                           "failed to deserialize judgment field");
+        goto cleanup;
+    }
+
+    if (!JsonBuffer_Get_uint32_t(parent, "Unset_Ent_Flags", &judgment->Unset_EntFlags)) {
+        JsonBuffer_LogDeserializationError(__func__, "Unset_Ent_Flags",
+                                           "failed to deserialize judgment field");
+        goto cleanup;
     }
 
     if (json_object_object_get(parent, "Message") != NULL)
     {
-        if ((judgment->sMessage = (uint8_t *)JsonBuffer_Get_String(parent, "Message")) == NULL)
-        {
-            rzb_log(LOG_ERR, LOG_C_JSON, "%s: Failed to get Message", __func__);
-            Judgment_Destroy(judgment);
-            return false;
+        if ((judgment->sMessage = (uint8_t *)JsonBuffer_Get_String(parent, "Message")) == NULL) {
+            JsonBuffer_LogDeserializationError(__func__, "Message",
+                                               "failed to deserialize judgment field");
+            goto cleanup;
         }
     }
     *p_pJudgment = judgment;
+    judgment = NULL;
     return true;
+
+cleanup:
+    if (judgment != NULL)
+        Judgment_Destroy(judgment);
+    return false;
 }
 
 SO_PUBLIC bool JsonBuffer_Put_Nugget (json_object * parent, const char * name,
@@ -1260,35 +1602,41 @@ SO_PUBLIC bool JsonBuffer_Put_Nugget (json_object * parent, const char * name,
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_new_object()) == NULL)
+    }
+    if ((object = json_object_new_object()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate object value");
         return false;
+    }
     json_object_object_add(parent, name, object);
     parent = object;
 
-    if (!JsonBuffer_Put_UUID(parent, "Nugget_ID", nugget->uuidNuggetId))
-        return false;
+    JSONBUFFER_RETURN_PUT("Nugget_ID", "failed to serialize nugget field",
+                          JsonBuffer_Put_UUID(parent, "Nugget_ID", nugget->uuidNuggetId));
 
-    if (!JsonBuffer_Put_UUID(parent, "App_Type", nugget->uuidApplicationType))
-        return false;
+    JSONBUFFER_RETURN_PUT("App_Type", "failed to serialize nugget field",
+                          JsonBuffer_Put_UUID(parent, "App_Type", nugget->uuidApplicationType));
 
-    if (!JsonBuffer_Put_UUID(parent, "Nugget_Type", nugget->uuidNuggetType))
-        return false;
+    JSONBUFFER_RETURN_PUT("Nugget_Type", "failed to serialize nugget field",
+                          JsonBuffer_Put_UUID(parent, "Nugget_Type", nugget->uuidNuggetType));
 
     if (nugget->sName != NULL)
-        if (!JsonBuffer_Put_String(parent, "Name", nugget->sName))
-            return false;
+        JSONBUFFER_RETURN_PUT("Name", "failed to serialize nugget field",
+                              JsonBuffer_Put_String(parent, "Name", nugget->sName));
 
     if (nugget->sLocation != NULL)
-        if (!JsonBuffer_Put_String(parent, "Location", nugget->sLocation))
-            return false;
+        JSONBUFFER_RETURN_PUT("Location", "failed to serialize nugget field",
+                              JsonBuffer_Put_String(parent, "Location", nugget->sLocation));
 
     if (nugget->sContact != NULL)
-        if (!JsonBuffer_Put_String(parent, "Contact", nugget->sContact))
-            return false;
+        JSONBUFFER_RETURN_PUT("Contact", "failed to serialize nugget field",
+                              JsonBuffer_Put_String(parent, "Contact", nugget->sContact));
 
     return true;
 }
@@ -1296,67 +1644,83 @@ SO_PUBLIC bool JsonBuffer_Put_Nugget (json_object * parent, const char * name,
 SO_PUBLIC bool JsonBuffer_Get_Nugget (json_object * parent, const char * name,
                                            struct Nugget ** r_nugget)
 {
-    struct Nugget *nugget;
+    struct Nugget *nugget = NULL;
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
+    }
     // Get the container
-    if ((object = json_object_object_get(parent, name)) == NULL)
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_object)
+    }
+    if (json_object_get_type(object) != json_type_object) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "object", object, false);
         return false;
+    }
     parent = object;
 
-    if ((nugget = calloc(1, sizeof(struct Nugget))) == NULL)
-        return false;
-
-    if (!JsonBuffer_Get_UUID(parent, "Nugget_ID", nugget->uuidNuggetId))
-    {
-        Nugget_Destroy(nugget);
+    if ((nugget = calloc(1, sizeof(struct Nugget))) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate Nugget");
         return false;
     }
 
-    if (!JsonBuffer_Get_UUID(parent, "App_Type", nugget->uuidApplicationType))
-    {
-        Nugget_Destroy(nugget);
-        return false;
+    if (!JsonBuffer_Get_UUID(parent, "Nugget_ID", nugget->uuidNuggetId)) {
+        JsonBuffer_LogDeserializationError(__func__, "Nugget_ID",
+                                           "failed to deserialize nugget field");
+        goto cleanup;
     }
-    if (!JsonBuffer_Get_UUID(parent, "Nugget_Type", nugget->uuidNuggetType))
-    {
-        Nugget_Destroy(nugget);
-        return false;
+
+    if (!JsonBuffer_Get_UUID(parent, "App_Type", nugget->uuidApplicationType)) {
+        JsonBuffer_LogDeserializationError(__func__, "App_Type",
+                                           "failed to deserialize nugget field");
+        goto cleanup;
+    }
+    if (!JsonBuffer_Get_UUID(parent, "Nugget_Type", nugget->uuidNuggetType)) {
+        JsonBuffer_LogDeserializationError(__func__, "Nugget_Type",
+                                           "failed to deserialize nugget field");
+        goto cleanup;
     }
     if (json_object_object_get(parent, "Name") != NULL)
     {
-        if ((nugget->sName = JsonBuffer_Get_String(parent, "Name")) == NULL)
-        {
-            Nugget_Destroy(nugget);
-            return false;
+        if ((nugget->sName = JsonBuffer_Get_String(parent, "Name")) == NULL) {
+            JsonBuffer_LogDeserializationError(__func__, "Name",
+                                               "failed to deserialize nugget field");
+            goto cleanup;
         }
     }
     if (json_object_object_get(parent, "Location") != NULL)
     {
-        if ((nugget->sLocation = JsonBuffer_Get_String(parent, "Location")) == NULL)
-        {
-            Nugget_Destroy(nugget);
-            return false;
+        if ((nugget->sLocation = JsonBuffer_Get_String(parent, "Location")) == NULL) {
+            JsonBuffer_LogDeserializationError(__func__, "Location",
+                                               "failed to deserialize nugget field");
+            goto cleanup;
         }
     }
 
     if (json_object_object_get(parent, "Contact") != NULL)
     {
-        if ((nugget->sContact = JsonBuffer_Get_String(parent, "Contact")) == NULL)
-        {
-            Nugget_Destroy(nugget);
-            return false;
+        if ((nugget->sContact = JsonBuffer_Get_String(parent, "Contact")) == NULL) {
+            JsonBuffer_LogDeserializationError(__func__, "Contact",
+                                               "failed to deserialize nugget field");
+            goto cleanup;
         }
     }
     *r_nugget=nugget;
+    nugget = NULL;
     return true;
+
+cleanup:
+    if (nugget != NULL)
+        Nugget_Destroy(nugget);
+    return false;
 }
 
 static int
@@ -1366,15 +1730,21 @@ JsonBuffer_Put_UUIDList_Add(void *vnode, void *varray)
     char uuid[UUID_STRING_LENGTH];
     json_object *array = varray;
     json_object *object;
-    if ((object = json_object_new_object()) == NULL)
+    if ((object = json_object_new_object()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, "<uuid-list-entry>",
+                                         "failed to allocate object value");
         return LIST_EACH_ERROR;
+    }
 
     uuid_unparse(node->uuid, uuid);
-    JsonBuffer_Put_String(object, "id", uuid);
+    JSONBUFFER_RETURN_LIST_PUT("id", "failed to serialize UUID list entry id",
+                               JsonBuffer_Put_String(object, "id", uuid));
     if (node->sName != NULL)
-        JsonBuffer_Put_String(object, "name", node->sName);
+        JSONBUFFER_RETURN_LIST_PUT("name", "failed to serialize UUID list entry name",
+                                   JsonBuffer_Put_String(object, "name", node->sName));
     if (node->sDescription != NULL)
-        JsonBuffer_Put_String(object, "description", node->sDescription);
+        JSONBUFFER_RETURN_LIST_PUT("description", "failed to serialize UUID list entry description",
+                                   JsonBuffer_Put_String(object, "description", node->sDescription));
 
     json_object_array_add(array, object);
 
@@ -1388,15 +1758,22 @@ JsonBuffer_Put_UUIDList (json_object * parent, const char * name,
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_new_array()) == NULL)
+    }
+    if ((object = json_object_new_array()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate array value");
         return false;
+    }
     json_object_object_add(parent, name, object);
 
-    List_ForEach(list, JsonBuffer_Put_UUIDList_Add, object);
+    JSONBUFFER_RETURN_PUT(name, "failed to serialize UUID list entries",
+                          List_ForEach(list, JsonBuffer_Put_UUIDList_Add, object));
     return true;
 }
 
@@ -1406,38 +1783,83 @@ SO_PUBLIC bool JsonBuffer_Get_UUIDList (json_object * parent, const char * name,
     List_t *list;
     json_object *object;
     uuid_t uuid;
-    const char *uuidS, *nameS, *desc;
+    char *uuidS, *nameS, *desc;
     size_t i;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_object_get(parent, name)) == NULL)
+    }
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_array)
+    }
+    if (json_object_get_type(object) != json_type_array) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "array", object, false);
         return false;
+    }
     parent = object;
-    if ((list = UUID_Create_List()) == NULL)
+    if ((list = UUID_Create_List()) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate UUID list");
         return false;
+    }
 
     for (i = 0; i < json_object_array_length(parent); i++)
     {
+        uuidS = NULL;
+        nameS = NULL;
+        desc = NULL;
         if (((object = json_object_array_get_idx(parent, i)) == NULL) ||
                 (json_object_get_type(object) != json_type_object) )
         {
+            JsonBuffer_LogDeserializationError(__func__, name,
+                                              "encountered invalid UUID list entry");
             List_Destroy(list);
             return false;
         }
-        uuidS = JsonBuffer_Get_String(object, "id");
-        nameS = JsonBuffer_Get_String(object, "name");
-        desc = JsonBuffer_Get_String(object, "description");
+        if ((uuidS = JsonBuffer_Get_String(object, "id")) == NULL) {
+            JsonBuffer_LogDeserializationError(__func__, "id",
+                                              "failed to deserialize UUID list entry id");
+            List_Destroy(list);
+            return false;
+        }
+        if (json_object_object_get(object, "name") != NULL) {
+            if ((nameS = JsonBuffer_Get_String(object, "name")) == NULL) {
+                JsonBuffer_LogDeserializationError(__func__, "name",
+                                                  "failed to deserialize UUID list entry name");
+                free(uuidS);
+                List_Destroy(list);
+                return false;
+            }
+        }
+        if (json_object_object_get(object, "description") != NULL) {
+            if ((desc = JsonBuffer_Get_String(object, "description")) == NULL) {
+                JsonBuffer_LogDeserializationError(__func__, "description",
+                                                  "failed to deserialize UUID list entry description");
+                free(nameS);
+                free(uuidS);
+                List_Destroy(list);
+                return false;
+            }
+        }
         uuid_parse(uuidS, uuid);
-        UUID_Add_List_Entry(list, uuid, nameS, desc);
-        free((void *)nameS);
-        free((void *)uuidS);
-        free((void *)desc);
+        if (!UUID_Add_List_Entry(list, uuid, nameS, desc)) {
+            JsonBuffer_LogDeserializationError(__func__, name,
+                                              "failed to append UUID list entry");
+            free(desc);
+            free(nameS);
+            free(uuidS);
+            List_Destroy(list);
+            return false;
+        }
+        free(nameS);
+        free(uuidS);
+        free(desc);
     }
 
     *r_list = list;
@@ -1465,12 +1887,18 @@ JsonBuffer_Put_StringList (json_object * parent, const char * name,
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_new_array()) == NULL)
+    }
+    if ((object = json_object_new_array()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate array value");
         return false;
+    }
     json_object_object_add(parent, name, object);
 
     List_ForEach(list, JsonBuffer_Put_StringList_Add, object);
@@ -1487,27 +1915,57 @@ JsonBuffer_Get_StringList (json_object * parent, const char * name,
     size_t i;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_object_get(parent, name)) == NULL)
+    }
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_array)
+    }
+    if (json_object_get_type(object) != json_type_array) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "array", object, false);
         return false;
+    }
     parent = object;
-    if ((list = StringList_Create()) == NULL)
+    if ((list = StringList_Create()) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate string list");
         return false;
+    }
     for (i = 0; i < json_object_array_length(parent); i++)
     {
-        if (((object = json_object_array_get_idx(parent, i)) == NULL) ||
-                (json_object_get_type(object) != json_type_string) ||
-                ((string = json_object_get_string(object))== NULL))
+        if ((object = json_object_array_get_idx(parent, i)) == NULL)
         {
+            JsonBuffer_LogDeserializationError(__func__, name,
+                                              "encountered missing string list entry");
             List_Destroy(list);
             return false;
         }
-        StringList_Add(list, string);
+        if (json_object_get_type(object) != json_type_string)
+        {
+            JsonBuffer_LogTypeMismatch(__func__, name, "string", object, false);
+            List_Destroy(list);
+            return false;
+        }
+        string = json_object_get_string(object);
+        if (string == NULL)
+        {
+            JsonBuffer_LogDeserializationError(__func__, name,
+                                              "failed to access string list entry");
+            List_Destroy(list);
+            return false;
+        }
+        if (!StringList_Add(list, string))
+        {
+            JsonBuffer_LogDeserializationError(__func__, name,
+                                              "failed to append string list entry");
+            List_Destroy(list);
+            return false;
+        }
     }
 
     *r_list = list;
@@ -1523,18 +1981,27 @@ JsonBuffer_Put_uint8List (json_object * parent, const char * name,
     uint32_t i;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_new_array()) == NULL)
+    }
+    if ((object = json_object_new_array()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate array value");
         return false;
+    }
     json_object_object_add(parent, name, object);
     parent = object;
     for (i = 0; i < count; i++)
     {
-        if ((object = json_object_new_int(list[i])) == NULL)
+        if ((object = json_object_new_int(list[i])) == NULL) {
+            JsonBuffer_LogSerializationError(__func__, name,
+                                             "failed to allocate uint8 list entry");
             return false;
+        }
 
         json_object_array_add(parent, object);
     }
@@ -1551,25 +2018,40 @@ JsonBuffer_Get_uint8List (json_object * parent, const char * name,
     uint32_t i;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
-    if (parent == NULL)
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
         return false;
-    if (name == NULL)
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
         return false;
-    if ((object = json_object_object_get(parent, name)) == NULL)
+    }
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
         return false;
-    if (json_object_get_type(object) != json_type_array)
+    }
+    if (json_object_get_type(object) != json_type_array) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "array", object, false);
         return false;
+    }
     parent = object;
     c = json_object_array_length(parent);
     if (c > 0)
-        if ((items = calloc(c, sizeof(uint8_t))) == NULL)
+        if ((items = calloc(c, sizeof(uint8_t))) == NULL) {
+            JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate uint8 list");
             return false;
+        }
 
     for ( i = 0; i < c; i++)
     {
         if (((object = json_object_array_get_idx(parent, i)) == NULL) ||
-                (json_object_get_type(object) != json_type_int))
-            items[i] = json_object_get_int(object);
+                (json_object_get_type(object) != json_type_int)) {
+            JsonBuffer_LogDeserializationError(__func__, name,
+                                              "encountered invalid uint8 list entry");
+            free(items);
+            return false;
+        }
+        items[i] = json_object_get_int(object);
     }
 
     *list = items;
