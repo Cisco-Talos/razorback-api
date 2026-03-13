@@ -438,7 +438,7 @@ static bool Mutex_Init(Mutex_t *mutex) {
         case MUTEX_MODE_NORMAL:
             break;
         default:
-            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid mutex mode: %d", mutex->mode);
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid mutex mode: %d", __func__, mutex->mode);
             return false;
     }
     pthread_mutex_init(&mutex->lock, &mutex->attrs);

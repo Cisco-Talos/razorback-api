@@ -216,7 +216,7 @@ Transfer_Prepare_File(struct Block *block, char *file, bool temp)
     }
     if ((block->data.file=fopen(file, "r")) == NULL)
     {
-        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to open file handle: %s, File: %s", strerror(errno), file);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to open file handle: %s, File: %s", __func__, strerror(errno), file);
         return false;
     }
     block->data.fileName = file;
@@ -225,7 +225,7 @@ Transfer_Prepare_File(struct Block *block, char *file, bool temp)
 
 #ifdef _MSC_VER
 again:
-    block->data.mfileHandle = CreateFileA(block->data.fileName, GENERIC_READ, FILE_SHARE_READ,  NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    block->data.mfileHandle = CreateFileA(block->data.fileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (block->data.mfileHandle == NULL || block->data.mfileHandle == INVALID_HANDLE_VALUE)
     {
         if (GetLastError() == ERROR_SHARING_VIOLATION)

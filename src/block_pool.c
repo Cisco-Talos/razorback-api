@@ -77,7 +77,7 @@ BlockPool_CreateItem(struct RazorbackContext *context)
     // Enforce pool size limits.
     if ((Config_getBlockPoolMaxItems() > 0) &&
         (List_Length(sg_bpList) >= Config_getBlockPoolMaxItems())) {
-        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Block pool item limit exceeded");
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Block pool item limit exceeded", __func__);
         return NULL;
     }
 
