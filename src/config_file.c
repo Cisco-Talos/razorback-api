@@ -1236,7 +1236,8 @@ parseRoutingType (const char *string, conf_int_t * val) {
 bool
 testFile (const char *configfile) {
     struct stat sb;
-    int fd;
+    int fd = -1;
+    bool success = false;
     ASSERT(configfile != NULL);
     if (configfile == NULL) {
         rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: configfile is NULL", __func__);
@@ -1247,14 +1248,21 @@ testFile (const char *configfile) {
 
     if (fd == -1) {
         rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to open (%s) in ", __func__, configfile);
-        return false;
+        goto cleanup;
     }
 
     if (fstat(fd, &sb) == -1) {
-        return false;
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to stat (%s)", __func__, configfile);
+        goto cleanup;
     }
-    close (fd);
-    return true;
+
+    success = true;
+
+cleanup:
+    if (fd != -1)
+        close (fd);
+
+    return success;
 
 }
 #endif
