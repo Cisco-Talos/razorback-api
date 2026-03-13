@@ -41,6 +41,7 @@
 #endif
 
 #include <openssl/ssl.h>
+#include <openssl/err.h>
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
@@ -542,11 +543,29 @@ SSL_Socket_Connect ( const char * destination, uint16_t port, bool insecureMode)
     }
 
     // Initiate SSL handshake
-    if (SSL_connect (sock->sslHandle) != 1)
     {
-        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: TLS handshake failed", __func__);
-        Socket_Close(sock);
-        return NULL;
+        int rc = SSL_connect(sock->sslHandle);
+        if (rc != 1)
+        {
+            int ssl_err = SSL_get_error(sock->sslHandle, rc);
+            char err_buf[256];
+            unsigned long e;
+
+            rzb_log(LOG_ERR, LOG_C_NETWORK,
+                    "%s: TLS handshake failed (SSL_connect rc=%d, SSL_get_error=%d)",
+                    __func__, rc, ssl_err);
+
+            while ((e = ERR_get_error()) != 0)
+            {
+                ERR_error_string_n(e, err_buf, sizeof(err_buf));
+                rzb_log(LOG_ERR, LOG_C_NETWORK,
+                        "%s: OpenSSL error: %s",
+                        __func__, err_buf);
+            }
+
+            Socket_Close(sock);
+            return NULL;
+        }
     }
 
     if (insecureMode)
