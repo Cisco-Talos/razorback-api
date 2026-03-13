@@ -190,7 +190,7 @@ Socket_CopyAddress (struct Socket *dest, const struct Socket *source)
 
 static bool
 SocketAddress_Initialize (struct Socket *sock,
-                          const uint8_t * address, uint16_t port)
+                          const char * address, uint16_t port)
 {
     struct addrinfo aiHints;
     char portAsString[32];
@@ -212,7 +212,7 @@ SocketAddress_Initialize (struct Socket *sock,
 
     aiHints.ai_protocol = IPPROTO_TCP;
     ret = getaddrinfo(
-            (const char *) address,
+            address,
             portAsString,
             &aiHints,
             &sock->pAddressInfo);
@@ -235,7 +235,7 @@ SocketAddress_Initialize (struct Socket *sock,
 }
 
 SO_PUBLIC struct Socket *
-Socket_Listen (const unsigned char *sourceAddress, uint16_t port)
+Socket_Listen (const char *sourceAddress, uint16_t port)
 {
     struct Socket *sock;
     int on = 1;
@@ -423,7 +423,7 @@ Socket_Accept (struct Socket **retSock,
 }
 
 SO_PUBLIC struct Socket *
-Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
+Socket_Connect (const char *destinationAddress, uint16_t port)
 {
     struct addrinfo *cur = NULL;
     struct Socket *sock = NULL;
@@ -483,10 +483,10 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
 }
 
 SO_PUBLIC struct Socket *
-SSL_Socket_Connect ( const uint8_t * destination, uint16_t port, bool insecureMode)
+SSL_Socket_Connect ( const char * destination, uint16_t port, bool insecureMode)
 {
     struct Socket *sock;
-    const char *peerName = (const char *)destination;
+    const char *peerName = destination;
     long verifyResult;
 
     ASSERT (destination != NULL);

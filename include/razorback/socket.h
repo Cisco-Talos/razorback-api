@@ -56,11 +56,11 @@ struct Socket
 
 /**
  * Starts a socket listening.
- * @param sourceAddress The address.
+ * @param sourceAddress A null-terminated hostname or IP address string.
  * @param port The port.
  * @return A new socket or NULL on error.
  */
-SO_PUBLIC extern struct Socket * Socket_Listen(const uint8_t * sourceAddress, uint16_t port);
+SO_PUBLIC extern struct Socket * Socket_Listen(const char * sourceAddress, uint16_t port);
 
 /**
  * Start a UNIX socket listening.
@@ -70,14 +70,14 @@ SO_PUBLIC extern struct Socket * Socket_Listen(const uint8_t * sourceAddress, ui
 SO_PUBLIC extern struct Socket * Socket_Listen_Unix(const char * path);
 
 /**
- * Starts a socket listening.
- * @param destinationAddress The address.
+ * Starts a TLS client connection.
+ * @param destinationAddress A null-terminated hostname or IP address string.
  * @param port The port.
  * @param insecureMode When true, disables certificate and hostname verification.
  * @return A new socket or NULL on error.
  */
 SO_PUBLIC extern struct Socket * SSL_Socket_Connect(
-    const uint8_t * destinationAddress,
+    const char * destinationAddress,
     uint16_t port,
     bool insecureMode
 );
@@ -92,11 +92,11 @@ SO_PUBLIC extern int Socket_Accept(struct Socket **socket, const struct Socket *
 
 /**
  * Starts a connecting socket.
- * @param destinationAddress the address.
+ * @param destinationAddress A null-terminated hostname or IP address string.
  * @param port the port.
  * @return a new socket on success null on failure.
  */
-SO_PUBLIC extern struct Socket * Socket_Connect(const uint8_t * destinationAddress, uint16_t port);
+SO_PUBLIC extern struct Socket * Socket_Connect(const char * destinationAddress, uint16_t port);
 
 /**
  * Close a socket.
