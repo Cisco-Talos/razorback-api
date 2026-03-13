@@ -80,7 +80,7 @@ MessageCacheResp_Initialize (
     msg->destroy=CacheResp_Destroy;
     msg->deserialize=CacheResp_Deserialize;
     msg->serialize=CacheResp_Serialize;
- 
+
     return msg;
 }
 

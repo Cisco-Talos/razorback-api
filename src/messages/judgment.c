@@ -118,7 +118,7 @@ JudgmentSubmission_Deserialize(struct Message *message)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: json_tokener_parse failed", __func__);
         return false;
     }
-    
+
     submit = message->message;
 
     if (!JsonBuffer_Get_uint8_t(msg, "Reason", &submit->iReason)) {

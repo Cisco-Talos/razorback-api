@@ -113,10 +113,10 @@ extern "C" {
  */
 struct MessageHandler
 {
-    uint32_t type;                            ///< Message type code
-    bool (*serialize)(struct Message *msg);   ///< Serialization function pointer
-    bool (*deserialize)(struct Message *msg); ///< Deserialization function pointer
-    void (*destroy)(struct Message *msg);     ///< Destructor function pointer
+    uint32_t type;                             ///< Message type code
+    bool (*serialize)(struct Message *msg);    ///< Serialization function pointer
+    bool (*deserialize)(struct Message *msg);  ///< Deserialization function pointer
+    void (*destroy)(struct Message *msg);      ///< Destructor function pointer
 };
 
 /** Create a list for storing message headers
@@ -257,7 +257,7 @@ SO_PUBLIC extern struct Message* MessageHello_Initialize (struct RazorbackContex
  * @return A new message on success,  NULL On failure.
  */
 SO_PUBLIC extern struct Message* MessageRegistrationRequest_Initialize (
-                                                   const uuid_t dispatcherId, 
+                                                   const uuid_t dispatcherId,
                                                    const uuid_t sourceNugget,
                                                    const uuid_t nuggetType,
                                                    const uuid_t applicationType,

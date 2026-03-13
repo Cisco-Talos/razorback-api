@@ -21,8 +21,8 @@
  * ConnectedEntity structures and functions
  */
 
-#ifndef	RAZORBACK_CONNECTED_ENTITY_H
-#define	RAZORBACK_CONNECTED_ENTITY_H
+#ifndef RAZORBACK_CONNECTED_ENTITY_H
+#define RAZORBACK_CONNECTED_ENTITY_H
 
 #include <razorback/visibility.h>
 
@@ -38,8 +38,8 @@ extern "C" {
  */
 struct DispatcherEntity
 {
-    uint8_t priority;           ///< Dispatcher priority
-    uint32_t flags;             ///< Dispatcher flags
+    uint8_t priority;      ///< Dispatcher priority
+    uint32_t flags;        ///< Dispatcher flags
     List_t * addressList;  ///< Dispatcher address list.
     uint8_t protocol;
     uint16_t port;
@@ -50,12 +50,12 @@ struct DispatcherEntity
  */
 struct ConnectedEntity
 {
-    uuid_t uuidNuggetId;                    ///< identifying uuid of the entity
-    uuid_t uuidNuggetType;                  ///< identifying uuid of the entity
-    uuid_t uuidApplicationType;             ///< identifying uuid of the entity
-    time_t tTimeOfLastHello;                ///< time-stamp of last hello received
-    uint8_t locality;                       ///< Configured locality of the entity
-    struct DispatcherEntity *dispatcher;    ///< Dispatcher entity information
+    uuid_t uuidNuggetId;                  ///< identifying uuid of the entity
+    uuid_t uuidNuggetType;                ///< identifying uuid of the entity
+    uuid_t uuidApplicationType;           ///< identifying uuid of the entity
+    time_t tTimeOfLastHello;              ///< time-stamp of last hello received
+    uint8_t locality;                     ///< Configured locality of the entity
+    struct DispatcherEntity *dispatcher;  ///< Dispatcher entity information
 };
 
 /** Updates the timestamp an entry in the list

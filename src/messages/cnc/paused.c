@@ -55,7 +55,7 @@ static struct MessageHandler handler = {
 };
 
 // core.h
-void 
+void
 Message_CnC_Paused_Init(void)
 {
     Message_Register_Handler(&handler);

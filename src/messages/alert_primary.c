@@ -43,7 +43,7 @@ static struct MessageHandler handler = {
 };
 
 // core.h
-void 
+void
 MessageAlertPrimary_Init(void)
 {
     Message_Register_Handler(&handler);
@@ -123,7 +123,7 @@ static void
 AlertPrimary_Destroy (struct Message *message)
 {
     struct MessageAlertPrimary *msg;
-    
+
     ASSERT (message != NULL);
     if (message == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);
@@ -176,7 +176,7 @@ AlertPrimary_Deserialize(struct Message *message)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: json_tokener_parse failed", __func__);
         return false;
     }
-    
+
     alert = message->message;
 
     if (!JsonBuffer_Get_Nugget(msg, "Nugget", &alert->nugget)) {

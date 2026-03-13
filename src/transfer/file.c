@@ -46,7 +46,7 @@ static struct TransportDescriptor descriptor =
     Transfer_File_Fetch
 };
 
-bool 
+bool
 File_Init(void)
 {
     return Transport_Register(&descriptor);
@@ -55,7 +55,7 @@ File_Init(void)
 static char * File_mkdir(const char *fmt, ...)
 {
     char *dir = NULL;
-	va_list argp;
+    va_list argp;
     va_start (argp, fmt);
     if (vasprintf (&dir, fmt, argp) == -1)
     {
@@ -67,10 +67,10 @@ static char * File_mkdir(const char *fmt, ...)
     if (access (dir, F_OK) == -1)
     {
 #ifdef _MSC_VER
-		if (_mkdir (dir) != 0)
+        if (_mkdir (dir) != 0)
 #else
         if (mkdir (dir, S_IRUSR | S_IWUSR | S_IXUSR |
-                   S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1)	
+                   S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) == -1)
 #endif
         {
             rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: Error creating directory %s", __func__,
@@ -90,17 +90,17 @@ createDirectory(struct Block *block, const char *basepath)
     hash = Transfer_generateFilename(block);
     if ((dir = File_mkdir("%s/%c", basepath, hash[0])) == NULL)
         goto createDone;
-    else 
+    else
         free(dir);
 
     if ((dir = File_mkdir("%s/%c/%c", basepath, hash[0], hash[1])) == NULL)
         goto createDone;
-    else 
+    else
         free(dir);
 
     if ((dir = File_mkdir("%s/%c/%c/%c", basepath, hash[0], hash[1], hash[2])) == NULL)
         goto createDone;
-    else 
+    else
         free(dir);
 
     dir = File_mkdir("%s/%c/%c/%c/%c", basepath, hash[0], hash[1], hash[2],
@@ -147,7 +147,7 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     uint8_t data[4096];
     size_t len;
 
-	ASSERT (item != NULL);
+    ASSERT (item != NULL);
 
     if ((filename = Transfer_generateFilename (item->pEvent->pBlock)) == NULL)
     {
@@ -173,7 +173,7 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     dir = NULL;
 
 
-	if ((fd = open(path, O_RDONLY, 0)) != -1)
+    if ((fd = open(path, O_RDONLY, 0)) != -1)
     {
         close(fd);
         free(path);
@@ -233,10 +233,10 @@ Transfer_File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     char *path = NULL;
     struct stat fs;
 #ifdef _MSC_VER
-	char *tmp = NULL;
+    char *tmp = NULL;
 #endif
 
-	ASSERT (block != NULL);
+    ASSERT (block != NULL);
 
     if ((filename = Transfer_generateFilename (block)) == NULL)
     {
@@ -252,9 +252,9 @@ Transfer_File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     free (filename); filename = NULL;
 
 #ifdef _MSC_VER
-	while ((tmp = strchr( ((tmp == NULL) ? path : tmp), '/')) != NULL)
-		*tmp = '\\';
-#endif    
+    while ((tmp = strchr( ((tmp == NULL) ? path : tmp), '/')) != NULL)
+        *tmp = '\\';
+#endif
 
     fd = open (path, O_RDONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (fd == -1)
@@ -306,8 +306,8 @@ File_Delete(struct Block *block)
 #endif
 
     if (remove(path) != 0)
-		rzb_perror(LOG_C_TRANSFER,"File_Remove: failed to delete file: %s");
+        rzb_perror(LOG_C_TRANSFER,"File_Remove: failed to delete file: %s");
 
 
-	return true;
+    return true;
 }

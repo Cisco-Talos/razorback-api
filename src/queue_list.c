@@ -99,7 +99,7 @@ QueueList_Remove (List_t *p_pList, const uuid_t p_pId)
     return true;
 }
 
-static int QueueList_KeyCmp(void *a, void *id) 
+static int QueueList_KeyCmp(void *a, void *id)
 {
     unsigned char *uuid=(unsigned char *)id;
     struct QueueListEntry *entry = (struct QueueListEntry *)a;

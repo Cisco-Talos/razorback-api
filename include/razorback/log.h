@@ -18,7 +18,7 @@
 
 /** @file log.h
  * The Razorback Logging API.
- * 
+ *
  * Log levels avaliable are the same as the standard syslog log levels and
  * definitions are imported from syslog.
  *

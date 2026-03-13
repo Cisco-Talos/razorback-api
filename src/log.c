@@ -97,15 +97,15 @@ rzb_log (unsigned level, uint64_t compontent, const char *fmt, ...)
         return;
     }
 
-	va_list argp;
+    va_list argp;
     RZB_LOG_DEST_t log_dest = Config_getLogDest();
     if (level > (unsigned) Config_getLogLevel())
     {
         return;
     }
-    
+
     va_start (argp, fmt);
-    
+
     if (log_dest != RZB_LOG_DEST_SYSLOG)
     {
         if (vasprintf (&msg, fmt, argp) == -1)
@@ -116,7 +116,7 @@ rzb_log (unsigned level, uint64_t compontent, const char *fmt, ...)
     {
     case RZB_LOG_DEST_SYSLOG:
 #ifdef _MSC_VER
-		UNIMPLEMENTED();
+        UNIMPLEMENTED();
 #else
         vsyslog (level, fmt, argp);
 #endif
@@ -139,19 +139,19 @@ rzb_log_remote (uint8_t level, struct EventId *eventId, const char *fmt, ...)
     struct Message *message;
     char *msg = NULL;
     struct RazorbackContext *l_pContext;
-	va_list argp;
+    va_list argp;
 
     if (level > (unsigned) Config_getLogLevel())
     {
         return;
     }
-    
+
     va_start (argp, fmt);
 
     if (vasprintf (&msg, fmt, argp) == -1)
         return;
     va_end (argp);
-    
+
     l_pContext = Thread_GetCurrentContext ();
 
     if ((message = MessageLog_Initialize(l_pContext->uuidNuggetId,

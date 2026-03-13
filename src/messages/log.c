@@ -89,14 +89,14 @@ MessageLog_Initialize (
     return msg;
 }
 
-static void 
+static void
 Log_Destroy (struct Message *msg)
 {
     struct MessageLogSubmission *message;
     ASSERT (msg != NULL);
     if (msg  == NULL)
         return;
-    message = msg->message; 
+    message = msg->message;
     if (message != NULL) {
         // destroy any malloc'd components
         if (message->pEventId != NULL) {
@@ -130,7 +130,7 @@ Log_Deserialize(struct Message *message)
                  "%s: failed to parse json", __func__);
         return false;
     }
-    
+
     submit = message->message;
 
     if (!JsonBuffer_Get_UUID(msg, "Nugget_ID", submit->uuidNuggetId)) {

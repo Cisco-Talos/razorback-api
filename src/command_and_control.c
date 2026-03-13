@@ -105,8 +105,8 @@ CommandAndControl_Unpause(void) {
 
 bool
 CommandAndControl_Start (struct RazorbackContext *p_pContext) {
-	uuid_t dispatcher;
-	ASSERT (p_pContext != NULL);
+    uuid_t dispatcher;
+    ASSERT (p_pContext != NULL);
     if (p_pContext == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Context is NULL", __func__);
         return false;
@@ -166,7 +166,7 @@ CommandAndControl_Start (struct RazorbackContext *p_pContext) {
     return true;
 }
 
-void 
+void
 CommandAndControl_Shutdown(void) {
    // Shut down state tracking timer.
    ConnectedEntityList_Stop();
@@ -180,7 +180,7 @@ CommandAndControl_Shutdown(void) {
    sg_tThread = NULL;
 }
 
-static void 
+static void
 CommandAndControl_Thread (Thread_t *p_pThread) {
 
     // local variables for command processing
@@ -488,7 +488,7 @@ CommandAndControl_DispatchCommand (struct RazorbackContext *p_pContext, void*use
     return LIST_EACH_OK;
 }
 
-bool 
+bool
 CommandAndControl_SendBye (struct RazorbackContext *context) {
     struct Message *bye;
 
@@ -526,7 +526,7 @@ CommandAndControl_Register (struct RazorbackContext *p_pContext) {
     while ((dispatcher = ConnectedEntityList_GetDedicatedDispatcher()) == NULL) {
         rzb_log(LOG_INFO, LOG_C_CNC, "%s: Waiting for dispatcher", __func__);
 #ifdef _MSC_VER
-		Sleep(1000);
+        Sleep(1000);
 #else
         sleep(1);
 #endif
@@ -623,7 +623,7 @@ Default_processHelloMessage (struct Message *message) {
     if (uuid_compare(dispatcher, hello->uuidNuggetType) != 0) {
         return true;
     }
-    
+
     ConnectedEntityList_Update (message);
 
     return true;
@@ -641,7 +641,7 @@ CommandAndControl_processCacheClearMessage (struct RazorbackContext *context) {
         rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: Failed to get dispatcher UUID", __func__);
         return false;
     }
-    
+
     // If we are not a dispatcher but we are stand alone then process this request.
     if (
             (uuid_compare(dispatcher, context->uuidNuggetType) != 0) &&
@@ -720,7 +720,7 @@ CnC_UpdateUUIDList(int listType, List_t *msgList)
 static bool
 Default_processConfUpdateMessage (struct Message *message){
     struct MessageConfigurationUpdate *mcuConfigUpdate;
-	struct RazorbackContext *l_pContext;
+    struct RazorbackContext *l_pContext;
     struct Message *configAck;
     uuid_t source,dest;
 
@@ -896,15 +896,15 @@ Default_processByeMessage (struct Message *message) {
 
 static void
 ReregistrationThread(Thread_t *thread) {
-	struct RazorbackContext *context;
-	ASSERT (thread != NULL);
-	if (thread == NULL) {
+    struct RazorbackContext *context;
+    ASSERT (thread != NULL);
+    if (thread == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Failed to process re-registration, thread NULL", __func__);
         return;
     }
 
-	context = Thread_GetContext(thread);
-	ASSERT (context != NULL);
+    context = Thread_GetContext(thread);
+    ASSERT (context != NULL);
     if (context == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Failed to process re-registration, context NULL", __func__);
         return;
@@ -918,15 +918,15 @@ ReregistrationThread(Thread_t *thread) {
         return;
     }
 
-	return;
+    return;
 }
 
 static bool
 Default_processReRegMessage (struct Message *message) {
-	struct RazorbackContext *context;
-	Thread_t *thread;
-	ASSERT(message != NULL);
-	if (message == NULL) {
+    struct RazorbackContext *context;
+    Thread_t *thread;
+    ASSERT(message != NULL);
+    if (message == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Message is NULL", __func__);
         return false;
     }
@@ -935,5 +935,5 @@ Default_processReRegMessage (struct Message *message) {
     thread = Thread_Launch(ReregistrationThread,NULL, NULL, context);
     //Decrement the ref count so it can be free'd once its finished.
     Thread_Destroy(thread);
-	return true;
+    return true;
 }

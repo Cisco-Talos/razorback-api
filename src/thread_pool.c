@@ -27,7 +27,7 @@
 #endif
 
 
-static int 
+static int
 TP_KeyCmp(void *a, void *id)
 {
     struct ThreadPoolItem *item = (struct ThreadPoolItem *)a;
@@ -51,7 +51,7 @@ TP_Cmp(void *a, void *b)
     return -1;
 }
 
-static void 
+static void
 TP_Destroy(void *a)
 {
     struct ThreadPoolItem *worker = (struct ThreadPoolItem *)a;
@@ -59,7 +59,7 @@ TP_Destroy(void *a)
     free(a);
 }
 
-static void 
+static void
 ThreadPool_Main(Thread_t *thread)
 {
     struct ThreadPoolItem *worker = Thread_GetUserData(thread);
@@ -72,9 +72,9 @@ ThreadPool_Main(Thread_t *thread)
 }
 
 SO_PUBLIC struct ThreadPool *
-ThreadPool_Create(int initialThreads, 
-        int maxThreads, 
-        struct RazorbackContext *context, 
+ThreadPool_Create(int initialThreads,
+        int maxThreads,
+        struct RazorbackContext *context,
         const char *namePattern,
         void (*mainFunction) (Thread_t *))
 {
@@ -137,7 +137,7 @@ ThreadPool_LaunchWorker(struct ThreadPool *pool)
 SO_PUBLIC bool
 ThreadPool_LaunchWorkers(struct ThreadPool *pool, int count)
 {
-	int i=0;
+    int i=0;
     for (i = 0; i < count; i++)
     {
         if (!ThreadPool_LaunchWorker(pool))
@@ -176,9 +176,9 @@ ThreadPool_KillWorkers(struct ThreadPool *pool)
     size_t count;
     List_ForEach(pool->list, ThreadPool_Kill, NULL);
 
-    for (count = List_Length(pool->list); count > 0; count = List_Length(pool->list)) 
+    for (count = List_Length(pool->list); count > 0; count = List_Length(pool->list))
         Thread_Yield();
-        
+
     return true;
 }
 

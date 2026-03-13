@@ -51,33 +51,33 @@ static double min(double, unsigned);
 
 
 Lookup_Result checkLocalEntry(uint8_t *key, uint32_t size, uint32_t *sfflags, uint32_t *entflags, CacheType type) {
-    
-	CACHE *cache;
-	ENTRY entry;
-	ENTRY *cachehit;
 
-    //Set Cache pointer based on CACHETYPE value    
+    CACHE *cache;
+    ENTRY entry;
+    ENTRY *cachehit;
+
+    //Set Cache pointer based on CACHETYPE value
     if (type >= ALL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
         return R_ERROR;
-	}
+    }
 
-	cache = &Cache[type];
+    cache = &Cache[type];
 
     if (sfflags == NULL || entflags == NULL || key == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL pointer passed as argument", __func__);
-		return R_ERROR;
-	}
- 
+        return R_ERROR;
+    }
+
     Mutex_Lock(cache->cachemutex);
 
-	entry.next = NULL;
-	entry.prev = NULL;
-	entry.size = size;
-	entry.key = key;
-	entry.listtype = LT_NONE;
-	entry.sfflags = *sfflags;
-	entry.entflags = *entflags;
+    entry.next = NULL;
+    entry.prev = NULL;
+    entry.size = size;
+    entry.key = key;
+    entry.listtype = LT_NONE;
+    entry.sfflags = *sfflags;
+    entry.entflags = *entflags;
 
     cachehit = FindEntry(&entry, cache);
 
@@ -90,7 +90,7 @@ Lookup_Result checkLocalEntry(uint8_t *key, uint32_t size, uint32_t *sfflags, ui
                 //In T1? Cache is now frequent; grows T2, shrinks T1
                 cache->listSize[LT_T1]--;
                 cache->listSize[LT_T2]++;
-		__attribute__((fallthrough));
+        __attribute__((fallthrough));
             case LT_T2:
                 //In T2? Reinsert entry as MRU, caches stay the same size
                 //*****Check to make sure hit isn't already T2 MRU
@@ -127,19 +127,19 @@ Lookup_Result checkLocalEntry(uint8_t *key, uint32_t size, uint32_t *sfflags, ui
 
             case LT_NONE:
                 rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unexpected listtype value, possible memory corruption", __func__);
-				Mutex_Unlock(cache->cachemutex);
-				return R_ERROR;
+                Mutex_Unlock(cache->cachemutex);
+                return R_ERROR;
         }
 
         Mutex_Unlock(cache->cachemutex);
 
         *entflags = cachehit->entflags;
-		*sfflags = cachehit->sfflags;
+        *sfflags = cachehit->sfflags;
 
-		if (type == BADHASH)
-			rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: --Local Cache Hit-- BADHASH SF: 0x%08x, ENT: 0x%08x", __func__, *sfflags, *entflags);
-		else if (type == GOODHASH)
-			rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: --Local Cache Hit-- GOODHASH SF: 0x%08x, ENT: 0x%08x", __func__, *sfflags, *entflags);
+        if (type == BADHASH)
+            rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: --Local Cache Hit-- BADHASH SF: 0x%08x, ENT: 0x%08x", __func__, *sfflags, *entflags);
+        else if (type == GOODHASH)
+            rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: --Local Cache Hit-- GOODHASH SF: 0x%08x, ENT: 0x%08x", __func__, *sfflags, *entflags);
 
         return R_FOUND;
     }
@@ -155,15 +155,15 @@ Lookup_Result addLocalEntry(uint8_t *key, uint32_t size, uint32_t sfflags, uint3
     ENTRY *newentry;
 
     if (type >= ALL) {
-		rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
         return R_ERROR;
     }
 
     cache = &Cache[type];
 
     Mutex_Lock(cache->cachemutex);
-    
-	//Cache Miss (aka: Addentry)
+
+    //Cache Miss (aka: Addentry)
     //B1 + T1 full?
     if (cache->listSize[LT_T1] + cache->listSize[LT_B1] == cache->size)
     {
@@ -195,22 +195,22 @@ Lookup_Result addLocalEntry(uint8_t *key, uint32_t size, uint32_t sfflags, uint3
         else
             newentry = getNewEntry(cache);
     }
-    
-	AddMRU(newentry, LT_T1, cache);
+
+    AddMRU(newentry, LT_T1, cache);
     cache->listSize[LT_T1]++;
     //size and protocol are a union and size is bigger
     //So, referencing the entire dword will copy either
     newentry->size = size;
-	newentry->sfflags = sfflags;
-	newentry->entflags = entflags;
+    newentry->sfflags = sfflags;
+    newentry->entflags = entflags;
 
     if (newentry->key != NULL)
-		free(newentry->key);
-	if ((newentry->key = (uint8_t *)malloc(size)) == 0) {
-	    rzb_log(LOG_ERR, LOG_C_CORE, "%s: malloctile dysfunction", __func__);
-		Mutex_Unlock(cache->cachemutex);
-		return R_ERROR;
-	}
+        free(newentry->key);
+    if ((newentry->key = (uint8_t *)malloc(size)) == 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: malloctile dysfunction", __func__);
+        Mutex_Unlock(cache->cachemutex);
+        return R_ERROR;
+    }
     memcpy(newentry->key, key, size);
 
     Mutex_Unlock(cache->cachemutex);
@@ -223,7 +223,7 @@ Lookup_Result updateLocalEntry(uint8_t *key, uint32_t size, uint32_t sfflags, ui
     ENTRY *entry;
     ENTRY temp;
 
-	if (type >= ALL) {
+    if (type >= ALL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
         return R_ERROR;
     }
@@ -236,22 +236,22 @@ Lookup_Result updateLocalEntry(uint8_t *key, uint32_t size, uint32_t sfflags, ui
     }
 
     Mutex_Lock(cache->cachemutex);
-    
-	temp.next = NULL;
+
+    temp.next = NULL;
     temp.prev = NULL;
     temp.size = size;
     temp.key = key;
     temp.sfflags = sfflags;
     temp.entflags = entflags;
-	
-	entry = FindEntry(&temp, cache);
 
-    if (entry == NULL) { 
+    entry = FindEntry(&temp, cache);
+
+    if (entry == NULL) {
         //Couldn't find entry to update, it's possible.
-		Mutex_Unlock(cache->cachemutex);
+        Mutex_Unlock(cache->cachemutex);
         return R_NOT_FOUND;
     }
- 
+
     entry->sfflags = sfflags;
     entry->entflags = entflags;
     Mutex_Unlock(cache->cachemutex);
@@ -261,68 +261,68 @@ Lookup_Result updateLocalEntry(uint8_t *key, uint32_t size, uint32_t sfflags, ui
 
 Lookup_Result removeLocalEntry(uint8_t *key, uint32_t size, CacheType type) {
     CACHE *cache;
-	ENTRY *entry;
-	ENTRY temp;
+    ENTRY *entry;
+    ENTRY temp;
 
-	if (type >= ALL) {
-		rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
-		return R_ERROR;
-	}
+    if (type >= ALL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
+        return R_ERROR;
+    }
 
-	cache = &Cache[type];
+    cache = &Cache[type];
 
-	if (key == NULL) {
-		rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL key passed as argument", __func__);
-		return R_ERROR;
-	}
+    if (key == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL key passed as argument", __func__);
+        return R_ERROR;
+    }
 
-	Mutex_Lock(cache->cachemutex);
+    Mutex_Lock(cache->cachemutex);
 
-	temp.next = NULL;
-	temp.prev = NULL;
-	temp.size = size;
-	temp.key = key;
+    temp.next = NULL;
+    temp.prev = NULL;
+    temp.size = size;
+    temp.key = key;
 
-	entry = FindEntry(&temp, cache);
+    entry = FindEntry(&temp, cache);
 
-	if (entry == NULL) {
-		Mutex_Unlock(cache->cachemutex);
-		return R_NOT_FOUND;
-	}
+    if (entry == NULL) {
+        Mutex_Unlock(cache->cachemutex);
+        return R_NOT_FOUND;
+    }
 
-	removeEntry(entry, cache);
+    removeEntry(entry, cache);
 
-	destroyEntry(entry);
+    destroyEntry(entry);
 
-	entry->size = 0;
+    entry->size = 0;
 
-	Mutex_Unlock(cache->cachemutex);
+    Mutex_Unlock(cache->cachemutex);
 
     return R_SUCCESS;
 }
 
 Lookup_Result
-clearLocalEntry(CacheType type, ClearMethod method) 
+clearLocalEntry(CacheType type, ClearMethod method)
 {
-    
-	unsigned i,j;
-	CACHE *cache;
+
+    unsigned i,j;
+    CACHE *cache;
 
     if (type > ALL) {
-		rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unrecognized cache type.", __func__);
-		return R_ERROR;
-	}
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unrecognized cache type.", __func__);
+        return R_ERROR;
+    }
 
-	
-	if (type == ALL) {
-          
-        for (j = 0; j < ALL; j++) {     
+
+    if (type == ALL) {
+
+        for (j = 0; j < ALL; j++) {
 
             cache = &Cache[j];
-        
-	        Mutex_Lock(cache->cachemutex);
-            
-			switch (method) {
+
+            Mutex_Lock(cache->cachemutex);
+
+            switch (method) {
 
                 case FULL:
                     for (i = 0; i < cache->entries; i++)
@@ -346,41 +346,41 @@ clearLocalEntry(CacheType type, ClearMethod method)
                     return R_ERROR;
             }
             Mutex_Unlock(cache->cachemutex);
-		}
-	}
-	else {
-	
-	    cache = &Cache[type];
-	    
-	    Mutex_Lock(cache->cachemutex);
-		
-		switch (method) {
+        }
+    }
+    else {
 
-			case FULL:
-		    	for (i = 0; i < cache->entries; i++)
-				{
-			      	destroyEntry(&cache->entrylist[i]);
-		    	}
+        cache = &Cache[type];
 
-		    	cache->entries = 0;
-	        	cache->target = cache->size;
+        Mutex_Lock(cache->cachemutex);
 
-	        	for (i = 0; i < LT_NONE; i++) {
-		            Cache->listSize[i] = 0;
-		            Cache->LRU[i] = NULL;
-			        Cache->MRU[i] = NULL;
-		        }
-				break;
+        switch (method) {
 
-			default:
-				rzb_log(LOG_EMERG, LOG_C_CORE, "%s: Unsupported method", __func__);
+            case FULL:
+                for (i = 0; i < cache->entries; i++)
+                {
+                    destroyEntry(&cache->entrylist[i]);
+                }
+
+                cache->entries = 0;
+                cache->target = cache->size;
+
+                for (i = 0; i < LT_NONE; i++) {
+                    Cache->listSize[i] = 0;
+                    Cache->LRU[i] = NULL;
+                    Cache->MRU[i] = NULL;
+                }
+                break;
+
+            default:
+                rzb_log(LOG_EMERG, LOG_C_CORE, "%s: Unsupported method", __func__);
                 Mutex_Unlock(cache->cachemutex);
-				return R_ERROR;
-		}
+                return R_ERROR;
+        }
 
         Mutex_Unlock(cache->cachemutex);
-	
-	}
+
+    }
 
 
     return R_SUCCESS;
@@ -407,8 +407,8 @@ static ENTRY *getNewEntry(CACHE *cache)
         newentry->listtype = LT_NONE;
         return newentry;
     }
-    
-	rzb_log(LOG_ERR, LOG_C_CORE, "%s: returning NULL, the math is wrong somewhere", __func__);
+
+    rzb_log(LOG_ERR, LOG_C_CORE, "%s: returning NULL, the math is wrong somewhere", __func__);
     return NULL;
 }
 
@@ -583,30 +583,30 @@ static ENTRY *replace(CACHE *cache)
 }
 
 static void destroyEntry(ENTRY *entry) {
-	    free(entry->key);
+        free(entry->key);
 }
 
 //TODO Update config to store the different cache sizes differently
-void 
+void
 initcache(void)
 {
-	unsigned i,j;
-	Cache[0].size = Config_getCacheBadLimit ();
-	Cache[1].size = Config_getCacheGoodLimit ();
-	for (i = 2; i < ALL; i++)
-		Cache[i].size = 256;
-	for (i = 0; i < ALL; i++) {
+    unsigned i,j;
+    Cache[0].size = Config_getCacheBadLimit ();
+    Cache[1].size = Config_getCacheGoodLimit ();
+    for (i = 2; i < ALL; i++)
+        Cache[i].size = 256;
+    for (i = 0; i < ALL; i++) {
         Cache[i].entries = 0;
         Cache[i].entrylist = malloc(Cache[i].size * 2 * sizeof(ENTRY));
         Cache[i].target = Cache[i].size;
-		if ((Cache[i].cachemutex = Mutex_Create(MUTEX_MODE_NORMAL)) ==  NULL)
+        if ((Cache[i].cachemutex = Mutex_Create(MUTEX_MODE_NORMAL)) ==  NULL)
             return;
 
-		for (j = 0; j < LT_NONE; j++) {
-			Cache[i].listSize[j] = 0;
-			Cache[i].LRU[j] = NULL;
-			Cache[i].MRU[j] = NULL;
-		}
+        for (j = 0; j < LT_NONE; j++) {
+            Cache[i].listSize[j] = 0;
+            Cache[i].LRU[j] = NULL;
+            Cache[i].MRU[j] = NULL;
+        }
     }
     rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: Cache initialized", __func__);
 }
@@ -620,7 +620,7 @@ void finicache(void)
 
     Mutex_Lock(&cachemutex);
 
-	for (j = 0; j < ALL; j++) {
+    for (j = 0; j < ALL; j++) {
         if (Cache[j].entrylist != NULL)
         {
             for (i = 0; i < Cache[j].entries; i++)
@@ -630,8 +630,8 @@ void finicache(void)
             }
 
             free(Cache[i].entrylist);
-	    }
-	}
+        }
+    }
 
     Mutex_Unlock(&cachemutex);
 }

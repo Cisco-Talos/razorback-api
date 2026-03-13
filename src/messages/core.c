@@ -177,14 +177,14 @@ Message_Add_Header(struct Message *p_pMessage, const char *p_sName, const char *
 
 SO_PUBLIC List_t *
 Message_Header_List_Create(void) {
-    return List_Create(LIST_MODE_GENERIC, 
+    return List_Create(LIST_MODE_GENERIC,
             MessageHeader_Cmp,
             MessageHeader_KeyCmp,
             MessageHeader_Delete,
             MessageHeader_Clone, NULL, NULL);
 }
 
-static int 
+static int
 MessageHeader_KeyCmp(void *a, void *id) {
     struct MessageHeader *item = (struct MessageHeader *)a;
     char *key = id;
@@ -206,7 +206,7 @@ MessageHeader_Cmp(void *a, void *b) {
 
 }
 
-static void 
+static void
 MessageHeader_Delete(void *a) {
     struct MessageHeader *header = a;
     ASSERT(header != NULL);
@@ -222,7 +222,7 @@ MessageHeader_Delete(void *a) {
 
 bool
 Message_Init() {
-    handlerList = List_Create(LIST_MODE_GENERIC, 
+    handlerList = List_Create(LIST_MODE_GENERIC,
             MessageHandler_Cmp,
             MessageHandler_KeyCmp,
             MessageHandler_Delete,
@@ -271,13 +271,13 @@ Message_Setup(struct Message *message) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL message", __func__);
         return false;
     }
-	
-	handler = List_Find(handlerList, &message->type);
+
+    handler = List_Find(handlerList, &message->type);
     if (handler == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: No handler for message type %u", __func__, message->type);
         return false;
     }
-	
+
     message->serialize = handler->serialize;
     message->deserialize = handler->deserialize;
     message->destroy = handler->destroy;
@@ -296,7 +296,7 @@ bool Message_Register_Handler(struct MessageHandler *handler) {
 
 
 
-static int 
+static int
 MessageHandler_KeyCmp(void *a, void *id) {
     struct MessageHandler *item = (struct MessageHandler *)a;
     uint32_t *key = id;
@@ -312,12 +312,12 @@ MessageHandler_Cmp(void *a, void *b) {
     return (iA->type - iB->type);
 }
 
-static void 
+static void
 MessageHandler_Delete(void *a)
 {
 }
 
-static bool 
+static bool
 Message_Add_Directed_Headers(struct Message *message, const uuid_t source, const uuid_t dest) {
     char uuid[UUID_STRING_LENGTH];
     ASSERT(message != NULL);
@@ -333,8 +333,8 @@ Message_Add_Directed_Headers(struct Message *message, const uuid_t source, const
     return true;
 }
 
-SO_PUBLIC struct Message * 
-Message_Create_Directed(uint32_t type, uint32_t version, 
+SO_PUBLIC struct Message *
+Message_Create_Directed(uint32_t type, uint32_t version,
         size_t msgSize, const uuid_t source, const uuid_t dest)
 {
     struct Message *msg;
@@ -351,8 +351,8 @@ Message_Create_Directed(uint32_t type, uint32_t version,
     return msg;
 }
 
-SO_PUBLIC struct Message * 
-Message_Create_Broadcast(uint32_t type, uint32_t version, 
+SO_PUBLIC struct Message *
+Message_Create_Broadcast(uint32_t type, uint32_t version,
         size_t msgSize, const uuid_t source) {
     struct Message *msg;
     uuid_t dest;
@@ -403,7 +403,7 @@ Message_Deserialize_Empty(struct Message *message) {
     return true;
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Message_Get_Nuggets(struct Message *message, uuid_t source, uuid_t dest) {
     struct MessageHeader *header;
 

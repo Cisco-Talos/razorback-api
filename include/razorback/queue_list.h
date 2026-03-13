@@ -19,8 +19,8 @@
 /** @file queue_list.h
  * A list of queues.
  */
-#ifndef	RAZORBACK_QUEUE_LIST_H
-#define	RAZORBACK_QUEUE_LIST_H
+#ifndef RAZORBACK_QUEUE_LIST_H
+#define RAZORBACK_QUEUE_LIST_H
 #include <razorback/visibility.h>
 #include <razorback/queue.h>
 #include <razorback/list.h>
@@ -34,9 +34,9 @@ extern "C" {
  */
 struct QueueListEntry
 {
-    struct Queue *pQueue;       ///< the queue
-    uuid_t uuiKey;              ///< a key for the queue
-    struct QueueListEntry *pNext;   ///< the next item in the list
+    struct Queue *pQueue;          ///< the queue
+    uuid_t uuiKey;                 ///< a key for the queue
+    struct QueueListEntry *pNext;  ///< the next item in the list
 };
 
 /** Initializes a queue list

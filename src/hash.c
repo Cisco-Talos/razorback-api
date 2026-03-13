@@ -78,8 +78,8 @@ Hash_ToText (const struct Hash *p_pHash)
     uint32_t l_iIndex;
     char *l_sTemp;
 
-	ASSERT (p_pHash != NULL);
-	if (p_pHash == NULL) {
+    ASSERT (p_pHash != NULL);
+    if (p_pHash == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pHash is NULL", __func__);
         return NULL;
     }
@@ -94,7 +94,7 @@ Hash_ToText (const struct Hash *p_pHash)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate new string", __func__);
         return NULL;
     }
-    
+
     l_sTemp = l_sString;
 
     for(l_iIndex=0; l_iIndex< p_pHash->iSize; l_iIndex++){
@@ -111,13 +111,13 @@ Hash_Create (void) {
 
 static bool
 Hash_Init_OpenSSL(struct Hash *hash) {
-	const EVP_MD *m;
-	ASSERT(hash != NULL);
-	if (hash == NULL) {
+    const EVP_MD *m;
+    ASSERT(hash != NULL);
+    if (hash == NULL) {
         rzb_log (LOG_ERR, LOG_C_CORE, "%s: failed due to NULL hash", __func__);
         return false;
     }
-	hash->pData = (uint8_t *)calloc (EVP_MAX_MD_SIZE, sizeof (uint8_t));
+    hash->pData = (uint8_t *)calloc (EVP_MAX_MD_SIZE, sizeof (uint8_t));
     if (hash->pData == NULL) {
         rzb_log (LOG_ERR, LOG_C_CORE, "%s: failed due to lack of memory", __func__);
         return false;
@@ -145,7 +145,7 @@ Hash_Init_OpenSSL(struct Hash *hash) {
     }
     hash->CTX = EVP_MD_CTX_new();
     EVP_DigestInit(hash->CTX, m);
-	return true;
+    return true;
 }
 
 SO_PUBLIC struct Hash *
@@ -195,9 +195,9 @@ Hash_Create_From_String(uint32_t p_iType, const char *p_sHash) {
     for(i = 0; i < hash->iSize; i++) {
 #ifdef _MSC_VER
         tmp[0] = *pos;
-		tmp[1] = *(pos+1);
-		b = strtoul(tmp,NULL, 16);
-		hash->pData[i] = (uint8_t) b;
+        tmp[1] = *(pos+1);
+        b = strtoul(tmp,NULL, 16);
+        hash->pData[i] = (uint8_t) b;
 #else
         sscanf(pos, "%2hhx", &hash->pData[i]);
 #endif
@@ -351,9 +351,9 @@ Hash_Destroy (struct Hash *p_pHash) {
 SO_PUBLIC struct Hash *
 Hash_Clone (const struct Hash *p_pSource) {
     struct Hash *l_pDestination;
-	
-	ASSERT (p_pSource != NULL);
-	if (p_pSource == NULL) {
+
+    ASSERT (p_pSource != NULL);
+    if (p_pSource == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pSource is NULL", __func__);
         return NULL;
     }

@@ -121,7 +121,7 @@ NTLV_Cmp(void *a, void *b)
     return -1;
 }
 
-static void 
+static void
 NTLV_Delete(void *a)
 {
     struct NTLVItem *item = (struct NTLVItem *)a;
@@ -145,13 +145,13 @@ NTLV_Clone(void *o)
     uuid_copy (item->uuidType, orig->uuidType);
     item->iLength = orig->iLength;
     memcpy (item->pData, orig->pData, orig->iLength);
-    return item; 
+    return item;
 }
 
 SO_PUBLIC List_t *
 NTLVList_Create (void)
 {
-    return List_Create(LIST_MODE_GENERIC, 
+    return List_Create(LIST_MODE_GENERIC,
             NTLV_Cmp,
             NTLV_KeyCmp,
             NTLV_Delete,

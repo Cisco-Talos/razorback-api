@@ -46,7 +46,7 @@ static struct MessageHandler config_handler = {
 };
 
 // core.h
-void 
+void
 Message_CnC_Error_Init(void) {
     Message_Register_Handler(&reg_handler);
     Message_Register_Handler(&config_handler);
@@ -117,7 +117,7 @@ Error_Deserialize(struct Message *message)
 {
     json_object *msg;
     struct MessageError *error;
-    
+
     ASSERT(message != NULL);
     if (message == NULL) {
         rzb_log (LOG_ERR, LOG_C_CORE,
@@ -136,7 +136,7 @@ Error_Deserialize(struct Message *message)
                 "%s: failed due to failure of json_tokener_parse", __func__);
         return false;
     }
-    
+
     error = message->message;
 
     if ((error->sMessage = (uint8_t *) JsonBuffer_Get_String(msg, "Message")) == NULL) {

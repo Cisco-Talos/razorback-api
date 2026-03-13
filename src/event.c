@@ -66,7 +66,7 @@ EventId_Clone (struct EventId *in) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed allocate event", __func__);
         return NULL;
     }
-    uuid_copy(id->uuidNuggetId, in->uuidNuggetId); 
+    uuid_copy(id->uuidNuggetId, in->uuidNuggetId);
     id->iSeconds = in->iSeconds;
     id->iNanoSecs = in->iNanoSecs;
     return id;

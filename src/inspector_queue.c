@@ -71,7 +71,7 @@ InspectorQueue_Initialize (uuid_t p_pApplicationType, int p_iFlags)
 
     // find the queue
     if (!QueueList_Add (sg_qlInspectorQueue, l_pQueue, p_pApplicationType))
-    {   
+    {
         // TODO: Terminate the queue.
         return NULL;
     }

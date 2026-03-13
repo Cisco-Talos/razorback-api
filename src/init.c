@@ -44,37 +44,37 @@ BOOL WINAPI DllMain(
   __in  LPVOID lpvReserved
 )
 {
-	switch( fdwReason ) 
-    { 
+    switch( fdwReason )
+    {
     case DLL_PROCESS_ATTACH:
-		wVersionRequested = MAKEWORD(2, 2);
-		WSAStartup(wVersionRequested, &wsaData);
-		setlocale( LC_ALL, "C" );
+        wVersionRequested = MAKEWORD(2, 2);
+        WSAStartup(wVersionRequested, &wsaData);
+        setlocale( LC_ALL, "C" );
 #else
-SO_PUBLIC void __attribute__ ((constructor)) 
+SO_PUBLIC void __attribute__ ((constructor))
 RZB_Init_API ()
 {
 #endif
-		Crypto_Initialize();
-		initCurl();
-		if (!readApiConfig()) {
+        Crypto_Initialize();
+        initCurl();
+        if (!readApiConfig()) {
             exit(1);
         }
-		configureLogging();
-		Magic_Init();
-		initcache();
-		initUuids();
-		initApi();
-		Message_Init();
-		if (!Transfer_Init()) {
+        configureLogging();
+        Magic_Init();
+        initcache();
+        initUuids();
+        initApi();
+        Message_Init();
+        if (!Transfer_Init()) {
             exit(1);
         }
 #ifdef _MSC_VER
-		break;
-	default:
-		break;
-	}
-	return true;
+        break;
+    default:
+        break;
+    }
+    return true;
 #endif
 }
 

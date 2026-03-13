@@ -667,8 +667,8 @@ SO_PUBLIC bool JsonBuffer_Get_Hash (json_object * parent, const char *name, stru
     json_object *object, *object2;
     const char *type, *data;
 #ifdef _MSC_VER
-	char tmp[3] = { '\0', '\0','\0' };
-	unsigned long b;
+    char tmp[3] = { '\0', '\0','\0' };
+    unsigned long b;
 #endif
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
@@ -1523,7 +1523,7 @@ JsonBuffer_Put_uint8List (json_object * parent, const char * name,
                                            uint8_t *list, uint32_t count)
 {
     json_object *object;
-	uint32_t i;
+    uint32_t i;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
     if (parent == NULL)
@@ -1551,7 +1551,7 @@ JsonBuffer_Get_uint8List (json_object * parent, const char * name,
     json_object *object;
     uint32_t c =0;
     uint8_t *items = NULL;
-	uint32_t i;
+    uint32_t i;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
     if (parent == NULL)

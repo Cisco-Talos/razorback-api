@@ -52,14 +52,14 @@ typedef long conf_int_t;
  */
 typedef enum
 {
-    RZB_CONF_KEY_TYPE_STRING = 5,   ///< A String.
-    RZB_CONF_KEY_TYPE_INT,      ///< A signed int.
-    RZB_CONF_KEY_TYPE_PARSED_STRING,    ///< A string with a callback to turn it into an int.
-    RZB_CONF_KEY_TYPE_UUID,     ///< A UUID in string format.
-    RZB_CONF_KEY_TYPE_BOOL,     ///< A Bool in string format.
-    RZB_CONF_KEY_TYPE_ARRAY,    ///< An array of simple items
-    RZB_CONF_KEY_TYPE_LIST,     ///< An list of complex items
-    RZB_CONF_KEY_TYPE_END       ///< End of block marker.
+    RZB_CONF_KEY_TYPE_STRING = 5,     ///< A String.
+    RZB_CONF_KEY_TYPE_INT,            ///< A signed int.
+    RZB_CONF_KEY_TYPE_PARSED_STRING,  ///< A string with a callback to turn it into an int.
+    RZB_CONF_KEY_TYPE_UUID,           ///< A UUID in string format.
+    RZB_CONF_KEY_TYPE_BOOL,           ///< A Bool in string format.
+    RZB_CONF_KEY_TYPE_ARRAY,          ///< An array of simple items
+    RZB_CONF_KEY_TYPE_LIST,           ///< An list of complex items
+    RZB_CONF_KEY_TYPE_END             ///< End of block marker.
 } RZB_CONF_KEY_TYPE_t;
 
 /**
@@ -67,25 +67,25 @@ typedef enum
  */
 typedef struct
 {
-    bool (*parseString) (const char *, conf_int_t *);   ///< Call back to convert the passed string into an int.
+    bool (*parseString) (const char *, conf_int_t *);  ///< Call back to convert the passed string into an int.
 } RZBConfCallBack;
 
-struct ConfArray 
+struct ConfArray
 {
     RZB_CONF_KEY_TYPE_t type;
     void **data;
     conf_int_t *count;
-    bool (*parseString) (const char *, conf_int_t *);   ///< Call back to convert the passed string into an int.
+    bool (*parseString) (const char *, conf_int_t *);  ///< Call back to convert the passed string into an int.
 };
 /**
  * Configuration file entry definition.
  */
 typedef struct
 {
-    const char *key;            ///< The path to the entry in the config file.
-    RZB_CONF_KEY_TYPE_t type;   ///< The ::RZB_CONF_KEY_TYPE_t value for the type of value to read for the entry.
-    void *dest;                 ///< A pointer to the pointer to the memory to be used to store the value.
-    void *callback;  ///< Callback structure.
+    const char *key;           ///< The path to the entry in the config file.
+    RZB_CONF_KEY_TYPE_t type;  ///< The ::RZB_CONF_KEY_TYPE_t value for the type of value to read for the entry.
+    void *dest;                ///< A pointer to the pointer to the memory to be used to store the value.
+    void *callback;            ///< Callback structure.
 } RZBConfKey_t;
 
 struct ConfList

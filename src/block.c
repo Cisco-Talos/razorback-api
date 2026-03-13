@@ -40,7 +40,7 @@ Block_Create (void) {
         free(l_pBlock);
         return NULL;
     }
-    
+
     if ((l_pBlock->pMetaDataList = NTLVList_Create ()) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create metadata list", __func__);
         free(l_pBlock);
@@ -75,7 +75,7 @@ SO_PUBLIC struct Block *
 Block_Clone (const struct Block *p_pSource) {
     struct Block *l_pDestination;
 
-	ASSERT (p_pSource != NULL);
+    ASSERT (p_pSource != NULL);
     if (p_pSource == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pSource is NULL", __func__);
         return NULL;

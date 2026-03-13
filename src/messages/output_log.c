@@ -93,7 +93,7 @@ static void
 OutputLog_Destroy (struct Message *message)
 {
     struct MessageOutputLog *msg;
-    
+
     ASSERT (message != NULL);
     if (message == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);

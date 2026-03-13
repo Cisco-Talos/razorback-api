@@ -85,7 +85,7 @@ static void
 OutputEvent_Destroy (struct Message *message)
 {
     struct MessageOutputEvent *msg;
-    
+
     ASSERT (message != NULL);
     if (message == NULL)
         return;
@@ -124,7 +124,7 @@ OutputEvent_Deserialize(struct Message *message)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: json_tokener_parse failed", __func__);
         return false;
     }
-    
+
     event = message->message;
 
     if (!JsonBuffer_Get_Nugget(msg, "Nugget", &event->nugget)) {
@@ -183,7 +183,7 @@ OutputEvent_Serialize(struct Message *message)
         json_object_put(msg);
         return false;
     }
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *)message->serialized, wire);
     json_object_put(msg);
 
     return true;

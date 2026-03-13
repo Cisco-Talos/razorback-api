@@ -54,7 +54,7 @@ struct ConnectedEntityKey {
 };
 
 
-static struct Timer *timer;             ///< The prune timer
+static struct Timer *timer;  ///< The prune timer
 
 struct ConnectedEntityHook {
     void (*entityRemoved) (struct ConnectedEntity *entity, uint32_t remainingCount);
@@ -104,7 +104,7 @@ ConnectedEntityList_Stop (void) {
        return;
 
     Timer_Destroy(timer);
-    List_Destroy(sg_pEntityList);    
+    List_Destroy(sg_pEntityList);
 }
 
 /** Return a entry or NULL
@@ -180,7 +180,7 @@ ConnectedEntityList_GetEntity (struct Message *message)
 SO_PUBLIC bool
 ConnectedEntityList_Update (struct Message *message) {
     uuid_t dispatcher;
-	struct ConnectedEntity *entity = NULL;
+    struct ConnectedEntity *entity = NULL;
     struct MessageHello *hello;
 
     ASSERT (sg_pEntityList != NULL);
@@ -229,7 +229,7 @@ struct CountEntity {
     struct ConnectedEntity *entity;
 };
 
-static int 
+static int
 ConnectedEntityList_CountNuggets(void *item, void *userData)
 {
     struct ConnectedEntity *entity = item;
@@ -248,7 +248,7 @@ ConnectedEntityList_CountNuggets(void *item, void *userData)
     return LIST_EACH_OK;
 }
 
-static int 
+static int
 ConnectedEntityList_HookWrapper(void *item, void *userData) {
     struct ConnectedEntityHook *hook = item;
     struct CountEntity *counter = userData;
@@ -262,7 +262,7 @@ ConnectedEntityList_HookWrapper(void *item, void *userData) {
     return LIST_EACH_OK;
 }
 
-static int 
+static int
 ConnectedEntityList_PruneEntity(void *item, void *userData)
 {
     struct ConnectedEntity *entity = item;
@@ -377,7 +377,7 @@ ConnectedEntityList_GetDedicatedDispatcher(void) {
     // Note ret will be locked, need to unlock it
     return ret;
 }
-static int 
+static int
 ConnectedEntityList_CollectDispatchers(void *item, void *userData) {
     struct ConnectedEntity *entity = item;
     List_t *list = userData;
@@ -414,10 +414,10 @@ ConnectedEntityList_GetDispatcher(void) {
     conf_int_t localityCount = Config_getLocalityBackupCount();
     struct ConnectedEntity *entity = NULL;
     struct ConnectedEntity *ret = NULL;
-	conf_int_t i;
-	struct ConnectedEntityKey searchKey;
+    conf_int_t i;
+    struct ConnectedEntityKey searchKey;
 
-	memset(&searchKey, 0, sizeof(struct ConnectedEntityKey));
+    memset(&searchKey, 0, sizeof(struct ConnectedEntityKey));
 
     dispatchers = List_Create(LIST_MODE_GENERIC,
             ConnectedEntity_Cmp, // Cmp
@@ -475,7 +475,7 @@ getdispdone:
     return ret;
 }
 
-static int 
+static int
 ConnectedEntityList_CollectHighDispatcher(void *item, void *userData) {
     struct ConnectedEntity *entity = item;
     struct ConnectedEntity **cur = userData;
@@ -515,7 +515,7 @@ ConnectedEntityList_GetDispatcher_HighestPriority() {
                  "%s: Failed due to entity list not initialized", __func__);
         return NULL;
     }
-    
+
     List_ForEach(sg_pEntityList, ConnectedEntityList_CollectHighDispatcher, &ret);
     if (ret != NULL)
         ret = ConnectedEntity_Clone(ret);
@@ -524,8 +524,8 @@ ConnectedEntityList_GetDispatcher_HighestPriority() {
 }
 
 struct CE_SlaveSearch {
-	uint8_t locality;
-	bool found;
+    uint8_t locality;
+    bool found;
 };
 static int
 ConnectedEntityList_CollectSlaveInLocality(void *item, void *userData) {
@@ -541,11 +541,11 @@ ConnectedEntityList_CollectSlaveInLocality(void *item, void *userData) {
     UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, uuid);
     if ((uuid_compare(uuid, entity->uuidNuggetType) == 0))
     {
-    	if(entity->locality != search->locality)
-    		return LIST_EACH_OK;
+        if(entity->locality != search->locality)
+            return LIST_EACH_OK;
 
-    	if ((entity->dispatcher->flags & DISP_HELLO_FLAG_LS) != 0)
-    		search->found = true;
+        if ((entity->dispatcher->flags & DISP_HELLO_FLAG_LS) != 0)
+            search->found = true;
     }
 
     return LIST_EACH_OK;
@@ -553,12 +553,12 @@ ConnectedEntityList_CollectSlaveInLocality(void *item, void *userData) {
 
 SO_PUBLIC bool
 ConnectedEntityList_SlaveInLocality(uint8_t locality) {
-	struct CE_SlaveSearch search;
-	search.locality = locality;
-	search.found = false;
+    struct CE_SlaveSearch search;
+    search.locality = locality;
+    search.found = false;
 
     List_ForEach(sg_pEntityList, ConnectedEntityList_CollectSlaveInLocality, &search);
-	return search.found;
+    return search.found;
 }
 
 bool
@@ -577,7 +577,7 @@ ConnectedEntityList_MarkDispatcherUnusable(uuid_t nuggetId) {
     return true;
 }
 
-static int 
+static int
 ConnectedEntity_KeyCmp(void *a, void *id) {
     struct ConnectedEntity *entity = a;
     struct ConnectedEntityKey *key = id;
@@ -644,7 +644,7 @@ ConnectedEntity_KeyCmp(void *a, void *id) {
     }
     return ret;
 }
-static int 
+static int
 ConnectedEntity_Cmp(void *a, void *b) {
     if (a == b) {
         return 0;
@@ -653,7 +653,7 @@ ConnectedEntity_Cmp(void *a, void *b) {
     return -1;
 }
 
-static void 
+static void
 ConnectedEntity_Delete(void *a) {
     ASSERT(a != NULL);
     if (a == NULL) {
@@ -663,11 +663,11 @@ ConnectedEntity_Delete(void *a) {
     ConnectedEntity_Destroy(a);
 }
 
-static int 
+static int
 ConnectedEntityHook_KeyCmp(void *a, void *id) {
-    return -1;    
+    return -1;
 }
-static int 
+static int
 ConnectedEntityHook_Cmp(void *a, void *b) {
     if (a == b) {
         return 0;
@@ -676,7 +676,7 @@ ConnectedEntityHook_Cmp(void *a, void *b) {
     return -1;
 }
 
-static void 
+static void
 ConnectedEntityHook_Delete(void *a) {
     ASSERT(a != NULL);
     if (a == NULL) {

@@ -98,7 +98,7 @@ CacheReq_Destroy (struct Message *message) {
     if (msg != NULL) {
         BlockId_Destroy(msg->pId);
     }
-    
+
     Message_Destroy(message);
 }
 
@@ -125,7 +125,7 @@ CacheReq_Deserialize(struct Message *message) {
                  "%s: failed due to failure of json_tokener_parse", __func__);
         return false;
     }
- 
+
     submit = message->message;
 
     if (!JsonBuffer_Get_UUID(msg, "Requestor", submit->uuidRequestor)) {
@@ -187,7 +187,7 @@ CacheReq_Serialize(struct Message *message)
         json_object_put(msg);
         return false;
     }
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *)message->serialized, wire);
     json_object_put(msg);
 
     return true;

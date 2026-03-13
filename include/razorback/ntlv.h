@@ -19,8 +19,8 @@
 /** @file ntlv.h
  * Name Type Length Value data field wrapper.
  */
-#ifndef	RAZORBACK_NTLV_H
-#define	RAZORBACK_NTLV_H
+#ifndef RAZORBACK_NTLV_H
+#define RAZORBACK_NTLV_H
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 
@@ -32,10 +32,10 @@ extern "C" {
  */
 struct NTLVItem
 {
-    uuid_t uuidName;            ///< The UUID of the data type name.
-    uuid_t uuidType;            ///< The UUID of the data type in this block
-    uint32_t iLength;           ///< The length of the data in this block
-    uint8_t *pData;             ///< The data
+    uuid_t uuidName;   ///< The UUID of the data type name.
+    uuid_t uuidType;   ///< The UUID of the data type in this block
+    uint32_t iLength;  ///< The length of the data in this block
+    uint8_t *pData;    ///< The data
 };
 
 SO_PUBLIC extern List_t * NTLVList_Create(void);

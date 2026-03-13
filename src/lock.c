@@ -33,26 +33,26 @@
  */
 struct _Mutex {
 #ifdef _MSC_VER
-    HANDLE recursiveLock;			///< Recursive lock handle (win32)
-	CRITICAL_SECTION cs;			///< None recursive lock handle (win32)
+    HANDLE recursiveLock;  ///< Recursive lock handle (win32)
+    CRITICAL_SECTION cs;   ///< None recursive lock handle (win32)
 #else
-    pthread_mutex_t lock;			///< PThreads lock structure.
-    pthread_mutexattr_t attrs;		///< PThreads lock attributes.
+    pthread_mutex_t lock;       ///< PThreads lock structure.
+    pthread_mutexattr_t attrs;  ///< PThreads lock attributes.
 #endif
-    int mode;						///< Lock mode
+    int mode;  ///< Lock mode
 };
 
 /** RWLock Control Structure
  */
 struct _RWLock {
 #ifdef _MSC_VER
-    HANDLE recursiveLock;			///< Recursive lock handle (win32)
-	CRITICAL_SECTION cs;			///< None recursive lock handle (win32)
+    HANDLE recursiveLock;  ///< Recursive lock handle (win32)
+    CRITICAL_SECTION cs;   ///< None recursive lock handle (win32)
 #else
-    pthread_rwlock_t lock;			///< PThreads lock structure.
-    pthread_rwlockattr_t attrs;		///< PThreads lock attributes.
+    pthread_rwlock_t lock;       ///< PThreads lock structure.
+    pthread_rwlockattr_t attrs;  ///< PThreads lock attributes.
 #endif
-    int mode;						///< Lock mode
+    int mode;  ///< Lock mode
 };
 
 
@@ -61,9 +61,9 @@ struct _RWLock {
  */
 struct _Semaphore {
 #ifdef _MSC_VER
-    HANDLE sem;	///< Semaphore handle (win32)
+    HANDLE sem;  ///< Semaphore handle (win32)
 #else
-    sem_t sem;	///< PThreads semaphore
+    sem_t sem;  ///< PThreads semaphore
 #endif
 };
 
@@ -86,7 +86,7 @@ Mutex_Create(int mode) {
     return ret;
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Mutex_Lock(Mutex_t *mutex) {
     ASSERT(mutex != NULL);
     if (mutex == NULL) {
@@ -94,13 +94,13 @@ Mutex_Lock(Mutex_t *mutex) {
         return false;
     }
 #ifdef _MSC_VER
-	switch (mutex->mode)
+    switch (mutex->mode)
     {
     case MUTEX_MODE_RECURSIVE:
-		WaitForSingleObject(mutex->recursiveLock, INFINITE);
+        WaitForSingleObject(mutex->recursiveLock, INFINITE);
         break;
     case MUTEX_MODE_NORMAL:
-		EnterCriticalSection(&mutex->cs);
+        EnterCriticalSection(&mutex->cs);
         break;
     default:
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid mutex mode: %d", mutex->mode);
@@ -115,7 +115,7 @@ Mutex_Lock(Mutex_t *mutex) {
     return true;
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Mutex_Unlock(Mutex_t *mutex) {
     ASSERT(mutex != NULL);
     if (mutex == NULL) {
@@ -123,13 +123,13 @@ Mutex_Unlock(Mutex_t *mutex) {
         return false;
     }
 #ifdef _MSC_VER
-	switch (mutex->mode)
+    switch (mutex->mode)
     {
     case MUTEX_MODE_RECURSIVE:
-		ReleaseMutex(mutex->recursiveLock);
+        ReleaseMutex(mutex->recursiveLock);
         break;
     case MUTEX_MODE_NORMAL:
-		LeaveCriticalSection(&mutex->cs);
+        LeaveCriticalSection(&mutex->cs);
         break;
     default:
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid mutex mode: %d", mutex->mode);
@@ -144,7 +144,7 @@ Mutex_Unlock(Mutex_t *mutex) {
     return true;
 }
 
-SO_PUBLIC void 
+SO_PUBLIC void
 Mutex_Destroy(Mutex_t *mutex) {
     ASSERT(mutex != NULL);
     if (mutex == NULL) {
@@ -152,18 +152,18 @@ Mutex_Destroy(Mutex_t *mutex) {
         return;
     }
 #ifdef _MSC_VER
-	switch (mutex->mode)
+    switch (mutex->mode)
     {
     case MUTEX_MODE_RECURSIVE:
-		CloseHandle(mutex->recursiveLock);
+        CloseHandle(mutex->recursiveLock);
         break;
     case MUTEX_MODE_NORMAL:
-		DeleteCriticalSection(&mutex->cs);
+        DeleteCriticalSection(&mutex->cs);
         break;
     default:
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid mutex mode: %d", mutex->mode);
     }
-	
+
 #else //_MSC_VER
     pthread_mutex_destroy(&mutex->lock);
     pthread_mutexattr_destroy(&mutex->attrs);
@@ -199,10 +199,10 @@ RWLock_ReadLock(RWLock_t *rwlock) {
     switch (rwlock->mode)
     {
     case MUTEX_MODE_RECURSIVE:
-		WaitForSingleObject(rwlock->recursiveLock, INFINITE);
+        WaitForSingleObject(rwlock->recursiveLock, INFINITE);
         break;
     case MUTEX_MODE_NORMAL:
-		EnterCriticalSection(&rwlock->cs);
+        EnterCriticalSection(&rwlock->cs);
         break;
     default:
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid rwlock mode: %d", rwlock->mode);
@@ -228,10 +228,10 @@ RWLock_WriteLock(RWLock_t *rwlock) {
     switch (rwlock->mode)
     {
     case MUTEX_MODE_RECURSIVE:
-		WaitForSingleObject(rwlock->recursiveLock, INFINITE);
+        WaitForSingleObject(rwlock->recursiveLock, INFINITE);
         break;
     case MUTEX_MODE_NORMAL:
-		EnterCriticalSection(&rwlock->cs);
+        EnterCriticalSection(&rwlock->cs);
         break;
     default:
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid rwlock mode: %d", rwlock->mode);
@@ -257,10 +257,10 @@ RWLock_Unlock(RWLock_t *rwlock) {
     switch (rwlock->mode)
     {
     case MUTEX_MODE_RECURSIVE:
-		ReleaseRWLock(rwlock->recursiveLock);
+        ReleaseRWLock(rwlock->recursiveLock);
         break;
     case MUTEX_MODE_NORMAL:
-		LeaveCriticalSection(&rwlock->cs);
+        LeaveCriticalSection(&rwlock->cs);
         break;
     default:
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid rwlock mode: %d", rwlock->mode);
@@ -286,10 +286,10 @@ RWLock_Destroy(RWLock_t *rwlock) {
     switch (rwlock->mode)
     {
     case MUTEX_MODE_RECURSIVE:
-		CloseHandle(rwlock->recursiveLock);
+        CloseHandle(rwlock->recursiveLock);
         break;
     case MUTEX_MODE_NORMAL:
-		DeleteCriticalSection(&rwlock->cs);
+        DeleteCriticalSection(&rwlock->cs);
         break;
     default:
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid rwlock mode: %d", rwlock->mode);
@@ -311,12 +311,12 @@ Semaphore_Create(bool shared, unsigned int value) {
         return NULL;
     }
 #ifdef _MSC_VER
-	ret->sem = CreateSemaphore(NULL,0,LONG_MAX,NULL);
-	if (!ret->sem)
-	{
-		free(ret);
-		return NULL;
-	}
+    ret->sem = CreateSemaphore(NULL,0,LONG_MAX,NULL);
+    if (!ret->sem)
+    {
+        free(ret);
+        return NULL;
+    }
 
 #else //_MSC_VER
     sem_init (&ret->sem, (shared ? 1 : 0), value);
@@ -324,7 +324,7 @@ Semaphore_Create(bool shared, unsigned int value) {
     return ret;
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Semaphore_Post(Semaphore_t *sem) {
     ASSERT(sem != NULL);
     if (sem == NULL) {
@@ -332,7 +332,7 @@ Semaphore_Post(Semaphore_t *sem) {
         return false;
     }
 #ifdef _MSC_VER
-	ReleaseSemaphore(sem->sem, 1, NULL);
+    ReleaseSemaphore(sem->sem, 1, NULL);
 #else //_MSC_VER
     if (sem_post(&sem->sem) != 0) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem_post failed", __func__);
@@ -342,16 +342,16 @@ Semaphore_Post(Semaphore_t *sem) {
     return true;
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Semaphore_TimedWait(Semaphore_t *sem) {
     ASSERT(sem != NULL);
     if (sem == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem is NULL", __func__);
         return false;
     }
-	UNIMPLEMENTED();
+    UNIMPLEMENTED();
 #ifdef _MSC_VER
-	UNIMPLEMENTED();
+    UNIMPLEMENTED();
 #else //_MSC_VER
     if (sem_wait(&sem->sem) != 0) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem_wait failed", __func__);
@@ -361,7 +361,7 @@ Semaphore_TimedWait(Semaphore_t *sem) {
     return true;
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Semaphore_Wait(Semaphore_t *sem) {
     ASSERT(sem != NULL);
     if (sem == NULL) {
@@ -369,7 +369,7 @@ Semaphore_Wait(Semaphore_t *sem) {
         return false;
     }
 #ifdef _MSC_VER
-	WaitForSingleObject(sem->sem, INFINITE);
+    WaitForSingleObject(sem->sem, INFINITE);
 #else //_MSC_VER
     if (sem_wait(&sem->sem) != 0) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem_wait failed", __func__);
@@ -379,7 +379,7 @@ Semaphore_Wait(Semaphore_t *sem) {
     return true;
 }
 
-SO_PUBLIC void 
+SO_PUBLIC void
 Semaphore_Destroy(Semaphore_t *sem) {
     ASSERT(sem != NULL);
     if (sem == NULL) {
@@ -387,39 +387,39 @@ Semaphore_Destroy(Semaphore_t *sem) {
         return;
     }
 #ifdef _MSC_VER
-	CloseHandle(sem->sem);
+    CloseHandle(sem->sem);
 #else //_MSC_VER
     sem_destroy(&sem->sem);
 #endif //_MSC_VER
     free(sem);
 }
-    
+
 
 
 #ifdef _MSC_VER
 static bool Mutex_Init(Mutex_t *mutex)
 {
     ASSERT(mutex != NULL);
-    if (mutex == NULL) 
+    if (mutex == NULL)
         return false;
-	switch (mutex->mode)
+    switch (mutex->mode)
     {
     case MUTEX_MODE_RECURSIVE:
-		mutex->recursiveLock = CreateMutex( 
-			NULL,              // default security attributes
-			FALSE,             // initially not owned
-			NULL);				// unnamed mutex
-		if (mutex->recursiveLock == NULL)
-			return false;
+        mutex->recursiveLock = CreateMutex(
+            NULL,              // default security attributes
+            FALSE,             // initially not owned
+            NULL);              // unnamed mutex
+        if (mutex->recursiveLock == NULL)
+            return false;
         break;
     case MUTEX_MODE_NORMAL:
-		InitializeCriticalSection(&mutex->cs);
+        InitializeCriticalSection(&mutex->cs);
         break;
     default:
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid mutex mode: %d", mutex->mode);
         return false;
     }
-	
+
     return true;
 }
 #else //_MSC_VER

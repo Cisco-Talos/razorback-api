@@ -36,24 +36,24 @@ static bool rzb_daemonize_posix(void (*signal_handler)(int), const char *pidFile
 SO_PUBLIC bool
 rzb_daemonize (void (*signal_handler) (int), const char *pidFile) {
 #ifdef _MSC_VER
-	return rzb_daemonize_win32();
+    return rzb_daemonize_win32();
 #else //_MSC_VER
-	return rzb_daemonize_posix(signal_handler, pidFile);
+    return rzb_daemonize_posix(signal_handler, pidFile);
 #endif
 }
 
-	
+
 
 #ifdef _MSC_VER
 static bool rzb_daemonize_win32(void)
 {
-	UNIMPLEMENTED();
-	return true;
+    UNIMPLEMENTED();
+    return true;
 }
 #else //_MSC_VER
 static const char *sg_pidFile = NULL;
 
-static void 
+static void
 unlinkPidFile(void) {
     if (sg_pidFile != NULL)
         unlink(sg_pidFile);

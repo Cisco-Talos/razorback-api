@@ -50,10 +50,10 @@ struct StompMessage {
 };
 
 struct _AMQP_Socket {
-    amqp_socket_t *pSocket;        ///< The socket to the broker
-    amqp_connection_state_t pConn; ///< The connection to the broker
-    amqp_bytes_t pQueueName;       ///< The name of the queue
-    bool bChannelOpen;             ///< Is the channel open
+    amqp_socket_t *pSocket;         ///< The socket to the broker
+    amqp_connection_state_t pConn;  ///< The connection to the broker
+    amqp_bytes_t pQueueName;        ///< The name of the queue
+    bool bChannelOpen;              ///< Is the channel open
 };
 
 static bool Queue_Reconnect(struct Queue *queue, int p_iSide);
@@ -136,7 +136,7 @@ Queue_Connect_Socket(
     tval.tv_sec = 5;
     tval.tv_usec = 0;
 
-	ASSERT (address != NULL);
+    ASSERT (address != NULL);
     ASSERT (username != NULL);
     ASSERT (password != NULL);
 
@@ -189,7 +189,7 @@ Queue_BeginReading (struct Queue *p_pQ)
     const char *exchange = p_pQ->bTopic ? "amq.topic" : "amq.direct";
     int autoDelete = p_pQ->bTopic ? 1 : 0;
 
-	ASSERT (p_pQ != NULL);
+    ASSERT (p_pQ != NULL);
 
     if (p_pQ->bTopic) {
        decQueuename = amqp_empty_bytes;
@@ -254,7 +254,7 @@ static bool
 Queue_EndReading (struct Queue *p_pQ)
 {
 
-	ASSERT (p_pQ != NULL);
+    ASSERT (p_pQ != NULL);
 
     return true;
 }
@@ -311,7 +311,7 @@ Queue_Connect(struct Queue *queue)
 
     if (((queue->iFlags & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND) && (queue->pWriteSocket == NULL))
     {
-        if ((queue->pWriteSocket = 
+        if ((queue->pWriteSocket =
                     Queue_Connect_Socket(queue->sHostname, queue->iPort,
                     queue->sUser, queue->sPassword, queue->sVhost, queue->bUseSSL)) == NULL)
         {
@@ -346,7 +346,7 @@ Queue_Reconnect(struct Queue *queue, int p_iSide)
             queue->pWriteSocket = NULL;
         }
     }
-        
+
 
     return Queue_Connect(queue);
 }
@@ -383,7 +383,7 @@ Queue_Create_With_Host (const char * p_sQueueName,
 {
     struct Queue *l_pQueue;
 
-	ASSERT (p_sQueueName != NULL);
+    ASSERT (p_sQueueName != NULL);
 
     if ((l_pQueue = (struct Queue *)calloc (1, sizeof (struct Queue))) == NULL)
     {
@@ -426,7 +426,7 @@ Queue_Create_With_Host (const char * p_sQueueName,
 SO_PUBLIC void
 Queue_Terminate (struct Queue *p_pQ)
 {
-	ASSERT (p_pQ != NULL);
+    ASSERT (p_pQ != NULL);
 
     Mutex_Lock (p_pQ->mReadMutex);
     Mutex_Lock (p_pQ->mWriteMutex);
@@ -462,7 +462,7 @@ Queue_Get (struct Queue *queue)
     amqp_envelope_t envelope;
     int headerIndex = 0;
 
-	ASSERT (queue);
+    ASSERT (queue);
     Mutex_Lock (queue->mReadMutex);
 
     amqp_maybe_release_buffers(queue->pReadSocket->pConn);
@@ -589,7 +589,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
         return false;
     if (message == NULL)
         return false;
-    
+
     Mutex_Lock (queue->mWriteMutex);
     if (queue->pWriteSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Write socket unavailable, attempting reconnect", __func__);

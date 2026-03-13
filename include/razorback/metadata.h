@@ -30,7 +30,7 @@
 extern "C" {
 #endif
 
-#define Metadata_Add NTLVList_Add	///< Add metadata to a metadata list.
+#define Metadata_Add NTLVList_Add   ///< Add metadata to a metadata list.
 #define Metadata_Get NTLVList_Get   ///< Get metadata from a metadata list.
 
 /** Add a string to a metadata list.

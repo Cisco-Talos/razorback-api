@@ -29,7 +29,7 @@
 
 SO_PUBLIC bool
 BlockId_IsEqual (const struct BlockId * p_pA, const struct BlockId * p_pB) {
-	bool uuid, hash, length;
+    bool uuid, hash, length;
     ASSERT (p_pA != NULL);
     ASSERT (p_pB != NULL);
     if (p_pA == NULL || p_pB == NULL) {
@@ -53,7 +53,7 @@ BlockId_ToText (const struct BlockId *p_pA, uint8_t * p_sText) {
     char l_sUUID[UUID_STRING_LENGTH];
     char *l_sHash;
 
-	ASSERT (p_pA != NULL);
+    ASSERT (p_pA != NULL);
     ASSERT (p_sText != NULL);
     if (p_pA == NULL || p_sText == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pA or p_sText is NULL", __func__);
@@ -118,7 +118,7 @@ BlockId_Destroy (struct BlockId *p_pBlockId) {
 SO_PUBLIC struct BlockId *
 BlockId_Clone (const struct BlockId *p_pSource) {
     struct BlockId *dest;
-	ASSERT (p_pSource != NULL);
+    ASSERT (p_pSource != NULL);
     if (p_pSource == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pSource is NULL", __func__);
         return NULL;

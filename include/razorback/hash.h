@@ -20,8 +20,8 @@
  * Hash functions
  */
 
-#ifndef	RAZORBACK_HASH_H
-#define	RAZORBACK_HASH_H
+#ifndef RAZORBACK_HASH_H
+#define RAZORBACK_HASH_H
 
 #include <razorback/visibility.h>
 #include <razorback/types.h>

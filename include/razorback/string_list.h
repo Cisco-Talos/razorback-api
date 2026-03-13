@@ -19,8 +19,8 @@
 /** @file ntlv.h
  * Name Type Length Value data field wrapper.
  */
-#ifndef	RAZORBACK_STRING_LIST_H
-#define	RAZORBACK_STRING_LIST_H
+#ifndef RAZORBACK_STRING_LIST_H
+#define RAZORBACK_STRING_LIST_H
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 

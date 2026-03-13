@@ -31,7 +31,7 @@ static void Timer_Destroy_Posix(struct Timer *);
 static void Timer_Wrapper(union sigval val);
 #endif
 
-SO_PUBLIC struct Timer * 
+SO_PUBLIC struct Timer *
 Timer_Create(uint32_t interval, void (*handler)(void *), void *userData)
 {
     struct Timer *ret;
@@ -51,7 +51,7 @@ Timer_Create(uint32_t interval, void (*handler)(void *), void *userData)
     }
     return ret;
 }
-SO_PUBLIC void 
+SO_PUBLIC void
 Timer_Destroy(struct Timer *timer)
 {
 #ifdef _MSC_VER
@@ -65,33 +65,33 @@ Timer_Destroy(struct Timer *timer)
 
 #ifdef _MSC_VER
 
-static bool 
+static bool
 Timer_Init_Win32(struct Timer *timer)
 {
-	if ((timer->timerQueue = CreateTimerQueue()) == NULL)
-		return false;
-	if (!CreateTimerQueueTimer( &timer->timer, timer->timerQueue, 
-			(WAITORTIMERCALLBACK)Timer_Wrapper, timer , (timer->interval * 1000), (timer->interval * 1000), 0))
-		return false;
+    if ((timer->timerQueue = CreateTimerQueue()) == NULL)
+        return false;
+    if (!CreateTimerQueueTimer( &timer->timer, timer->timerQueue,
+            (WAITORTIMERCALLBACK)Timer_Wrapper, timer , (timer->interval * 1000), (timer->interval * 1000), 0))
+        return false;
 
     return true;
 }
 
-static void 
+static void
 Timer_Destroy_Win32(struct Timer *timer)
 {
-	DeleteTimerQueue(timer->timerQueue);
+    DeleteTimerQueue(timer->timerQueue);
 }
 
-static void CALLBACK 
+static void CALLBACK
 Timer_Wrapper(void * lpParam, bool TimerOrWaitFired)
 {
-	struct Timer *timer = (struct Timer *)lpParam;
-	timer->function(timer->userData);
+    struct Timer *timer = (struct Timer *)lpParam;
+    timer->function(timer->userData);
 }
 
 #else //_MSC_VER
-static bool 
+static bool
 Timer_Init_Posix(struct Timer *timer)
 {
     if ((timer->props = calloc(1,sizeof(struct sigevent))) == NULL)
@@ -120,14 +120,14 @@ Timer_Init_Posix(struct Timer *timer)
     return true;
 }
 
-static void 
+static void
 Timer_Destroy_Posix(struct Timer *timer)
 {
     timer_delete(timer->timer);
     free(timer->props);
 }
 
-static void 
+static void
 Timer_Wrapper(union sigval val)
 {
     struct Timer *timer = val.sival_ptr;

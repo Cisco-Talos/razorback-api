@@ -39,5 +39,5 @@ static bool Crypto_Initialize_OpenSSL(void)
 
 bool Crypto_Initialize(void)
 {
-	return Crypto_Initialize_OpenSSL();
+    return Crypto_Initialize_OpenSSL();
 }

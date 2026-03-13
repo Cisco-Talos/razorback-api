@@ -40,16 +40,16 @@ extern "C" {
 struct Timer
 {
 #ifdef _MSC_VER
-	HANDLE timerQueue;			///< Queue handle
-	HANDLE timer;				///< Itemer handle
+    HANDLE timerQueue;  ///< Queue handle
+    HANDLE timer;       ///< Itemer handle
 #else
-   timer_t timer;				///< Timer structure.
-   struct itimerspec spec;		///< Timer specification.
-   struct sigevent *props;		///< Event properties.
+   timer_t timer;           ///< Timer structure.
+   struct itimerspec spec;  ///< Timer specification.
+   struct sigevent *props;  ///< Event properties.
 #endif
-   uint32_t interval;			///< Timer interval in seconds.
-   void *userData;				///< User data provided to the event function.
-   void (*function)(void *);	///< Function to call when the timer expires, userData will be passed as the argument.
+   uint32_t interval;         ///< Timer interval in seconds.
+   void *userData;            ///< User data provided to the event function.
+   void (*function)(void *);  ///< Function to call when the timer expires, userData will be passed as the argument.
 };
 
 /** Create a timer.

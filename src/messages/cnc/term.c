@@ -40,7 +40,7 @@ static struct MessageHandler handler = {
 };
 
 // core.h
-void 
+void
 Message_CnC_Term_Init(void)
 {
     Message_Register_Handler(&handler);
@@ -90,7 +90,7 @@ MessageTerminate_Initialize (
     return msg;
 }
 
-void 
+void
 Message_CnC_Term_Setup(struct Message *msg)
 {
     msg->destroy=Terminate_Destroy;
@@ -124,7 +124,7 @@ Terminate_Deserialize(struct Message *message)
 {
     struct MessageTerminate *term;
     json_object *msg;
-    
+
     ASSERT(message != NULL);
     if (message == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE,
@@ -138,7 +138,7 @@ Terminate_Deserialize(struct Message *message)
         return false;
     }
 
-    
+
     if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
         rzb_log (LOG_ERR, LOG_C_CORE,
                  "%s: failed due to failure of json_tokener_parse", __func__);
@@ -196,7 +196,7 @@ Terminate_Serialize(struct Message *message)
         json_object_put(msg);
         return false;
     }
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *)message->serialized, wire);
     json_object_put(msg);
 
     return true;

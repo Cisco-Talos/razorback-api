@@ -63,8 +63,8 @@ struct CacheResult
 bool
 Submission_Init(struct RazorbackContext *p_pContext)
 {
-    
-    if (sg_bInitDone) 
+
+    if (sg_bInitDone)
         return true;
 
     sg_pContext = p_pContext;
@@ -75,40 +75,40 @@ Submission_Init(struct RazorbackContext *p_pContext)
     }
 
     requestQueue = List_Create(LIST_MODE_QUEUE,
-    		NULL, // Cmp
-    		NULL, // KeyCmp
-    		NULL, // Destroy
-    		NULL, // Clone
-    		NULL, // lock
-    		NULL); // Unlock
+            NULL, // Cmp
+            NULL, // KeyCmp
+            NULL, // Destroy
+            NULL, // Clone
+            NULL, // lock
+            NULL); // Unlock
     submitQueue = List_Create(LIST_MODE_QUEUE,
-			NULL, // Cmp
-    		NULL, // KeyCmp
-    		NULL, // Destroy
-    		NULL, // Clone
-    		NULL, // lock
-    		NULL); // Unlock
+            NULL, // Cmp
+            NULL, // KeyCmp
+            NULL, // Destroy
+            NULL, // Clone
+            NULL, // lock
+            NULL); // Unlock
 
     requestThreadPool = ThreadPool_Create(
-    		Config_getSubGcReqThreadsInit(),
-    		Config_getSubGcReqThreadsMax(),
-    		p_pContext,
-    		"GC Request Thread (%d)",
-    		Submission_GlobalCache_RequestThread);
+            Config_getSubGcReqThreadsInit(),
+            Config_getSubGcReqThreadsMax(),
+            p_pContext,
+            "GC Request Thread (%d)",
+            Submission_GlobalCache_RequestThread);
 
     responseThreadPool = ThreadPool_Create(
-    		Config_getSubGcRespThreadsInit(),
-    		Config_getSubGcRespThreadsMax(),
-    		p_pContext,
-    		"GC Response Thread (%d)",
-    		Submission_GlobalCache_ResponseThread);
+            Config_getSubGcRespThreadsInit(),
+            Config_getSubGcRespThreadsMax(),
+            p_pContext,
+            "GC Response Thread (%d)",
+            Submission_GlobalCache_ResponseThread);
 
     submissionThreadPool = ThreadPool_Create(
-			Config_getSubTransferThreadsInit(),
-    		Config_getSubTransferThreadsMax(),
-    		p_pContext,
-    		"Submission Transfer Thread (%d)",
-    		Submission_SubmitThread);
+            Config_getSubTransferThreadsInit(),
+            Config_getSubTransferThreadsMax(),
+            p_pContext,
+            "Submission Transfer Thread (%d)",
+            Submission_SubmitThread);
 
     sg_bInitDone = true;
 
@@ -118,10 +118,10 @@ Submission_Init(struct RazorbackContext *p_pContext)
 SO_PUBLIC int
 Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_Flags, uint32_t *p_pEnt_Flags)
 {
-	Lookup_Result result;
-	uint32_t sfflags = 0;
-	uint32_t entflags = 0;
-	BlockPool_Item_Lock(p_pItem);
+    Lookup_Result result;
+    uint32_t sfflags = 0;
+    uint32_t entflags = 0;
+    BlockPool_Item_Lock(p_pItem);
 
     if ( (p_pItem->pEvent->pBlock->pParentId != NULL ) &&
             BlockId_IsEqual(p_pItem->pEvent->pBlock->pId, p_pItem->pEvent->pBlock->pParentId) )
@@ -133,14 +133,14 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
         return RZB_SUBMISSION_ERROR;
 
     }
-    
-	if (p_pSf_Flags == NULL || p_pEnt_Flags == NULL) {
-		rzb_log(LOG_ERR,LOG_C_CORE, "%s: NULL pointer arguments to function", __func__);
+
+    if (p_pSf_Flags == NULL || p_pEnt_Flags == NULL) {
+        rzb_log(LOG_ERR,LOG_C_CORE, "%s: NULL pointer arguments to function", __func__);
         BlockPool_Item_Unlock(p_pItem);
         BlockPool_DestroyItem(p_pItem);
-		return RZB_SUBMISSION_ERROR;
-	}
-	
+        return RZB_SUBMISSION_ERROR;
+    }
+
     // Set up the data type.
     if (uuid_is_null(p_pItem->pEvent->pBlock->pId->uuidDataType) == 1)
     {
@@ -154,13 +154,13 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
     }
 
     result = checkLocalEntry(p_pItem->pEvent->pBlock->pId->pHash->pData, p_pItem->pEvent->pBlock->pId->pHash->iSize,
-			                 &sfflags, &entflags, BADHASH);
+                             &sfflags, &entflags, BADHASH);
     if (result != R_FOUND)
     {
         result = checkLocalEntry(p_pItem->pEvent->pBlock->pId->pHash->pData, p_pItem->pEvent->pBlock->pId->pHash->iSize,
-					   &sfflags, &entflags, GOODHASH);
+                       &sfflags, &entflags, GOODHASH);
     }
-	if (result == R_FOUND) {
+    if (result == R_FOUND) {
         rzb_log(LOG_INFO,LOG_C_CORE, "%s: Local Cache Hit - SF: 0x%08x, ENT: 0x%08x", __func__, sfflags, entflags);
         BlockPool_DestroyItemDataList(p_pItem->pDataHead); // We don't need the data any more.
         p_pItem->pDataHead = NULL;
@@ -168,26 +168,26 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
         BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_SUBMIT_DATA);
         BlockPool_SetFlags(p_pItem, p_iFlags | BLOCK_POOL_FLAG_EVENT_ONLY);
         List_Push(submitQueue, p_pItem);
-	}
-	else 
-	{
+    }
+    else
+    {
         BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_CHECK_GLOBAL_CACHE);
         BlockPool_SetFlags(p_pItem, p_iFlags);
         List_Push(requestQueue, p_pItem);
     }
 
-	BlockPool_Item_Unlock(p_pItem);
+    BlockPool_Item_Unlock(p_pItem);
     *p_pSf_Flags = sfflags;
     *p_pEnt_Flags = entflags;
     return RZB_SUBMISSION_OK;
 }
 
-void 
+void
 Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
 {
-	struct BlockPoolItem *item = NULL;
-	struct Queue *queue = NULL;
-	struct Message *message = NULL;
+    struct BlockPoolItem *item = NULL;
+    struct Queue *queue = NULL;
+    struct Message *message = NULL;
 #if 0
     struct timespec l_tsTimeOut;
     l_tsTimeOut.tv_sec=1;
@@ -197,31 +197,31 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
 
     while (!Thread_IsStopped(p_pThread))
     {
-    	item = List_Pop(requestQueue);
-    	if (item == NULL)
-    	{
-    		rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to dequeue item", __func__);
-    		continue;
-    	}
-    	BlockPool_Item_Lock(item);
-    	if (BlockPool_GetStatus(item) != BLOCK_POOL_STATUS_CHECK_GLOBAL_CACHE)
-		{
-    		rzb_log(LOG_ERR,LOG_C_CORE, "%s: Item (%p) in queue with wrong status", __func__, item );
-    		BlockPool_Item_Unlock(item);
-    		continue;
-		}
-		BlockPool_SetStatus(item, BLOCK_POOL_STATUS_CHECKING_GLOBAL_CACHE);
+        item = List_Pop(requestQueue);
+        if (item == NULL)
+        {
+            rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to dequeue item", __func__);
+            continue;
+        }
+        BlockPool_Item_Lock(item);
+        if (BlockPool_GetStatus(item) != BLOCK_POOL_STATUS_CHECK_GLOBAL_CACHE)
+        {
+            rzb_log(LOG_ERR,LOG_C_CORE, "%s: Item (%p) in queue with wrong status", __func__, item );
+            BlockPool_Item_Unlock(item);
+            continue;
+        }
+        BlockPool_SetStatus(item, BLOCK_POOL_STATUS_CHECKING_GLOBAL_CACHE);
 
-		if (( message = MessageCacheReq_Initialize(
-						sg_pContext->uuidNuggetId, item->pEvent->pBlock->pId)) == NULL)
-		{
-			rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to initialize cache request", __func__);
-			BlockPool_Item_Unlock(item);
-			continue;
-		}
-		Queue_Put(queue, message);
-		BlockPool_Item_Unlock(item);
-		message->destroy(message);
+        if (( message = MessageCacheReq_Initialize(
+                        sg_pContext->uuidNuggetId, item->pEvent->pBlock->pId)) == NULL)
+        {
+            rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to initialize cache request", __func__);
+            BlockPool_Item_Unlock(item);
+            continue;
+        }
+        Queue_Put(queue, message);
+        BlockPool_Item_Unlock(item);
+        message->destroy(message);
     }
 }
 
@@ -239,22 +239,22 @@ Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void * use
     {
         if (BlockId_IsEqual(p_pItem->pEvent->pBlock->pId, l_pRes->pId))
         {
-			if (l_pRes->iSfFlags & SF_FLAG_BAD) {
-				
-				if (addLocalEntry (p_pItem->pEvent->pBlock->pId->pHash->pData, p_pItem->pEvent->pBlock->pId->pHash->iSize, 
-							                 l_pRes->iSfFlags & (SF_FLAG_CANHAZ ^ SF_FLAG_ALL), l_pRes->iEntFlags, BADHASH) != R_SUCCESS) 
-				{
-					rzb_log(LOG_ERR,LOG_C_CORE, "%s: Could not add to bad cache", __func__);
-				}
-			}
-			else 
+            if (l_pRes->iSfFlags & SF_FLAG_BAD) {
+
+                if (addLocalEntry (p_pItem->pEvent->pBlock->pId->pHash->pData, p_pItem->pEvent->pBlock->pId->pHash->iSize,
+                                             l_pRes->iSfFlags & (SF_FLAG_CANHAZ ^ SF_FLAG_ALL), l_pRes->iEntFlags, BADHASH) != R_SUCCESS)
+                {
+                    rzb_log(LOG_ERR,LOG_C_CORE, "%s: Could not add to bad cache", __func__);
+                }
+            }
+            else
             {
-				if (addLocalEntry (p_pItem->pEvent->pBlock->pId->pHash->pData, p_pItem->pEvent->pBlock->pId->pHash->iSize, 
-								             l_pRes->iSfFlags & (SF_FLAG_CANHAZ ^ SF_FLAG_ALL), l_pRes->iEntFlags, GOODHASH) != R_SUCCESS)
-				{
-					rzb_log(LOG_ERR,LOG_C_CORE, "%s: Could not add to good cache", __func__);
-				}
-			}
+                if (addLocalEntry (p_pItem->pEvent->pBlock->pId->pHash->pData, p_pItem->pEvent->pBlock->pId->pHash->iSize,
+                                             l_pRes->iSfFlags & (SF_FLAG_CANHAZ ^ SF_FLAG_ALL), l_pRes->iEntFlags, GOODHASH) != R_SUCCESS)
+                {
+                    rzb_log(LOG_ERR,LOG_C_CORE, "%s: Could not add to good cache", __func__);
+                }
+            }
             rzb_log(LOG_DEBUG,LOG_C_CORE, "%s: Got flags SF: 0x%08x, ENT: 0x%08x", __func__, l_pRes->iSfFlags, l_pRes->iEntFlags);
             BlockPool_SetStatus (p_pItem, BLOCK_POOL_STATUS_SUBMIT_DATA);
             if ((l_pRes->iSfFlags & SF_FLAG_CANHAZ) != SF_FLAG_CANHAZ)
@@ -267,7 +267,7 @@ Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void * use
     return LIST_EACH_OK;
 }
 
-void 
+void
 Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
 {
     struct Message *message;
@@ -308,7 +308,7 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
 void
 Submission_SubmitThread(Thread_t *p_pThread)
 {
-	struct Message *message;
+    struct Message *message;
     uint8_t storedLocality = 0;
     struct ConnectedEntity *dispatcher = NULL;
     enum TransferStatus transfered = TRANSFER_FAIL_LOCAL;
@@ -328,20 +328,20 @@ Submission_SubmitThread(Thread_t *p_pThread)
     {
         transfered = TRANSFER_FAIL_LOCAL;
         transferTries = 0;
-    	item = List_Pop(submitQueue);
-    	if (item == NULL)
-    	{
-    		rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to dequeue item", __func__);
-    		continue;
-    	}
+        item = List_Pop(submitQueue);
+        if (item == NULL)
+        {
+            rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to dequeue item", __func__);
+            continue;
+        }
 
-    	BlockPool_Item_Lock(item);
-		if (BlockPool_GetStatus(item) != BLOCK_POOL_STATUS_SUBMIT_DATA)
-		{
-			rzb_log(LOG_ERR,LOG_C_CORE, "%s: Dequeued item with wrong state", __func__);
-			BlockPool_Item_Unlock(item);
-			continue;
-		}
+        BlockPool_Item_Lock(item);
+        if (BlockPool_GetStatus(item) != BLOCK_POOL_STATUS_SUBMIT_DATA)
+        {
+            rzb_log(LOG_ERR,LOG_C_CORE, "%s: Dequeued item with wrong state", __func__);
+            BlockPool_Item_Unlock(item);
+            continue;
+        }
 
         if ((item->iStatus & (BLOCK_POOL_FLAG_EVENT_ONLY |BLOCK_POOL_FLAG_UPDATE)) != 0)
         {
@@ -383,7 +383,7 @@ Submission_SubmitThread(Thread_t *p_pThread)
             }
             storedLocality = dispatcher->locality;
             reason = SUBMISSION_REASON_REQUESTED;
-			rzb_log(LOG_ERR,LOG_C_CORE, "%s: %z", __func__, dispatcher);
+            rzb_log(LOG_ERR,LOG_C_CORE, "%s: %z", __func__, dispatcher);
             ConnectedEntity_Destroy(dispatcher);
         }
 
@@ -420,8 +420,8 @@ Submission_SubmitThread(Thread_t *p_pThread)
         }
         else
         {
-        	BlockPool_Item_Unlock(item);
-        	BlockPool_DestroyItem(item);
+            BlockPool_Item_Unlock(item);
+            BlockPool_DestroyItem(item);
             continue;
         }
     }

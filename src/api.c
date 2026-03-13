@@ -53,12 +53,12 @@ static int Context_Cmp(void *a, void *b);
 
 static List_t *sg_ContextList;
 void initApi(void) {
-    sg_ContextList = List_Create(LIST_MODE_GENERIC, 
-            Context_Cmp, 
-            Context_KeyCmp, 
+    sg_ContextList = List_Create(LIST_MODE_GENERIC,
+            Context_Cmp,
+            Context_KeyCmp,
             NULL, NULL, NULL, NULL);
 
-static void 
+static void
 Razorback_Remove_Context(struct RazorbackContext *context) {
     ASSERT(context != NULL);
     if (context == NULL) {
@@ -80,14 +80,14 @@ void Razorback_Destroy_Context(struct RazorbackContext *context) {
 
 SO_PUBLIC bool
 Razorback_Init_Context (struct RazorbackContext *context) {
-	uuid_t l_pUuid;
+    uuid_t l_pUuid;
 
     ASSERT(context != NULL);
     if (context == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Context is NULL", __func__);
         return false;
     }
-    
+
     context->locality = Config_getLocalityId();
 
     // Init the registration semaphore.
@@ -98,7 +98,7 @@ Razorback_Init_Context (struct RazorbackContext *context) {
     List_Push(sg_ContextList, context);
     // Launch C&C for this context
     if (!CommandAndControl_Start (context)) {
-    	rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to start command and control", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to start command and control", __func__);
         Razorback_Remove_Context(context);
         return false;
     }
@@ -106,7 +106,7 @@ Razorback_Init_Context (struct RazorbackContext *context) {
 
     UUID_Get_UUID (NUGGET_TYPE_COLLECTION, UUID_TYPE_NUGGET_TYPE, l_pUuid);
     if (uuid_compare (context->uuidNuggetType, l_pUuid) == 0) {
-        // XXX: This has interesting side effects -> this is not the context we 
+        // XXX: This has interesting side effects -> this is not the context we
         // expect later in execution.
         if (!Submission_Init (context)) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission api", __func__);
@@ -152,9 +152,9 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
     context->inspector.dataTypeList = dataTypeList;
     context->inspector.dataTypeList = calloc(dataTypeCount, sizeof(uuid_t));
     if (context->inspector.dataTypeList == NULL) {
-    	rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate data type list", __func__);
-    	Razorback_Destroy_Context(context);
-    	return NULL;
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate data type list", __func__);
+        Razorback_Destroy_Context(context);
+        return NULL;
     }
     memcpy(context->inspector.dataTypeList, dataTypeList, dataTypeCount *sizeof(uuid_t));
     context->pCommandHooks = NULL;
@@ -165,7 +165,7 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
         Razorback_Destroy_Context(context);
         return NULL;
     }
-	
+
     if ((context->inspector.judgmentQueue = Queue_Create(JUDGMENT_QUEUE, false, QUEUE_FLAG_SEND)) == NULL) {
         rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to create judgment queue", __func__);
         Razorback_Remove_Context(context);
@@ -207,8 +207,8 @@ Razorback_Init_Output_Context (uuid_t nuggetId,
     context->pCommandHooks = NULL;
     context->inspector.hooks = NULL;
     context->output.threads = List_Create(LIST_MODE_GENERIC,
-            Thread_Cmp, 
-            Thread_KeyCmp, 
+            Thread_Cmp,
+            Thread_KeyCmp,
             NULL, // destroy
             NULL, //Clone
             NULL, // lock
@@ -306,7 +306,7 @@ ForEach_Context_Wrapper(struct RazorbackContext *context, void *data) {
 
     if (thread != NULL) {
         prev = Thread_GetContext(thread);
-        Thread_ChangeContext(thread,context); 
+        Thread_ChangeContext(thread,context);
     }
 
     ret= hook->function(context, hook->userData);
@@ -453,7 +453,7 @@ Razorback_Output_Thread (Thread_t *thread)
             // drop message
             continue;
         }
-        
+
         if (message->type != hooks->messageType) {
             message->destroy(message);
             continue;
@@ -479,14 +479,14 @@ Razorback_Output_Thread (Thread_t *thread)
     free(name);
 }
 
-static int 
+static int
 Context_KeyCmp(void *a, void *id) {
     struct RazorbackContext *cA = (struct RazorbackContext*) a;
     // XXX: This is a hack
     return uuid_compare(cA->uuidNuggetId, (unsigned char *) id);
 }
 
-static int 
+static int
 Context_Cmp(void *a, void *b) {
     struct RazorbackContext *cA = (struct RazorbackContext*) a;
     struct RazorbackContext *cB = (struct RazorbackContext*) b;

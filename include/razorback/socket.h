@@ -20,7 +20,7 @@
  * Socket API.
  */
 
-#ifndef	RAZORBACK_SOCKET_H
+#ifndef RAZORBACK_SOCKET_H
 #define RAZORBACK_SOCKET_H
 
 #include <razorback/visibility.h>
@@ -44,9 +44,9 @@ extern "C" {
 struct Socket
 {
 #ifdef _MSC_VER
-	SOCKET iSocket;
+    SOCKET iSocket;
 #else
-    int iSocket;           ///< The Socket FD
+    int iSocket;  ///< The Socket FD
 #endif
     struct addrinfo *pAddressInfo;
     bool ssl;
@@ -62,7 +62,7 @@ struct Socket
 SO_PUBLIC extern struct Socket * Socket_Listen (const uint8_t * sourceAddress,
                            uint16_t port);
 
-/** Start a UNIX socket listening 
+/** Start a UNIX socket listening
  * @param path Path to the socket file
  * @return A new socket or NULL on error.
  */

@@ -109,8 +109,8 @@ SO_PUBLIC extern bool BlockPool_DestroyItem (struct BlockPoolItem *p_pItem);
  * @return true on success false on error.
  */
 SO_PUBLIC extern bool
-BlockPool_MetaData_Add(struct BlockPoolItem *block, 
-                            uuid_t uuidName, uuid_t uuidType, 
+BlockPool_MetaData_Add(struct BlockPoolItem *block,
+                            uuid_t uuidName, uuid_t uuidType,
                             uint8_t *data, uint32_t size);
 #ifdef __cplusplus
 }

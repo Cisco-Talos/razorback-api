@@ -20,8 +20,8 @@
  * ResponseQueue functions
  */
 
-#ifndef	RAZORBACK_RESPONSEQUEUE_H
-#define	RAZORBACK_RESPONSEQUEUE_H
+#ifndef RAZORBACK_RESPONSEQUEUE_H
+#define RAZORBACK_RESPONSEQUEUE_H
 
 #include <razorback/visibility.h>
 #include <razorback/types.h>

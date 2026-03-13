@@ -19,20 +19,20 @@
  * For compliance with Mr Darwin's terms: this has been very significantly
  * modified from the free "file" command.
  *
- * This code has been further modified from the mod_mime_magic code by the 
+ * This code has been further modified from the mod_mime_magic code by the
  * Razorback(TM) team:
  * - Compressed lookup of internal data type support has been removed
  * - File system identification code has been removed.
  * - Ascii-ness code is currently not included.
  * - All RSL code has been removed.
- * - Code integrates directly with the razorback API to set data type UUID's 
+ * - Code integrates directly with the razorback API to set data type UUID's
  *   on items in the block pool.
  *
  * October 2011
  * Tom Judge <tjudge@sourcefire.com>
  * Sourcefire Inc,
  * 9770 Patuxent Woods Drive
- * Columbia, MD 21046, 
+ * Columbia, MD 21046,
  * United State
  */
 
@@ -61,12 +61,12 @@ static char * Magic_GetFile(void);
  * apprentice - load configuration from the magic file r
  *  API request record
  */
-static int 
+static int
 Magic_apprentice() {
     FILE *f;
-	char * file = NULL;
+    char * file = NULL;
     // TODO - Load the magic file into a buffer so we dont load it every time
-	file = Magic_GetFile();
+    file = Magic_GetFile();
     if ((f = fopen(file, "r")) == NULL) {
         rzb_log(LOG_ERR, LOG_C_MAGIC, "%s: can't read magic file %s", __func__, file);
         return -1;
@@ -91,7 +91,7 @@ Magic_Init(void) {
 
 /*
  * magic_process - process input block pool item
- * (formerly called "process" in file command, prefix added for clarity) 
+ * (formerly called "process" in file command, prefix added for clarity)
  * Coallesses data out of the data list into a buffer and runs magic on it.
  */
 bool
@@ -156,66 +156,66 @@ Magic_process(struct BlockPoolItem *item)
 static char *
 Magic_GetFile(void)
 {
-	char *path;
-	HKEY hkey = HKEY_LOCAL_MACHINE;
-	HKEY razorback;
-	LONG lRet;
-	DWORD type, RegValueLen;
+    char *path;
+    HKEY hkey = HKEY_LOCAL_MACHINE;
+    HKEY razorback;
+    LONG lRet;
+    DWORD type, RegValueLen;
 
-	lRet = RegOpenKeyA(
-		hkey,
-		"SOFTWARE\\Razorback",
-		&razorback);
-	
-	if(lRet != ERROR_SUCCESS) {
-		rzb_log(LOG_ERR, "%s: Failed because registry key does not exist. SOFTWARE", __func__);
-		return false;
-	}
-	if ((path = calloc(MAX_PATH, sizeof(char)))== NULL)
-		return NULL;
+    lRet = RegOpenKeyA(
+        hkey,
+        "SOFTWARE\\Razorback",
+        &razorback);
 
-	lRet = RegQueryValueExA(
-		razorback, 
-		"Path",
-		NULL, 
-		&type, 
-		NULL, 
-		&RegValueLen);
+    if(lRet != ERROR_SUCCESS) {
+        rzb_log(LOG_ERR, "%s: Failed because registry key does not exist. SOFTWARE", __func__);
+        return false;
+    }
+    if ((path = calloc(MAX_PATH, sizeof(char)))== NULL)
+        return NULL;
 
-	if (lRet != ERROR_SUCCESS) {
-		rzb_log(LOG_ERR, "%s: Failed to query registry value length", __func__);
-		return false;
-	}
-	if (RegValueLen > MAX_PATH -7)
-	{
-		rzb_log(LOG_ERR, "%s: Key to large", __func__);
-		return false;
-	}
+    lRet = RegQueryValueExA(
+        razorback,
+        "Path",
+        NULL,
+        &type,
+        NULL,
+        &RegValueLen);
 
-	lRet = RegQueryValueExA(
-		razorback, 
-		"Path",
-		NULL, 
-		&type, 
-		(LPBYTE)path, 
-		&RegValueLen);
+    if (lRet != ERROR_SUCCESS) {
+        rzb_log(LOG_ERR, "%s: Failed to query registry value length", __func__);
+        return false;
+    }
+    if (RegValueLen > MAX_PATH -7)
+    {
+        rzb_log(LOG_ERR, "%s: Key to large", __func__);
+        return false;
+    }
 
-	if (lRet != ERROR_SUCCESS) {
-		rzb_log(LOG_ERR, "%s: Failed to query registry value", __func__);
-		return false;
-	}
+    lRet = RegQueryValueExA(
+        razorback,
+        "Path",
+        NULL,
+        &type,
+        (LPBYTE)path,
+        &RegValueLen);
 
-	if (type != REG_SZ) {
-		rzb_log(LOG_ERR, "%s: Failed because registry key is not the right type", __func__);
-		return false;
-	}
+    if (lRet != ERROR_SUCCESS) {
+        rzb_log(LOG_ERR, "%s: Failed to query registry value", __func__);
+        return false;
+    }
 
-	PathAppendA(path, "magic");
-	return path;
+    if (type != REG_SZ) {
+        rzb_log(LOG_ERR, "%s: Failed because registry key is not the right type", __func__);
+        return false;
+    }
+
+    PathAppendA(path, "magic");
+    return path;
 }
 #else //_MSC_VER
 static char * Magic_GetFile(void)
 {
-	return (char *)MAGIC_FILE;
+    return (char *)MAGIC_FILE;
 }
 #endif

@@ -72,7 +72,7 @@ Inspection_Thread (Thread_t *p_pThread)
     struct ConnectedEntity *dispatcher = NULL;
     void *threadData = NULL;
 
-	l_pContext = Thread_GetContext (p_pThread);
+    l_pContext = Thread_GetContext (p_pThread);
     if ((l_pQueue =
                  InspectorQueue_Initialize(l_pContext->uuidApplicationType,
                                            QUEUE_FLAG_RECV)) == NULL) {

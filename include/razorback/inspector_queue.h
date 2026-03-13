@@ -20,8 +20,8 @@
  * InspectorQueue functions
  */
 
-#ifndef	RAZORBACK_INSPECTORQUEUE_H
-#define	RAZORBACK_INSPECTORQUEUE_H
+#ifndef RAZORBACK_INSPECTORQUEUE_H
+#define RAZORBACK_INSPECTORQUEUE_H
 
 #include <razorback/visibility.h>
 #include <razorback/types.h>

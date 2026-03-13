@@ -173,7 +173,7 @@ Config_getLocalityBlockStore (void)
 {
     return sg_localityBlockStore;
 }
-bool 
+bool
 Config_isBlockStoreRemote(void)
 {
     return sg_blockStoreRemote;
@@ -259,36 +259,36 @@ Config_getCacheBadLimit (void)
     return sg_iCacheBadLimit;
 }
 
-void 
+void
 Config_setLogDest (RZB_LOG_DEST_t dest)
 {
     log_dest = dest;
 }
-void 
+void
 Config_setLogLevel(int level)
 {
     log_level = level;
 }
 
-RZB_LOG_DEST_t 
+RZB_LOG_DEST_t
 Config_getLogDest (void)
 {
     return log_dest;
 }
 
-int 
+int
 Config_getLogLevel(void)
 {
     return log_level;
 }
 
-int 
+int
 Config_getLogFacility(void)
 {
     return log_facility;
 }
 
-char * 
+char *
 Config_getLogFile(void)
 {
     return log_file;
@@ -381,7 +381,7 @@ static RZBConfKey_t global_config[] = {
     {"Submission.GlobalCache.Response.Threads.Initial", RZB_CONF_KEY_TYPE_INT, &sg_subGcRespThreadsInit, NULL},
     {"Submission.GlobalCache.Response.Threads.Max", RZB_CONF_KEY_TYPE_INT, &sg_subGcRespThreadsMax, NULL},
 
-	{"Submission.Transfer.Threads.Initial", RZB_CONF_KEY_TYPE_INT, &sg_subTransferThreadsInit, NULL},
+    {"Submission.Transfer.Threads.Initial", RZB_CONF_KEY_TYPE_INT, &sg_subTransferThreadsInit, NULL},
     {"Submission.Transfer.Threads.Max", RZB_CONF_KEY_TYPE_INT, &sg_subTransferThreadsMax, NULL},
 
     {"Submission.Pool.MaxItems", RZB_CONF_KEY_TYPE_INT, &sg_blockPoolMaxItems, NULL},
@@ -523,7 +523,7 @@ static bool
 parseLogFacility (const char *string, conf_int_t * val)
 {
 #ifdef _MSC_VER
-	return true;
+    return true;
 #else //_MSC_VER
     if (!strncasecmp (string, "daemon", 6))
     {
@@ -575,7 +575,7 @@ parseLogFacility (const char *string, conf_int_t * val)
         *val = LOG_LOCAL7;
         return true;
     }
-	return false;
+    return false;
 #endif //_MSC_VER
-    
+
 }

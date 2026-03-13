@@ -20,8 +20,8 @@
  * BlockId functions
  */
 
-#ifndef	RAZORBACK_BLOCK_ID_H
-#define	RAZORBACK_BLOCK_ID_H
+#ifndef RAZORBACK_BLOCK_ID_H
+#define RAZORBACK_BLOCK_ID_H
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 
@@ -39,7 +39,7 @@ SO_PUBLIC extern bool BlockId_IsEqual (const struct BlockId *p_pA,
 
 /** Converts a block id to text
  * @param p_pA the block id to convert
- * @param p_sText the destination text 
+ * @param p_sText the destination text
  */
 SO_PUBLIC extern void BlockId_ToText (const struct BlockId *p_pA, uint8_t * p_sText);
 

@@ -97,7 +97,7 @@ static void
 OutputInspection_Destroy (struct Message *message)
 {
     struct MessageOutputInspection *msg;
-    
+
     ASSERT (message != NULL);
     if (message == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message is NULL", __func__);
@@ -138,7 +138,7 @@ OutputInspection_Deserialize(struct Message *message)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to parse JSON", __func__);
         return false;
     }
-    
+
     event = message->message;
 
     if (!JsonBuffer_Get_Nugget(msg, "Nugget", &event->nugget)) {
@@ -240,7 +240,7 @@ OutputInspection_Serialize(struct Message *message)
         json_object_put(msg);
         return false;
     }
-    strcpy((char *)message->serialized, wire); 
+    strcpy((char *)message->serialized, wire);
     json_object_put(msg);
 
     return true;

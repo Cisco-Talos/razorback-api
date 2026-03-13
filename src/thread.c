@@ -49,16 +49,16 @@ struct _Thread
 #ifdef _MSC_VER
     HANDLE hThread;
 #endif //_MSC_VER
-    rzb_thread_t iThread;       			///< pthread Thread info.
-    Mutex_t * mMutex;  				///< mutex protecting this struct
-    bool bRunning;              			///< true if executing, false if not:  must be managed explicitly by thread function
-    void *pUserData;						///< Additional info for the thread
-    char *sName;            				///< The thread name
-    struct RazorbackContext *pContext; 		///< The Thread Context
-    void (*mainFunction) (Thread_t *); ///< Thread Main Function
-    bool bShutdown;         				///< Shutdown Flag
-    int refs;								///< Reference count
-    //void (*interrupt)(Thread_t *);		///< Cancellation handler for a blocking function.
+    rzb_thread_t iThread;               ///< pthread Thread info.
+    Mutex_t * mMutex;                   ///< mutex protecting this struct
+    bool bRunning;                      ///< true if executing, false if not:  must be managed explicitly by thread function
+    void *pUserData;                    ///< Additional info for the thread
+    char *sName;                        ///< The thread name
+    struct RazorbackContext *pContext;  ///< The Thread Context
+    void (*mainFunction) (Thread_t *);  ///< Thread Main Function
+    bool bShutdown;                     ///< Shutdown Flag
+    int refs;                           ///< Reference count
+    //void (*interrupt)(Thread_t *);    ///< Cancellation handler for a blocking function.
 };
 
 
@@ -76,11 +76,11 @@ static void Thread_Unlock(void *);
 static void
 initThreading (void)
 {
-	sg_threadList = List_Create(LIST_MODE_GENERIC, 
-            Thread_Cmp, 
-            Thread_KeyCmp, 
-            NULL, NULL, 
-            Thread_Lock, 
+    sg_threadList = List_Create(LIST_MODE_GENERIC,
+            Thread_Cmp,
+            Thread_KeyCmp,
+            NULL, NULL,
+            Thread_Lock,
             Thread_Unlock);
     List_SetLimit(sg_threadList, Config_getThreadLimit());
 #ifdef _MSC_VER
@@ -115,7 +115,7 @@ Thread_MainWrapper (void *arg)
     Thread_Destroy(l_pThread);
 
 #ifdef _MSC_VER
-	return 0;
+    return 0;
 #else //_MSC_VER
     return NULL; // Implicit pthread_exit()
 #endif //_MSC_VER
@@ -125,15 +125,15 @@ SO_PUBLIC Thread_t *
 Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
         char *name, struct RazorbackContext *context)
 {
-	Thread_t *thread;
-	
-	ASSERT (fpFunction != NULL);
-	if (fpFunction == NULL)
-		return NULL;
+    Thread_t *thread;
+
+    ASSERT (fpFunction != NULL);
+    if (fpFunction == NULL)
+        return NULL;
 
 #ifdef _MSC_VER
     if (initialized == 0)
-		initThreading();
+        initThreading();
 
 #else //_MSC_VER
     pthread_once (&g_once_control, initThreading);
@@ -173,7 +173,7 @@ Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
     }
 
 #ifdef _MSC_VER
-	thread->hThread = CreateThread(NULL, 0, Thread_MainWrapper, thread, 0, &thread->iThread);
+    thread->hThread = CreateThread(NULL, 0, Thread_MainWrapper, thread, 0, &thread->iThread);
 #else //_MSC_VER
     // start thread, check for error
     if (pthread_create
@@ -195,9 +195,9 @@ Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
 SO_PUBLIC void
 Thread_Destroy (Thread_t *thread)
 {
-	ASSERT(thread != NULL);
-	if (thread == NULL)
-		return;
+    ASSERT(thread != NULL);
+    if (thread == NULL)
+        return;
 
     Thread_Lock(thread);
 
@@ -216,7 +216,7 @@ Thread_Destroy (Thread_t *thread)
     Thread_Unlock(thread);
 
     Mutex_Destroy (thread->mMutex);
-    
+
     free (thread);
 }
 
@@ -224,9 +224,9 @@ SO_PUBLIC bool
 Thread_IsRunning (Thread_t *thread)
 {
     bool l_bRunning;
-	ASSERT (thread != NULL);
-	if (thread == NULL)
-		return false;
+    ASSERT (thread != NULL);
+    if (thread == NULL)
+        return false;
 
     Thread_Lock (thread);
 
@@ -242,9 +242,9 @@ Thread_IsStopped (Thread_t *thread)
 {
     bool l_bShutdown;
 
-	ASSERT (thread != NULL);
-	if (thread == NULL)
-		return false;
+    ASSERT (thread != NULL);
+    if (thread == NULL)
+        return false;
 
     Thread_Lock (thread);
 
@@ -261,7 +261,7 @@ Thread_Stop (Thread_t *thread)
 {
     ASSERT (thread != NULL);
     if (thread == NULL)
-    	return;
+        return;
 
     Thread_Lock (thread);
 
@@ -275,7 +275,7 @@ Thread_Interrupt(Thread_t *thread)
 {
     ASSERT (thread != NULL);
     if (thread == NULL)
-    	return;
+        return;
 
     Thread_Lock(thread);
     Thread_Stop(thread);
@@ -289,15 +289,15 @@ Thread_Interrupt(Thread_t *thread)
 
 }
 
-SO_PUBLIC void 
+SO_PUBLIC void
 Thread_Join(Thread_t *thread)
 {
-	ASSERT(thread != NULL);
-	if (thread == NULL)
-		return;
+    ASSERT(thread != NULL);
+    if (thread == NULL)
+        return;
 
 #ifdef _MSC_VER
-	WaitForSingleObject(thread->hThread,INFINITE);
+    WaitForSingleObject(thread->hThread,INFINITE);
 #else //_MSC_VER
     void *ret;
     int res =0;
@@ -311,7 +311,7 @@ Thread_StopAndJoin(Thread_t *thread)
 {
    ASSERT (thread != NULL);
    if (thread == NULL)
-	   return;
+       return;
 
    Thread_Stop(thread);
    Thread_Join(thread);
@@ -322,7 +322,7 @@ Thread_InterruptAndJoin(Thread_t *thread)
 {
     ASSERT (thread != NULL);
     if (thread == NULL)
-    	return;
+        return;
 
     Thread_Stop(thread);
     Thread_Interrupt(thread);
@@ -330,14 +330,14 @@ Thread_InterruptAndJoin(Thread_t *thread)
 }
 
 
-SO_PUBLIC struct RazorbackContext * 
+SO_PUBLIC struct RazorbackContext *
 Thread_GetContext(Thread_t *thread)
 {
     struct RazorbackContext *l_pOldContext;
 
     ASSERT(thread != NULL);
     if (thread == NULL)
-    	return NULL;
+        return NULL;
 
     Thread_Lock (thread);
 
@@ -347,7 +347,7 @@ Thread_GetContext(Thread_t *thread)
     return l_pOldContext;
 }
 
-SO_PUBLIC struct RazorbackContext * 
+SO_PUBLIC struct RazorbackContext *
 Thread_GetCurrentContext(void)
 {
     Thread_t *thread;
@@ -363,14 +363,14 @@ Thread_GetCurrentContext(void)
     return cont;
 }
 
-SO_PUBLIC struct RazorbackContext * 
+SO_PUBLIC struct RazorbackContext *
 Thread_ChangeContext(Thread_t *thread, struct RazorbackContext *context)
 {
     struct RazorbackContext *l_pOldContext;
 
     ASSERT(thread != NULL);
     if (thread == NULL)
-    	return NULL;
+        return NULL;
 
     Thread_Lock (thread);
 
@@ -386,9 +386,9 @@ SO_PUBLIC rzb_thread_t
 Thread_GetCurrentId(void)
 {
 #ifdef _MSC_VER
-	return GetCurrentThreadId();
+    return GetCurrentThreadId();
 #else
-	return pthread_self();
+    return pthread_self();
 #endif
 }
 
@@ -396,7 +396,7 @@ SO_PUBLIC Thread_t *
 Thread_GetCurrent(void)
 {
     Thread_t *l_pRet = NULL;
-	rzb_thread_t l_tCurrent = Thread_GetCurrentId();
+    rzb_thread_t l_tCurrent = Thread_GetCurrentId();
     l_pRet = (Thread_t *)List_Find(sg_threadList, &l_tCurrent);
     if (l_pRet == NULL)
         return NULL;
@@ -425,11 +425,11 @@ Thread_getCount (void)
     return num;
 }
 
-SO_PUBLIC int 
+SO_PUBLIC int
 Thread_KeyCmp(void *a, void *id)
 {
     Thread_t * cA = (Thread_t *)a;
-	rzb_thread_t cId = *(rzb_thread_t *)id;
+    rzb_thread_t cId = *(rzb_thread_t *)id;
 
     if (cId == cA->iThread)
         return 0;
@@ -439,7 +439,7 @@ Thread_KeyCmp(void *a, void *id)
     return -1;
 }
 
-SO_PUBLIC int 
+SO_PUBLIC int
 Thread_Cmp(void *a, void *b)
 {
     Thread_t * cA = (Thread_t *)a;
@@ -448,20 +448,20 @@ Thread_Cmp(void *a, void *b)
         return 0;
     if (cA->iThread == cB->iThread)
         return 0;
-    else 
+    else
         return -1;
 
     return -1;
 }
 
-static void 
+static void
 Thread_Lock(void *a)
 {
     Thread_t *t = (Thread_t *)a;
     Mutex_Lock(t->mMutex);
 }
 
-static void 
+static void
 Thread_Unlock(void *a)
 {
     Thread_t *t = (Thread_t *)a;
@@ -471,10 +471,10 @@ Thread_Unlock(void *a)
 
 #ifdef _MSC_VER
 
-static void 
+static void
 initThreading_win32(void)
 {
-	initialized=1;
+    initialized=1;
 }
 
 #else //_MSC_VER

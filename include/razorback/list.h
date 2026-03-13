@@ -38,17 +38,17 @@ extern "C" {
 /** List modes
  * @{
  */
-#define LIST_MODE_GENERIC	0	///< Generic list
-#define LIST_MODE_STACK 	1	///< Stack list
-#define LIST_MODE_QUEUE 	2	///< Queue list
+#define LIST_MODE_GENERIC   0   ///< Generic list
+#define LIST_MODE_STACK     1   ///< Stack list
+#define LIST_MODE_QUEUE     2   ///< Queue list
 /// @}
 
 /** List iteration returns.
  * @{
  */
-#define LIST_EACH_OK 		0	///< Node successfully processed
-#define LIST_EACH_ERROR 	1	///< Error processing node
-#define LIST_EACH_REMOVE 	2	///< Node successfully processed, remove from list.
+#define LIST_EACH_OK        0   ///< Node successfully processed
+#define LIST_EACH_ERROR     1   ///< Error processing node
+#define LIST_EACH_REMOVE    2   ///< Node successfully processed, remove from list.
 #define LIST_EACH_END       3   ///< Node successfully processed, end to loop
 /// @}
 
@@ -65,9 +65,9 @@ extern "C" {
  * @return A new List on success, NULL on error.
  */
 SO_PUBLIC extern List_t * List_Create(int mode,
-        int (*cmp)(void *, void *), 
-        int (*keyCmp)(void *, void *), 
-        void (*destroy)(void *), 
+        int (*cmp)(void *, void *),
+        int (*keyCmp)(void *, void *),
+        void (*destroy)(void *),
         void *(*clone)(void *),
         void (*nodeLock)(void *),
         void (*nodeUnlock)(void *));

@@ -20,8 +20,8 @@
  * Threading API.
  */
 
-#ifndef	RAZORBACK_THREAD_H
-#define	RAZORBACK_THREAD_H
+#ifndef RAZORBACK_THREAD_H
+#define RAZORBACK_THREAD_H
 
 #include <razorback/visibility.h>
 #include <razorback/types.h>
@@ -38,7 +38,7 @@ extern "C" {
 #endif
 
 /** Thread
- * Purpose:	hold the information about a thread
+ * Purpose: hold the information about a thread
  */
 
 /** Create a new thread

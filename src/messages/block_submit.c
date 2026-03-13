@@ -78,7 +78,7 @@ MessageBlockSubmission_Initialize (
 static void
 BlockSubmission_Destroy (struct Message *message) {
     struct MessageBlockSubmission *msg;
-    
+
     ASSERT (message != NULL);
     if (message == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Message is NULL", __func__);

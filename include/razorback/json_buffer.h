@@ -16,7 +16,7 @@
  *  MA 02110-1301, USA.
  */
 
-/** JSON Buffer Implimentation 
+/** JSON Buffer Implimentation
  */
 #ifndef RAZORBACK_JSON_BUFFER_H
 #define RAZORBACK_JSON_BUFFER_H
@@ -43,7 +43,7 @@ SO_PUBLIC extern bool JsonBuffer_Put_uint32_t (json_object * parent, const char 
 
 SO_PUBLIC extern bool JsonBuffer_Put_uint64_t (json_object * parent, const char * name, uint64_t p_iValue);
 
-SO_PUBLIC extern bool JsonBuffer_Put_ByteArray (json_object * parent, const char *name, 
+SO_PUBLIC extern bool JsonBuffer_Put_ByteArray (json_object * parent, const char *name,
                                       uint32_t p_iSize,
                                       const uint8_t * p_pByteArray);
 
@@ -89,13 +89,13 @@ SO_PUBLIC extern bool JsonBuffer_Put_BlockId (json_object * parent, const char *
 SO_PUBLIC extern bool JsonBuffer_Get_BlockId (json_object * parent, const char * name,
                                     struct BlockId **p_pId);
 
-SO_PUBLIC extern bool JsonBuffer_Put_Block (json_object * parent, const char * name, 
+SO_PUBLIC extern bool JsonBuffer_Put_Block (json_object * parent, const char * name,
                                   struct Block *p_pBlock);
 
 SO_PUBLIC extern bool JsonBuffer_Get_Block (json_object * parent, const char * name,
                                   struct Block **p_pBlock);
 
-SO_PUBLIC extern bool JsonBuffer_Put_Event (json_object * parent, const char * name, 
+SO_PUBLIC extern bool JsonBuffer_Put_Event (json_object * parent, const char * name,
                                   struct Event *p_pEvent);
 
 SO_PUBLIC extern bool JsonBuffer_Get_Event (json_object * parent, const char * name,
@@ -105,35 +105,35 @@ SO_PUBLIC extern bool JsonBuffer_Get_Event (json_object * parent, const char * n
 SO_PUBLIC extern bool JsonBuffer_Put_EventId (json_object * parent, const char * name,
                                     struct EventId *p_pEventId);
 
-SO_PUBLIC extern bool JsonBuffer_Get_EventId (json_object * parent, const char * name, 
+SO_PUBLIC extern bool JsonBuffer_Get_EventId (json_object * parent, const char * name,
                                     struct EventId **p_pEventId);
 
 SO_PUBLIC extern bool JsonBuffer_Put_Judgment (json_object * parent, const char * name,
                                      struct Judgment *p_pJudgment);
 
-SO_PUBLIC extern bool JsonBuffer_Get_Judgment (json_object * parent, const char * name, 
+SO_PUBLIC extern bool JsonBuffer_Get_Judgment (json_object * parent, const char * name,
                                      struct Judgment **p_pJudgment);
 
-SO_PUBLIC extern bool JsonBuffer_Put_Nugget (json_object * parent, const char * name, 
+SO_PUBLIC extern bool JsonBuffer_Put_Nugget (json_object * parent, const char * name,
                                            struct Nugget * nugget);
 
-SO_PUBLIC extern bool JsonBuffer_Get_Nugget (json_object * parent, const char * name, 
+SO_PUBLIC extern bool JsonBuffer_Get_Nugget (json_object * parent, const char * name,
                                            struct Nugget ** r_nugget);
 
-SO_PUBLIC extern bool JsonBuffer_Put_UUIDList (json_object * parent, const char * name, 
+SO_PUBLIC extern bool JsonBuffer_Put_UUIDList (json_object * parent, const char * name,
                                            List_t * list);
-SO_PUBLIC extern bool JsonBuffer_Get_UUIDList (json_object * parent, const char * name, 
+SO_PUBLIC extern bool JsonBuffer_Get_UUIDList (json_object * parent, const char * name,
                                            List_t ** r_list);
 
-SO_PUBLIC extern bool JsonBuffer_Put_StringList (json_object * parent, const char * name, 
+SO_PUBLIC extern bool JsonBuffer_Put_StringList (json_object * parent, const char * name,
                                            List_t * list);
-SO_PUBLIC extern bool JsonBuffer_Get_StringList (json_object * parent, const char * name, 
+SO_PUBLIC extern bool JsonBuffer_Get_StringList (json_object * parent, const char * name,
                                            List_t ** r_list);
-SO_PUBLIC extern bool 
-JsonBuffer_Put_uint8List (json_object * parent, const char * name, 
+SO_PUBLIC extern bool
+JsonBuffer_Put_uint8List (json_object * parent, const char * name,
                                            uint8_t *list, uint32_t count);
-SO_PUBLIC extern bool 
-JsonBuffer_Get_uint8List (json_object * parent, const char * name, 
+SO_PUBLIC extern bool
+JsonBuffer_Get_uint8List (json_object * parent, const char * name,
                                            uint8_t **list, uint32_t *count);
 #ifdef __cplusplus
 }

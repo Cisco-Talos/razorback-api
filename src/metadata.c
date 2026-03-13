@@ -29,7 +29,7 @@
 #endif
 
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_String (List_t *list, uuid_t name, const char *string){
     uuid_t uuidType;
     if (!UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuidType))
@@ -40,7 +40,7 @@ Metadata_Add_String (List_t *list, uuid_t name, const char *string){
     return Metadata_Add(list, name, uuidType, strlen(string)+1, (uint8_t *)string);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Get_String (List_t *list, uuid_t name, uint32_t *len, const char **string)
 {
     uuid_t uuidType;
@@ -52,7 +52,7 @@ Metadata_Get_String (List_t *list, uuid_t name, uint32_t *len, const char **stri
     return Metadata_Get(list, name, uuidType, len, (const uint8_t **)string);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_IPv4 (List_t *list, uuid_t name, const uint8_t *addr)
 {
     uuid_t uuidType;
@@ -64,7 +64,7 @@ Metadata_Add_IPv4 (List_t *list, uuid_t name, const uint8_t *addr)
     return Metadata_Add(list, name, uuidType, 4, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Get_IPv4 (List_t *list, uuid_t name, const uint8_t **addr)
 {
     uuid_t uuidType;
@@ -77,7 +77,7 @@ Metadata_Get_IPv4 (List_t *list, uuid_t name, const uint8_t **addr)
     return Metadata_Get(list, name, uuidType, &size, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_IPv6 (List_t *list, uuid_t name, const uint8_t *addr)
 {
     uuid_t uuidType;
@@ -89,7 +89,7 @@ Metadata_Add_IPv6 (List_t *list, uuid_t name, const uint8_t *addr)
     return Metadata_Add(list, name, uuidType, (128/8), addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Get_IPv6 (List_t *list, uuid_t name, const uint8_t **addr)
 {
     uuid_t uuidType;
@@ -102,7 +102,7 @@ Metadata_Get_IPv6 (List_t *list, uuid_t name, const uint8_t **addr)
     return Metadata_Get(list, name, uuidType, &size, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_Port (List_t *list, uuid_t name, const uint16_t port)
 {
     uuid_t uuidType;
@@ -114,7 +114,7 @@ Metadata_Add_Port (List_t *list, uuid_t name, const uint16_t port)
     return Metadata_Add(list, name, uuidType, 2, (uint8_t*)&port);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Get_Port (List_t *list, uuid_t name, uint16_t *port)
 {
     uuid_t uuidType;
@@ -133,7 +133,7 @@ Metadata_Get_Port (List_t *list, uuid_t name, uint16_t *port)
     return true;
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_Filename (List_t *list, const char *name)
 {
     uuid_t uuidName;
@@ -145,7 +145,7 @@ Metadata_Add_Filename (List_t *list, const char *name)
     return Metadata_Add_String(list, uuidName, name);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_Hostname (List_t *list, const char *name)
 {
     uuid_t uuidName;
@@ -157,7 +157,7 @@ Metadata_Add_Hostname (List_t *list, const char *name)
     return Metadata_Add_String(list, uuidName, name);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_URI (List_t *list, const char *name)
 {
     uuid_t uuidName;
@@ -169,7 +169,7 @@ Metadata_Add_URI (List_t *list, const char *name)
     return Metadata_Add_String(list, uuidName, name);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_HttpRequest (List_t *list, const char *name)
 {
     uuid_t uuidName;
@@ -181,7 +181,7 @@ Metadata_Add_HttpRequest (List_t *list, const char *name)
     return Metadata_Add_String(list, uuidName, name);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_HttpResponse (List_t *list, const char *name)
 {
     uuid_t uuidName;
@@ -193,7 +193,7 @@ Metadata_Add_HttpResponse (List_t *list, const char *name)
     return Metadata_Add_String(list, uuidName, name);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_MalwareName (List_t *list, const char *vendor, const char *name)
 {
     uuid_t uuidName;
@@ -214,7 +214,7 @@ Metadata_Add_MalwareName (List_t *list, const char *vendor, const char *name)
     return ret;
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_Report (List_t *list, const char *text)
 {
     uuid_t uuidName;
@@ -226,7 +226,7 @@ Metadata_Add_Report (List_t *list, const char *text)
     return Metadata_Add_String(list, uuidName, text);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_CVE (List_t *list, const char *text)
 {
     uuid_t uuidName;
@@ -238,7 +238,7 @@ Metadata_Add_CVE (List_t *list, const char *text)
     return Metadata_Add_String(list, uuidName, text);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_BID (List_t *list, const char *text)
 {
     uuid_t uuidName;
@@ -249,7 +249,7 @@ Metadata_Add_BID (List_t *list, const char *text)
     }
     return Metadata_Add_String(list, uuidName, text);
 }
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_OSVDB (List_t *list, const char *text)
 {
     uuid_t uuidName;
@@ -261,7 +261,7 @@ Metadata_Add_OSVDB (List_t *list, const char *text)
     return Metadata_Add_String(list, uuidName, text);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_IPv4_Source (List_t *list, const uint8_t *addr)
 {
     uuid_t uuidName;
@@ -273,7 +273,7 @@ Metadata_Add_IPv4_Source (List_t *list, const uint8_t *addr)
     return Metadata_Add_IPv4(list, uuidName, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Get_IPv4_Source (List_t *list, const uint8_t **addr)
 {
     uuid_t uuidName;
@@ -285,7 +285,7 @@ Metadata_Get_IPv4_Source (List_t *list, const uint8_t **addr)
     return Metadata_Get_IPv4(list, uuidName, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_IPv4_Destination (List_t *list, const uint8_t *addr)
 {
     uuid_t uuidName;
@@ -297,7 +297,7 @@ Metadata_Add_IPv4_Destination (List_t *list, const uint8_t *addr)
     return Metadata_Add_IPv4(list, uuidName, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Get_IPv4_Destination (List_t *list, const uint8_t **addr)
 {
     uuid_t uuidName;
@@ -309,7 +309,7 @@ Metadata_Get_IPv4_Destination (List_t *list, const uint8_t **addr)
     return Metadata_Get_IPv4(list, uuidName, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_IPv6_Source (List_t *list, const uint8_t *addr)
 {
     uuid_t uuidName;
@@ -321,7 +321,7 @@ Metadata_Add_IPv6_Source (List_t *list, const uint8_t *addr)
     return Metadata_Add_IPv6(list, uuidName, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Get_IPv6_Source (List_t *list, const uint8_t **addr)
 {
     uuid_t uuidName;
@@ -333,7 +333,7 @@ Metadata_Get_IPv6_Source (List_t *list, const uint8_t **addr)
     return Metadata_Get_IPv6(list, uuidName, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_IPv6_Destination (List_t *list, const uint8_t *addr)
 {
     uuid_t uuidName;
@@ -345,7 +345,7 @@ Metadata_Add_IPv6_Destination (List_t *list, const uint8_t *addr)
     return Metadata_Add_IPv6(list, uuidName, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Get_IPv6_Destination (List_t *list, const uint8_t **addr)
 {
     uuid_t uuidName;
@@ -357,7 +357,7 @@ Metadata_Get_IPv6_Destination (List_t *list, const uint8_t **addr)
     return Metadata_Get_IPv6(list, uuidName, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_Port_Source (List_t *list, const uint16_t addr)
 {
     uuid_t uuidName;
@@ -369,7 +369,7 @@ Metadata_Add_Port_Source (List_t *list, const uint16_t addr)
     return Metadata_Add_Port(list, uuidName, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Get_Port_Source (List_t *list, uint16_t *addr)
 {
     uuid_t uuidName;
@@ -381,7 +381,7 @@ Metadata_Get_Port_Source (List_t *list, uint16_t *addr)
     return Metadata_Get_Port(list, uuidName, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Add_Port_Destination (List_t *list, const uint16_t addr)
 {
     uuid_t uuidName;
@@ -393,7 +393,7 @@ Metadata_Add_Port_Destination (List_t *list, const uint16_t addr)
     return Metadata_Add_Port(list, uuidName, addr);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 Metadata_Get_Port_Destination (List_t *list, uint16_t *addr)
 {
     uuid_t uuidName;

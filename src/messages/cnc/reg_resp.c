@@ -59,7 +59,7 @@ static struct MessageHandler handler = {
 };
 
 // core.h
-void 
+void
 Message_CnC_RegResp_Init(void)
 {
     Message_Register_Handler(&handler);

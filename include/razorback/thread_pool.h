@@ -20,8 +20,8 @@
  * Thread worker pool API.
  */
 
-#ifndef	RAZORBACK_THREAD_POOL_H
-#define	RAZORBACK_THREAD_POOL_H
+#ifndef RAZORBACK_THREAD_POOL_H
+#define RAZORBACK_THREAD_POOL_H
 
 #include <razorback/visibility.h>
 #include <razorback/types.h>
@@ -38,9 +38,9 @@ struct ThreadPool;
  */
 struct ThreadPoolItem
 {
-    Thread_t *thread;		///< The worker thread.
-    int id;						///< The worker ID
-    struct ThreadPool *pool;	///< The pool the worker belongs to.
+    Thread_t *thread;         ///< The worker thread.
+    int id;                   ///< The worker ID
+    struct ThreadPool *pool;  ///< The pool the worker belongs to.
 };
 
 /**
@@ -48,12 +48,12 @@ struct ThreadPoolItem
  */
 struct ThreadPool
 {
-    size_t limit;                           ///< Maximum number of threads
-    atomic_int nextId;                             ///< Id of the next thread
-    struct RazorbackContext *context;       ///< Context to spawn threads in
-    void (*mainFunction) (Thread_t *); ///< Main function for spawned threads
-    const char *namePattern;                ///< Name pattern for threads
-    List_t *list;						///< Worker list.
+    size_t limit;                       ///< Maximum number of threads
+    atomic_int nextId;                  ///< Id of the next thread
+    struct RazorbackContext *context;   ///< Context to spawn threads in
+    void (*mainFunction) (Thread_t *);  ///< Main function for spawned threads
+    const char *namePattern;            ///< Name pattern for threads
+    List_t *list;                       ///< Worker list.
 };
 
 /** Create a ThreadPool

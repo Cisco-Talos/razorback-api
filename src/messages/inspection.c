@@ -150,12 +150,12 @@ InspectionSubmission_Deserialize(struct Message *message)
         return false;
     }
 
-    
+
     if ((msg = json_tokener_parse((char *)message->serialized)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to parse JSON", __func__);
         return false;
     }
-    
+
     submit = message->message;
 
     if (!JsonBuffer_Get_uint32_t(msg, "Reason", &submit->iReason)) {

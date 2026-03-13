@@ -79,7 +79,7 @@ struct SSH_Session_Key
 {
     uuid_t nuggetId;
     uuid_t dispatcherId;
-	rzb_thread_t threadId;
+    rzb_thread_t threadId;
 };
 
 struct SSH_Session
@@ -91,10 +91,10 @@ struct SSH_Session
     char *hostname;
 };
 
-bool 
+bool
 SSH_Init(void)
 {
-    sessionList = List_Create(LIST_MODE_GENERIC, 
+    sessionList = List_Create(LIST_MODE_GENERIC,
             SSH_Session_Cmp, //Cmp
             SSH_Session_KeyCmp, //KeyCmp
             NULL, //Destroy
@@ -103,15 +103,15 @@ SSH_Init(void)
             NULL); //Unlock
     if (sessionList == NULL)
         return false;
-	
+
     return Transport_Register(&descriptor);
 }
 
-static char * 
+static char *
 SSH_mkdir(struct SSH_Session *session, const char *fmt, ...)
 {
     char *dir = NULL;
-	va_list argp;
+    va_list argp;
     sftp_dir sdir;
     va_start (argp, fmt);
     if (vasprintf (&dir, fmt, argp) == -1)
@@ -147,12 +147,12 @@ createDirectory(struct Block *block, struct SSH_Session *session)
 
     if ((dir =SSH_mkdir(session, "%s/%c", cdir, hash[0])) == NULL)
         goto createDone;
-    else 
+    else
         free(dir);
 
     if ((dir =SSH_mkdir(session, "%s/%c/%c", cdir, hash[0], hash[1])) == NULL)
         goto createDone;
-    else 
+    else
         free(dir);
 
     if ((dir =SSH_mkdir(session, "%s/%c/%c/%c", cdir, hash[0], hash[1], hash[2])) == NULL)
@@ -205,7 +205,7 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
     uint8_t data[4096];
     size_t len;
 
-	ASSERT (item != NULL);
+    ASSERT (item != NULL);
 
     ctx = Thread_GetContext(Thread_GetCurrent());
     if (ctx == NULL)
@@ -214,7 +214,7 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
         return TRANSFER_FAIL_LOCAL;
     }
     session = SSH_Get_Session(ctx->uuidNuggetId, dispatcher);
-    if (session == NULL) 
+    if (session == NULL)
     {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to lookup context protocol session", __func__);
         return TRANSFER_FAIL_DISPATCHER;
@@ -222,7 +222,7 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
     if (!SSH_Check_Session(session))
         return TRANSFER_FAIL_DISPATCHER;
 
-    
+
     if ((filename = Transfer_generateFilename (item->pEvent->pBlock)) == NULL)
     {
         rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file name", __func__);
@@ -252,7 +252,7 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
         free(filename);
         return TRANSFER_OK;
     }
-    
+
     fd = sftp_open (session->sftp, fullpath, O_RDWR | O_CREAT | O_TRUNC,
                S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
     if (fd == NULL)
@@ -313,16 +313,16 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     char *filename = NULL;
     char *path = NULL;
     char *fullpath = NULL;
-	char * tmp_string;  // Temporary string to use for path to tmpfile
+    char * tmp_string;  // Temporary string to use for path to tmpfile
 #ifdef _MSC_VER
     char lpTempPathBuffer[MAX_PATH];
 #endif
     FILE *out_file;             // Output stream to create a temporary file on tmpfs
-	ssize_t read =0;
+    ssize_t read =0;
     ssize_t got =0;
     char buf[1024];
-	
-	ASSERT (block != NULL);
+
+    ASSERT (block != NULL);
 
     ctx = Thread_GetContext(Thread_GetCurrent());
     if (ctx == NULL)
@@ -336,23 +336,23 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         return TRANSFER_FAIL_DISPATCHER;
     }
     if (!SSH_Check_Session(session))
-	{
-		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Check Session failed", __func__);
+    {
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Check Session failed", __func__);
         return TRANSFER_FAIL_DISPATCHER;
-	}
+    }
 
     if ((filename = Transfer_generateFilename (block)) == NULL)
     {
         rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file name", __func__);
         return TRANSFER_FAIL_LOCAL;
     }
-	
+
     if ((path = sftp_canonicalize_path(session->sftp, ".")) == NULL)
-	{
-		free(filename);
-		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to canonicalize path on server", __func__);
-		return TRANSFER_FAIL_DISPATCHER;
-	}
+    {
+        free(filename);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to canonicalize path on server", __func__);
+        return TRANSFER_FAIL_DISPATCHER;
+    }
     if (asprintf(&fullpath, "%s/%c/%c/%c/%c/%s", path,
                 filename[0], filename[1], filename[2], filename[3], filename) == -1)
     {
@@ -381,18 +381,18 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     }
     tmp_string[0] = 0;
 #ifdef _MSC_VER
-	GetTempPathA(MAX_PATH, lpTempPathBuffer);
+    GetTempPathA(MAX_PATH, lpTempPathBuffer);
 
-	if (GetTempFileNameA(lpTempPathBuffer, "block", 0, tmp_string) == 0)
+    if (GetTempFileNameA(lpTempPathBuffer, "block", 0, tmp_string) == 0)
 #else
     if (tmpnam (tmp_string) == NULL)
 #endif
     {
-		rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Cannot create temporary file name: %s, error: %s", __func__, tmp_string, strerror(errno));
-		free(tmp_string);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Cannot create temporary file name: %s, error: %s", __func__, tmp_string, strerror(errno));
+        free(tmp_string);
         return TRANSFER_FAIL_LOCAL;
     }
-	//rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Thread ID: %d FileName: %s:", __func__, Thread_GetCurrent()->iThread, tmp_string);
+    //rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Thread ID: %d FileName: %s:", __func__, Thread_GetCurrent()->iThread, tmp_string);
     // Create tmpfile
     if ((out_file = fopen (tmp_string, "w")) == NULL)
     {
@@ -400,7 +400,7 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         free(tmp_string);
         return TRANSFER_FAIL_LOCAL;
     }
-    
+
     while ((uint64_t)read < block->pId->iLength)
     {
         got = sftp_read(fd, buf, 1024);
@@ -408,14 +408,14 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         {
             rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to read: %s", __func__, ssh_get_error(session->ssh));
             sftp_close(fd);
-			fclose(out_file);
-			remove(tmp_string);
-			free(tmp_string);
+            fclose(out_file);
+            remove(tmp_string);
+            free(tmp_string);
             return TRANSFER_FAIL_DISPATCHER;
         }
         if (got == 0)
             break;
-        fwrite(buf, 1, got, out_file); 
+        fwrite(buf, 1, got, out_file);
         read += got;
     }
     if ((uint64_t)read != block->pId->iLength)
@@ -428,7 +428,7 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         return TRANSFER_FAIL_DISPATCHER;
     }
     sftp_close (fd);
-	fflush(out_file);
+    fflush(out_file);
     fclose(out_file);
     // SSH only creates temp files.
     return Transfer_Prepare_File(block, tmp_string, true) ? TRANSFER_OK : TRANSFER_FAIL_LOCAL;
@@ -441,7 +441,7 @@ static int SSH_Session_KeyCmp(void *a, void *id)
     struct SSH_Session_Key *key = id;
     if ((uuid_compare(ses->key.nuggetId, key->nuggetId) == 0) &&
             (uuid_compare(ses->key.dispatcherId, key->dispatcherId) == 0) &&
-			(ses->key.threadId == key->threadId))
+            (ses->key.threadId == key->threadId))
         return 0;
     return -1;
 }
@@ -455,30 +455,30 @@ static int SSH_Session_Cmp(void *a, void *b)
 
     if ((uuid_compare(sesA->key.nuggetId, sesB->key.nuggetId) == 0) &&
             (uuid_compare(sesA->key.dispatcherId, sesB->key.dispatcherId) == 0) &&
-			(sesA->key.threadId == sesB->key.threadId))
+            (sesA->key.threadId == sesB->key.threadId))
         return 0;
     return -1;
 }
 
-static struct SSH_Session * 
+static struct SSH_Session *
 SSH_Get_Session(uuid_t nuggetId, struct ConnectedEntity *dispatcher)
 {
     struct SSH_Session *session;
     struct SSH_Session_Key key;
     uuid_copy(key.nuggetId, nuggetId);
     uuid_copy(key.dispatcherId, dispatcher->uuidNuggetId);
-	key.threadId = Thread_GetCurrentId();
+    key.threadId = Thread_GetCurrentId();
 
     session = List_Find(sessionList, &key);
     if (session != NULL)
         return session;
-    
+
     if ((session = calloc(1,sizeof(struct SSH_Session))) == NULL)
         return NULL;
 
     uuid_copy(session->key.nuggetId, nuggetId);
     uuid_copy(session->key.dispatcherId, dispatcher->uuidNuggetId);
-	session->key.threadId = key.threadId;
+    session->key.threadId = key.threadId;
     session->dispatcher=dispatcher;
     //session.context
     List_Push(sessionList, session);
@@ -525,7 +525,7 @@ SSH_Verify_Dispatcher(ssh_session session)
     case SSH_SERVER_FILE_NOT_FOUND:
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Could not find known host file, it will be automatically created.", __func__);
         /* fallback to SSH_SERVER_NOT_KNOWN behavior */
-	break;
+    break;
     case SSH_SERVER_NOT_KNOWN:
         hexa = ssh_get_hexa(hash, hlen);
         rzb_log(LOG_ERR,LOG_C_TRANSFER,"%s The server is unknown. Adding the key: %s", __func__, hexa);
@@ -627,7 +627,7 @@ SSH_Check_Session(struct SSH_Session *session)
             sftp_free(session->sftp);
             ssh_disconnect(session->ssh);
             ssh_free(session->ssh);
-            
+
             session->sftp = NULL;
             session->ssh = NULL;
             return false;
@@ -639,24 +639,24 @@ SSH_Check_Session(struct SSH_Session *session)
 #ifdef _MSC_VER
 static char * SSH_GetKnownDispatchers(void)
 {
-	char *path;
-	if ((path = calloc(MAX_PATH, sizeof(char)))== NULL)
-		return NULL;
+    char *path;
+    if ((path = calloc(MAX_PATH, sizeof(char)))== NULL)
+        return NULL;
 
-	SHGetFolderPathA(NULL, 
-		CSIDL_COMMON_APPDATA|CSIDL_FLAG_CREATE, NULL, 0, path);
-	PathAppendA(path, "Sourcefire Inc");
-	CreateDirectoryA(path, NULL);
-	PathAppendA(path, "Razorback");
-	CreateDirectoryA(path, NULL);
-	PathAppendA(path, "known_dispatchers");
-	//rzb_log(LOG_ERR, LOG_C_TRANSFER,"PATH: %s",path);
-	return path;
+    SHGetFolderPathA(NULL,
+        CSIDL_COMMON_APPDATA|CSIDL_FLAG_CREATE, NULL, 0, path);
+    PathAppendA(path, "Sourcefire Inc");
+    CreateDirectoryA(path, NULL);
+    PathAppendA(path, "Razorback");
+    CreateDirectoryA(path, NULL);
+    PathAppendA(path, "known_dispatchers");
+    //rzb_log(LOG_ERR, LOG_C_TRANSFER,"PATH: %s",path);
+    return path;
 }
 #else //_MSC_VER
 static char * SSH_GetKnownDispatchers(void)
 {
-	return (char *)KNOWN_DISPATCHERS;
+    return (char *)KNOWN_DISPATCHERS;
 }
 #endif //_MSC_VER
 

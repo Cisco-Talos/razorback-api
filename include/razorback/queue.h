@@ -24,8 +24,8 @@
  * http://stomp.codehaus.org/Protocol
  */
 
-#ifndef	RAZORBACK_QUEUE_H
-#define	RAZORBACK_QUEUE_H
+#ifndef RAZORBACK_QUEUE_H
+#define RAZORBACK_QUEUE_H
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 #include <razorback/socket.h>
@@ -47,21 +47,21 @@ typedef struct _AMQP_Socket AMQP_Socket_t;
  */
 struct Queue
 {
-    AMQP_Socket_t *pReadSocket;    ///< Socket for consuming messages
-    AMQP_Socket_t *pWriteSocket;   ///< Socket for sending messages
-    char *sName;                   ///< Queue name
-    int iFlags;                    ///< Flags (read/write/etc)
-    Mutex_t *mReadMutex;           ///< Read Lock
-    Mutex_t *mWriteMutex;          ///< Write lock
-    char *sHostname;               ///< Broker hostname
-    char *sVhost;                  ///< Broker virtual host
-    uint32_t iPort;                ///< Broker port
-    char *sUser;                   ///< Broker username
-    char *sPassword;               ///< Broker password
-    bool bUseSSL;                  ///< Use SSL connection to broker
-    uint32_t iPrefetch;            ///< Prefetch count
-    bool bTopic;                   ///< Is this a topic (vs queue)
-    struct Timer *pWriteHeartbeat; ///< Write heartbeat timer
+    AMQP_Socket_t *pReadSocket;     ///< Socket for consuming messages
+    AMQP_Socket_t *pWriteSocket;    ///< Socket for sending messages
+    char *sName;                    ///< Queue name
+    int iFlags;                     ///< Flags (read/write/etc)
+    Mutex_t *mReadMutex;            ///< Read Lock
+    Mutex_t *mWriteMutex;           ///< Write lock
+    char *sHostname;                ///< Broker hostname
+    char *sVhost;                   ///< Broker virtual host
+    uint32_t iPort;                 ///< Broker port
+    char *sUser;                    ///< Broker username
+    char *sPassword;                ///< Broker password
+    bool bUseSSL;                   ///< Use SSL connection to broker
+    uint32_t iPrefetch;             ///< Prefetch count
+    bool bTopic;                    ///< Is this a topic (vs queue)
+    struct Timer *pWriteHeartbeat;  ///< Write heartbeat timer
 };
 
 #define QUEUE_FLAG_SEND 0x01

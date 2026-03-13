@@ -20,8 +20,8 @@
  * Block functions
  */
 
-#ifndef	RAZORBACK_BLOCK_H
-#define	RAZORBACK_BLOCK_H
+#ifndef RAZORBACK_BLOCK_H
+#define RAZORBACK_BLOCK_H
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 

@@ -47,7 +47,7 @@
 
 
 /* controls the amount sent per call to read or write */
-#define	MAXRWSIZE	1024
+#define MAXRWSIZE   1024
 
 static void
 Socket_Destroy (struct Socket *sock)
@@ -62,11 +62,11 @@ Socket_CopyAddress (struct Socket *dest, const struct Socket *source)
 {
     ASSERT (dest->pAddressInfo == NULL);
     if (dest->pAddressInfo != NULL)
-    	return false;
-    
+        return false;
+
     ASSERT (source->pAddressInfo != NULL);
     if (source->pAddressInfo == NULL)
-    	return false;
+        return false;
 
     if ((dest->pAddressInfo = (struct addrinfo *)calloc(1,sizeof(struct addrinfo))) == NULL)
     {
@@ -79,11 +79,11 @@ Socket_CopyAddress (struct Socket *dest, const struct Socket *source)
     dest->pAddressInfo->ai_socktype= source->pAddressInfo->ai_socktype;
     dest->pAddressInfo->ai_protocol= source->pAddressInfo->ai_protocol;
     dest->pAddressInfo->ai_addrlen= source->pAddressInfo->ai_addrlen;
-    
+
     dest->pAddressInfo->ai_next= NULL; // No next when we clone it.
 
     dest->pAddressInfo->ai_canonname = NULL;
-    
+
 
     if ((dest->pAddressInfo->ai_addr = (struct sockaddr *)
          malloc (source->pAddressInfo->ai_addrlen)) == NULL)
@@ -102,9 +102,9 @@ static bool
 SocketAddress_Initialize (struct Socket *sock,
                           const uint8_t * address, uint16_t port)
 {
-	struct addrinfo aiHints;
+    struct addrinfo aiHints;
     char portAsString[32];
-	int ret;
+    int ret;
 
     ASSERT (sock->pAddressInfo == NULL);
     if (sock->pAddressInfo != NULL)
@@ -112,15 +112,15 @@ SocketAddress_Initialize (struct Socket *sock,
         rzb_log(LOG_ERR,LOG_C_NETWORK, "%s: Double address init", __func__);
         return false;
     }
-    
+
     sprintf (portAsString, "%i", port);
     memset (&aiHints, 0, sizeof (struct addrinfo));
-    
+
     aiHints.ai_family = AF_UNSPEC;
     aiHints.ai_socktype = SOCK_STREAM;
     aiHints.ai_flags = AI_PASSIVE | AI_NUMERICSERV;
 
-	aiHints.ai_protocol = IPPROTO_TCP;
+    aiHints.ai_protocol = IPPROTO_TCP;
     ret = getaddrinfo(
             (const char *) address,
             portAsString,
@@ -131,7 +131,7 @@ SocketAddress_Initialize (struct Socket *sock,
     {
 
 #ifdef _MSC_VER
-		rzb_log(LOG_ERR,LOG_C_NETWORK, "Failed to get address info: %S, %d, %S", address, ret, gai_strerror(ret));
+        rzb_log(LOG_ERR,LOG_C_NETWORK, "Failed to get address info: %S, %d, %S", address, ret, gai_strerror(ret));
 #else
         rzb_perror
             (LOG_C_NETWORK,"Failed to get address information in SocketAddress_Initialize: %s");
@@ -150,20 +150,20 @@ Socket_Listen (const unsigned char *sourceAddress, uint16_t port)
     struct Socket *sock;
     int on = 1;
 
-	ASSERT (sourceAddress != NULL);
-	if (sourceAddress == NULL)
-		return NULL;
+    ASSERT (sourceAddress != NULL);
+    if (sourceAddress == NULL)
+        return NULL;
 
-	ASSERT (port > 0);
-	if (port <= 0)
-		return  NULL;
+    ASSERT (port > 0);
+    if (port <= 0)
+        return  NULL;
 
     if ((sock = (struct Socket *)calloc (1, sizeof (struct Socket))) == NULL)
     {
         rzb_log(LOG_ERR,LOG_C_NETWORK, "%s: Failed to allocate new socket", __func__);
         return NULL;
     }
-   
+
     if (!SocketAddress_Initialize
         (sock, sourceAddress, port))
     {
@@ -212,15 +212,15 @@ SO_PUBLIC struct Socket *
 Socket_Listen_Unix (const char *path)
 {
 #ifdef _MSC_VER
-	ASSERT(false);
-	return NULL;
+    ASSERT(false);
+    return NULL;
 #else
     struct Socket *sock;
     struct sockaddr_un *server;
 
     ASSERT (path != NULL);
     if (path == NULL)
-    	return NULL;
+        return NULL;
 
     if((server = calloc(1, sizeof(struct sockaddr_un))) == NULL)
         return NULL;
@@ -288,11 +288,11 @@ Socket_Accept (struct Socket **retSock,
 
     ASSERT (retSock != NULL);
     if (retSock == NULL)
-    	return -1;
+        return -1;
 
     ASSERT (listeningSocket != NULL);
     if (listeningSocket == NULL)
-    	return -1;
+        return -1;
 
     if ((sock = (struct Socket *)calloc(1, sizeof (struct Socket))) == NULL)
     {
@@ -313,7 +313,7 @@ Socket_Accept (struct Socket **retSock,
             (LOG_C_NETWORK,"Socket_Accept failed due to failure of accept call: %s");
         return -1;
     }
-    
+
     {
         // check for error
         if ((sock->iSocket =
@@ -339,10 +339,10 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
     struct Socket *sock = NULL;
 
 #ifdef _MSC_VER
-	DWORD nTimeout = 5000;
+    DWORD nTimeout = 5000;
 #endif
 
-	ASSERT (destinationAddress != NULL);
+    ASSERT (destinationAddress != NULL);
 
     if ((sock = (struct Socket *)calloc (1, sizeof (struct Socket))) == NULL)
     {
@@ -358,11 +358,11 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
                  "%s: failed due to failure of SocketAddress_Initialize", __func__);
         return NULL;
     }
-    
+
     cur = sock->pAddressInfo;
     while (cur != NULL)
     {
-		if ((sock->iSocket = socket (cur->ai_family, cur->ai_socktype, cur->ai_protocol)) ==INVALID_SOCKET)
+        if ((sock->iSocket = socket (cur->ai_family, cur->ai_socktype, cur->ai_protocol)) ==INVALID_SOCKET)
         {
             rzb_perror
                 (LOG_C_NETWORK,"Socket_Connect failed due to failure of socket call: %s");
@@ -373,15 +373,15 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
         setsockopt(sock->iSocket, IPPROTO_TCP, TCP_NODELAY, (char *) &flag, sizeof(int));
 
 #ifdef _MSC_VER
-		setsockopt(sock->iSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&nTimeout, sizeof(int));
+        setsockopt(sock->iSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&nTimeout, sizeof(int));
 #endif
 
-		if (connect(sock->iSocket, cur->ai_addr, cur->ai_addrlen) == SOCKET_ERROR)
+        if (connect(sock->iSocket, cur->ai_addr, cur->ai_addrlen) == SOCKET_ERROR)
         {
             rzb_perror
                 (LOG_C_NETWORK,"Socket_Connect failed due to failure of connect call: %s");
             cur = cur->ai_next;
-			closesocket(sock->iSocket);
+            closesocket(sock->iSocket);
             continue;
         }
         return sock;
@@ -392,18 +392,18 @@ Socket_Connect (const unsigned char *destinationAddress, uint16_t port)
     return NULL;
 }
 
-SO_PUBLIC struct Socket * 
+SO_PUBLIC struct Socket *
 SSL_Socket_Connect ( const uint8_t * destination, uint16_t port)
 {
     struct Socket *sock;
 
     ASSERT (destination != NULL);
     if (destination == NULL)
-    	return NULL;
+        return NULL;
 
     ASSERT(port > 0);
     if (port <= 0)
-    	return NULL;
+        return NULL;
 
     if ((sock = Socket_Connect(destination, port)) == NULL)
     {
@@ -421,7 +421,7 @@ SSL_Socket_Connect ( const uint8_t * destination, uint16_t port)
         Socket_Close(sock);
         return NULL;
     }
-    
+
     if (!SSL_set_fd (sock->sslHandle, sock->iSocket))
     {
         Socket_Close(sock);
@@ -442,7 +442,7 @@ Socket_Close (struct Socket *sock)
 {
     ASSERT (sock != NULL);
     if (sock == NULL)
-    	return;
+        return;
 
     closesocket(sock->iSocket);
 
@@ -467,17 +467,17 @@ Socket_Tx (const struct Socket *sock, size_t size,
     ssize_t sendThisTime = 0;
     ssize_t sentThisTime = 0;
 
-	ASSERT (sock != NULL);
-	if (sock == NULL)
-		return -1;
+    ASSERT (sock != NULL);
+    if (sock == NULL)
+        return -1;
 
     ASSERT (buffer != NULL);
     if (buffer == NULL)
-    	return -1;
+        return -1;
 
     ASSERT (size > 0);
     if (size <= 0)
-    	return -1;
+        return -1;
 
     while ((size - amountSent )> 0)
     {
@@ -501,18 +501,18 @@ Socket_Tx (const struct Socket *sock, size_t size,
         if (sentThisTime == SOCKET_ERROR)
         {
 #ifdef _MSC_VER
-			if (WSAGetLastError() == WSAETIMEDOUT)
-				errno = EINTR;
+            if (WSAGetLastError() == WSAETIMEDOUT)
+                errno = EINTR;
 #endif
-            if (errno != EINTR && errno != EAGAIN) 
+            if (errno != EINTR && errno != EAGAIN)
                 rzb_perror (LOG_C_NETWORK,"Socket_Tx failed due to failure of read call: %s");
 
             return -1;
         }
         else if (sentThisTime == 0)
-        	return amountSent;
+            return amountSent;
         else
-			amountSent += sentThisTime;
+            amountSent += sentThisTime;
     }
 
     return amountSent;
@@ -526,11 +526,11 @@ Socket_Printf (const struct Socket *sock, const char *fmt, ...)
 
     ASSERT(sock != NULL);
     if (sock == NULL)
-    	return false;
+        return false;
 
     ASSERT(fmt != NULL);
     if (fmt == NULL)
-    	return false;
+        return false;
 
     va_start(argp, fmt);
 
@@ -563,17 +563,17 @@ Socket_Rx (const struct Socket * sock, size_t len,
     ssize_t toReadThisTime = 0;
     ssize_t readThisTime = 0;
 
-	ASSERT (sock != NULL);
-	if (sock == NULL)
-		return false;
+    ASSERT (sock != NULL);
+    if (sock == NULL)
+        return false;
 
     ASSERT (len > 0);
     if (len <= 0)
-    	return false;
+        return false;
 
     ASSERT (buffer != NULL);
     if (buffer == NULL)
-    	return false;
+        return false;
 
     while ((len - received) > 0)
     {
@@ -596,18 +596,18 @@ Socket_Rx (const struct Socket * sock, size_t len,
         if (readThisTime == SOCKET_ERROR)
         {
 #ifdef _MSC_VER
-			if (WSAGetLastError() == WSAETIMEDOUT)
-				errno = EINTR;
+            if (WSAGetLastError() == WSAETIMEDOUT)
+                errno = EINTR;
 #endif
-            if (errno != EINTR && errno != EAGAIN) 
+            if (errno != EINTR && errno != EAGAIN)
                 rzb_perror (LOG_C_NETWORK,"Socket_Rx failed due to failure of read call: %s");
 
             return -1;
         }
         else if (readThisTime == 0)
-        	return received;
+            return received;
         else
-			received += readThisTime;
+            received += readThisTime;
     }
 
     return received;

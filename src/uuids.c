@@ -125,8 +125,8 @@ UUID_getNodeByName (const char *p_sName, int p_iType)
     struct UUIDKey key;
     key.type=UUID_KEY_NAME;
     key.name=p_sName;
-    list = UUID_Get_List(p_iType); 
-    
+    list = UUID_Get_List(p_iType);
+
     return (struct UUIDListNode *)List_Find(list, &key);
 }
 
@@ -142,7 +142,7 @@ UUID_getNodeByUUID (uuid_t p_uuid, int p_iType)
     return (struct UUIDListNode *)List_Find(list, &key);
 }
 
-static void 
+static void
 init_NuggetTypes(void)
 {
     uuid_t uuid;
@@ -161,7 +161,7 @@ init_NuggetTypes(void)
     uuid_parse(DEFENSE_UUID,uuid);
     UUID_Add_List_Entry(sg_NuggetTypeList, uuid, NUGGET_TYPE_DEFENSE, DEFENSE_DESC);
 }
-void 
+void
 initUuids (void)
 {
     sg_DataTypeList = UUID_Create_List();
@@ -257,13 +257,13 @@ UUID_Get_UUIDAsString (const char *p_sName, int p_iType)
     return l_sTemp;
 }
 
-static int 
+static int
 UUID_Cmp(void *a, void *b)
 {
     return -1;
 }
 
-static int 
+static int
 UUID_KeyCmp(void *a, void *id)
 {
     struct UUIDListNode *current = (struct UUIDListNode *)a;
@@ -302,11 +302,11 @@ UUID_Clone(void *o)
             return NULL;
         }
     }
-            
+
     return new;
 }
 
-static void 
+static void
 UUID_Destroy(void *a)
 {
     struct UUIDListNode *current = (struct UUIDListNode *)a;
@@ -321,7 +321,7 @@ SO_PUBLIC List_t *
 UUID_Create_List (void)
 {
     List_t *list;
-    list = List_Create(LIST_MODE_GENERIC, 
+    list = List_Create(LIST_MODE_GENERIC,
             UUID_Cmp,
             UUID_KeyCmp,
             UUID_Destroy,

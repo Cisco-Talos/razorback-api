@@ -28,9 +28,9 @@
 /** List node structure.
  */
 struct ListNode {
-    struct ListNode *next;	///< Next node
-    struct ListNode *prev;	///< Previous node
-    void *item;				///< Item data
+    struct ListNode *next;  ///< Next node
+    struct ListNode *prev;  ///< Previous node
+    void *item;             ///< Item data
     atomic_bool del;        ///< Node deletion marker
 };
 
@@ -47,18 +47,18 @@ struct ListNode {
  */
 struct _List {
     struct ListNode * head;         ///< Head node
-    struct ListNode * tail;	        ///< Tail node
+    struct ListNode * tail;         ///< Tail node
     atomic_size_t length;           ///< Number of items in the list
     size_t limit;                   ///< Maximum number of items in the list
-    int mode;						///< Operation mode
-    int (*cmp)(void *, void *);		///< Node comparator
-    int (*keyCmp)(void *, void *);	///< Node key comparator
-    void (*destroy)(void *);		///< Node data destructor
-    void *(*clone)(void *);			///< Node data clone
-    void (*nodeLock)(void *);		///< Node lock function
-    void (*nodeUnlock)(void *);		///< Node unlock function
-    Semaphore_t *sem;			///< List event semaphore.
-    RWLock_t *lock;            ///< RW Lock
+    int mode;                       ///< Operation mode
+    int (*cmp)(void *, void *);     ///< Node comparator
+    int (*keyCmp)(void *, void *);  ///< Node key comparator
+    void (*destroy)(void *);        ///< Node data destructor
+    void *(*clone)(void *);         ///< Node data clone
+    void (*nodeLock)(void *);       ///< Node lock function
+    void (*nodeUnlock)(void *);     ///< Node unlock function
+    Semaphore_t *sem;               ///< List event semaphore.
+    RWLock_t *lock;                 ///< RW Lock
 };
 
 
@@ -71,9 +71,9 @@ static struct ListNode * List_Stack_Pop(List_t *list);
 static struct ListNode * List_Queue_Pop(List_t *list);
 
 SO_PUBLIC List_t *
-List_Create(int mode, 
-        int (*cmp)(void *, void *), 
-        int (*keyCmp)(void *, void *), 
+List_Create(int mode,
+        int (*cmp)(void *, void *),
+        int (*keyCmp)(void *, void *),
         void (*destroy)(void *),
         void *(*clone)(void *),
         void (*nodeLock)(void *),
@@ -140,7 +140,7 @@ List_SetLimit(List_t *list, size_t limit) {
     RWLock_Unlock(list->lock);
 }
 
-SO_PUBLIC void * 
+SO_PUBLIC void *
 List_Find(List_t *list, void *id) {
     struct FindData data;
     ASSERT(list != NULL);
@@ -164,7 +164,7 @@ List_Find(List_t *list, void *id) {
     return data.ret;
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 List_Push(List_t *list, void *item) {
     struct ListNode *node;
     bool insert_result = false;
@@ -445,7 +445,7 @@ List_Destroy(List_t *list) {
         rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
         return;
     }
-    
+
     List_Clear(list);
     RWLock_Destroy(list->lock);
     free(list);
@@ -480,11 +480,11 @@ List_Clone (List_t *source) {
         rzb_log(LOG_ERR, LOG_C_LIST, "%s: source list clone function is NULL", __func__);
         return NULL;
     }
-    
-    dest = List_Create(source->mode, 
-            source->cmp, 
-            source->keyCmp, 
-            source->destroy, 
+
+    dest = List_Create(source->mode,
+            source->cmp,
+            source->keyCmp,
+            source->destroy,
             source->clone,
             source->nodeLock,
             source->nodeUnlock);
@@ -595,7 +595,7 @@ List_Stack_Pop(List_t *list)
     return ret;
 }
 
-static struct 
+static struct
 ListNode * List_Queue_Pop(List_t *list) {
     struct ListNode *ret;
     ASSERT(list != NULL);

@@ -39,7 +39,7 @@ static struct MessageHandler handler = {
 };
 
 // core.h
-void 
+void
 Message_CnC_RegReq_Init(void)
 {
     Message_Register_Handler(&handler);
@@ -75,7 +75,7 @@ MessageRegistrationRequest_Initialize (
             RegistrationRequest_Destroy(msg);
             return NULL;
         }
-    } 
+    }
     else
         message->pDataTypeList = NULL;
 
@@ -125,7 +125,7 @@ RegistrationRequest_Deserialize(struct Message *message)
     struct MessageRegistrationRequest *regReq;
     json_object *msg, *object, *item;
     const char *str;
-	size_t i;
+    size_t i;
 
     ASSERT(message != NULL);
     if (message == NULL) {
@@ -145,7 +145,7 @@ RegistrationRequest_Deserialize(struct Message *message)
                  "%s: failed due to failure of json_tokener_parse", __func__);
         return false;
     }
- 
+
     regReq = message->message;
 
     if (!JsonBuffer_Get_UUID(msg, "Nugget_Type", regReq->uuidNuggetType)) {
@@ -195,7 +195,7 @@ RegistrationRequest_Serialize(struct Message *message)
     json_object *msg, *object, *item;
     const char * wire;
     char uuid[UUID_STRING_LENGTH];
-	size_t i;
+    size_t i;
     ASSERT(message != NULL);
     if (message == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE,

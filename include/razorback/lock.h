@@ -30,8 +30,8 @@
 extern "C" {
 #endif
 
-#define MUTEX_MODE_NORMAL 		0	///< None recursively lockable mutex
-#define MUTEX_MODE_RECURSIVE 	1	///< Recursively lockable mutex
+#define MUTEX_MODE_NORMAL       0   ///< None recursively lockable mutex
+#define MUTEX_MODE_RECURSIVE    1   ///< Recursively lockable mutex
 
 
 

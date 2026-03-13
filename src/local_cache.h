@@ -38,12 +38,12 @@ typedef enum
     GOODHASH,
     BADHASH,
     URL,
-	ALL
+    ALL
 } CacheType;
 
-typedef enum 
+typedef enum
 {
-	FULL
+    FULL
 } ClearMethod;
 
 typedef struct _ENTRY
@@ -52,9 +52,9 @@ typedef struct _ENTRY
     struct _ENTRY *prev;
     LISTTYPE listtype;
     unsigned size;
-	uint8_t *key;
-	uint32_t sfflags;
-	uint32_t entflags;
+    uint8_t *key;
+    uint32_t sfflags;
+    uint32_t entflags;
 } ENTRY;
 
 typedef struct _CACHE

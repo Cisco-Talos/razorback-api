@@ -16,8 +16,8 @@
  *  MA 02110-1301, USA.
  */
 
-#ifndef	RAZORBACK_API_INTERNAL_H
-#define	RAZORBACK_API_INTERNAL_h
+#ifndef RAZORBACK_API_INTERNAL_H
+#define RAZORBACK_API_INTERNAL_h
 
 #include <razorback/types.h>
 #ifdef __cplusplus

@@ -48,7 +48,7 @@ StringList_Size (List_t * list)
     return size + sizeof (uint32_t);
 }
 
-static int 
+static int
 String_KeyCmp(void *a, void *id)
 {
     char *item = a;
@@ -69,7 +69,7 @@ String_Cmp(void *a, void *b)
     return strcmp(iA, iB);
 }
 
-static void 
+static void
 String_Delete(void *a)
 {
     char *item = a;
@@ -84,21 +84,21 @@ String_Clone(void *o)
     if ((item = calloc(strlen(orig)+1, sizeof(char))) == NULL)
         return NULL;
     strcpy (item, orig);
-    return item; 
+    return item;
 }
 
 
 SO_PUBLIC List_t *
 StringList_Create (void)
 {
-    return List_Create(LIST_MODE_GENERIC, 
+    return List_Create(LIST_MODE_GENERIC,
             String_Cmp,
             String_KeyCmp,
             String_Delete,
             String_Clone, NULL, NULL);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 StringList_Add (List_t *p_pList, const char *string)
 {
     char *new;

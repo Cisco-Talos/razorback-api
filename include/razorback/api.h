@@ -45,43 +45,43 @@ extern "C" {
  */
 struct RazorbackInspectionHooks
 {
-    uint8_t (*processBlock) (struct Block *, struct EventId *, List_t *, void *);    	///< FP to inspection handler
-    bool (*processDeferredList) (struct DeferredList *);            						///< FP to pending items
-    bool (*initThread) (void  **);															///< FP to per thread init function
-    void (*cleanupThread) (void *);															///< FP to per thread cleanup function
+    uint8_t (*processBlock) (struct Block *, struct EventId *, List_t *, void *);  ///< FP to inspection handler
+    bool (*processDeferredList) (struct DeferredList *);                           ///< FP to pending items
+    bool (*initThread) (void  **);                                                 ///< FP to per thread init function
+    void (*cleanupThread) (void *);                                                ///< FP to per thread cleanup function
 };
 
 /** Output nugget hooks
  */
 struct RazorbackOutputHooks
 {
-    struct Queue *queue;											///< reserved for in api use.
-    const char *pattern;											///<
-    uint32_t messageType;											///< Type of message requested.
-    bool (*handleAlertPrimary)(struct MessageAlertPrimary *log);	///< FP to handle primary alerts
-    bool (*handleAlertChild)(struct MessageAlertChild *log);		///< FP to handle child alerts
-    bool (*handleEvent)(struct MessageOutputEvent *log);			///< FP to handle events
-    bool (*handleLog)(struct MessageOutputLog *log);				///< FP to handle log messages
+    struct Queue *queue;                                          ///< reserved for in api use.
+    const char *pattern;                                          ///<
+    uint32_t messageType;                                         ///< Type of message requested.
+    bool (*handleAlertPrimary)(struct MessageAlertPrimary *log);  ///< FP to handle primary alerts
+    bool (*handleAlertChild)(struct MessageAlertChild *log);      ///< FP to handle child alerts
+    bool (*handleEvent)(struct MessageOutputEvent *log);          ///< FP to handle events
+    bool (*handleLog)(struct MessageOutputLog *log);              ///< FP to handle log messages
 };
 
 /** Command and control hooks
  */
 struct RazorbackCommandAndControlHooks
 {
-    bool (*processRegReqMessage) (struct Message *);		///< Registration Request Handler
-    bool (*processRegRespMessage) (struct Message *);		///< Registration Response Handler
-    bool (*processRegErrMessage) (struct Message *);		///< Registration Error Handler
-    bool (*processConfUpdateMessage) (struct Message *);	///< Configuration Update Handler
-    bool (*processConfAckMessage) (struct Message *);		///< Configuration Acknowledgment Handler
-    bool (*processConfErrMessage) (struct Message *);		///< Configuration Error Handler
-    bool (*processPauseMessage) (struct Message *);			///< Pause Handler
-    bool (*processPausedMessage) (struct Message *);		///< Paused Handler
-    bool (*processGoMessage) (struct Message *);			///< Go Handler
-    bool (*processRunningMessage) (struct Message *);		///< Running Handler
-    bool (*processTermMessage) (struct Message *);			///< Terminate Handler
-    bool (*processByeMessage) (struct Message *);			///< Bye Handler
-    bool (*processHelloMessage) (struct Message *);			///< Hello Handler
-    bool (*processReRegMessage) (struct Message *);			///< Re-Registration Handler
+    bool (*processRegReqMessage) (struct Message *);      ///< Registration Request Handler
+    bool (*processRegRespMessage) (struct Message *);     ///< Registration Response Handler
+    bool (*processRegErrMessage) (struct Message *);      ///< Registration Error Handler
+    bool (*processConfUpdateMessage) (struct Message *);  ///< Configuration Update Handler
+    bool (*processConfAckMessage) (struct Message *);     ///< Configuration Acknowledgment Handler
+    bool (*processConfErrMessage) (struct Message *);     ///< Configuration Error Handler
+    bool (*processPauseMessage) (struct Message *);       ///< Pause Handler
+    bool (*processPausedMessage) (struct Message *);      ///< Paused Handler
+    bool (*processGoMessage) (struct Message *);          ///< Go Handler
+    bool (*processRunningMessage) (struct Message *);     ///< Running Handler
+    bool (*processTermMessage) (struct Message *);        ///< Terminate Handler
+    bool (*processByeMessage) (struct Message *);         ///< Bye Handler
+    bool (*processHelloMessage) (struct Message *);       ///< Hello Handler
+    bool (*processReRegMessage) (struct Message *);       ///< Re-Registration Handler
 };
 
 
@@ -92,26 +92,26 @@ struct RazorbackCommandAndControlHooks
  */
 struct RazorbackContext
 {
-    uuid_t uuidNuggetId;									///< Nugget UUID
-    uuid_t uuidNuggetType;									///< Nugget Type UUID
-    uuid_t uuidApplicationType;								///< Nugget App Type UUID
-    char *sNuggetName;										///< Nugget Name
-    uint32_t iFlags;										///< Context Flags
-    uint8_t locality;										///< Nugget Locality
-    struct RazorbackCommandAndControlHooks *pCommandHooks;	///< Command And Control Hooks
-    Semaphore_t *regSem;								///< Registration semaphore
-    bool regOk;												///< Registration status
-	void *userData;											///< Context User Data
+    uuid_t uuidNuggetId;                                    ///< Nugget UUID
+    uuid_t uuidNuggetType;                                  ///< Nugget Type UUID
+    uuid_t uuidApplicationType;                             ///< Nugget App Type UUID
+    char *sNuggetName;                                      ///< Nugget Name
+    uint32_t iFlags;                                        ///< Context Flags
+    uint8_t locality;                                       ///< Nugget Locality
+    struct RazorbackCommandAndControlHooks *pCommandHooks;  ///< Command And Control Hooks
+    Semaphore_t *regSem;                                    ///< Registration semaphore
+    bool regOk;                                             ///< Registration status
+    void *userData;                                         ///< Context User Data
 
-	/** Inspector specific data.
-	 */
+    /** Inspector specific data.
+     */
     struct Inspector
     {
-		struct RazorbackInspectionHooks *hooks;				///< Inspection Hooks
-		uint32_t dataTypeCount;								///< Inspection Data Type Count
-		uuid_t *dataTypeList;								///< Inspection Data Type UUID Array
-		struct ThreadPool *threadPool;						///< Inspection Thread Pool
-		struct Queue *judgmentQueue;						///< Judgment queue structure
+        struct RazorbackInspectionHooks *hooks;  ///< Inspection Hooks
+        uint32_t dataTypeCount;                  ///< Inspection Data Type Count
+        uuid_t *dataTypeList;                    ///< Inspection Data Type UUID Array
+        struct ThreadPool *threadPool;           ///< Inspection Thread Pool
+        struct Queue *judgmentQueue;             ///< Judgment queue structure
 
     } inspector;
 
@@ -119,18 +119,18 @@ struct RazorbackContext
      */
     struct Output
     {
-		List_t *threads;								///< Output Thread List
+        List_t *threads;  ///< Output Thread List
     } output;
 
     /** Dispatcher specific data.
      */
     struct Dispatcher
     {
-    	uint32_t flags;										///< Dispatcher Flags
-    	uint8_t priority;									///< Dispatcher Priority
-    	uint16_t port;										///< Dispatcher Transfer Port
-    	uint8_t protocol;									///< Dispatcher Transfer Protocol
-    	List_t *addressList;							///< Dispatcher Transfer Address List
+        uint32_t flags;       ///< Dispatcher Flags
+        uint8_t priority;     ///< Dispatcher Priority
+        uint16_t port;        ///< Dispatcher Transfer Port
+        uint8_t protocol;     ///< Dispatcher Transfer Protocol
+        List_t *addressList;  ///< Dispatcher Transfer Address List
     } dispatcher;
 };
 

@@ -44,7 +44,7 @@ static struct MessageHandler handler = {
 };
 
 // core.h
-void 
+void
 Message_CnC_ConfigUpdate_Init(void) {
     Message_Register_Handler(&handler);
 }
@@ -97,7 +97,7 @@ MessageConfigurationUpdate_Initialize (
         return false;
     }
 
-    
+
     msg->destroy = ConfigUpdate_Destroy;
     msg->deserialize = ConfigUpdate_Deserialize;
     msg->serialize = ConfigUpdate_Serialize;
@@ -131,7 +131,7 @@ ConfigUpdate_Deserialize(struct Message *message)
 {
     struct MessageConfigurationUpdate *configUpdate;
     json_object *msg;
-    //uint32_t size; 
+    //uint32_t size;
     ASSERT(message != NULL);
     if (message == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);
@@ -147,7 +147,7 @@ ConfigUpdate_Deserialize(struct Message *message)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to parse JSON", __func__);
         return false;
     }
-    
+
     configUpdate = message->message;
     if (!JsonBuffer_Get_UUIDList(msg, "NTLV_Types", &configUpdate->ntlvTypes)) {
         json_object_put(msg);
@@ -178,12 +178,12 @@ ConfigUpdate_Serialize(struct Message *message) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: message is NULL", __func__);
         return false;
     }
-    
+
     if ((msg = json_object_new_object()) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create JSON object", __func__);
         return false;
     }
-   
+
     configUpdate = message->message;
 
     if (!JsonBuffer_Put_UUIDList(msg, "NTLV_Types", configUpdate->ntlvTypes)) {

@@ -117,7 +117,7 @@ BlockPool_GetItemCount(void) {
     return List_Length(sg_bpList);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 BlockPool_SetItemDataType(struct BlockPoolItem *item, char * name) {
     if (!UUID_Get_UUID(name, UUID_TYPE_DATA_TYPE, item->pEvent->pBlock->pId->uuidDataType)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid data type name", __func__);
@@ -128,7 +128,7 @@ BlockPool_SetItemDataType(struct BlockPoolItem *item, char * name) {
 
 SO_PUBLIC bool
 BlockPool_AddData_FromFile(struct BlockPoolItem *item, char *fileName, bool tempFile){
-	struct BlockPoolData *dataBlock;
+    struct BlockPoolData *dataBlock;
     struct stat sb;
 
     ASSERT (item != NULL);
@@ -210,14 +210,14 @@ BlockPool_AddData_FromFile(struct BlockPoolItem *item, char *fileName, bool temp
 
     BlockPool_Item_Unlock(item);
 
-    return true; 
+    return true;
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 BlockPool_AddData (struct BlockPoolItem *item, uint8_t * data,
                                uint32_t length, int flags)
 {
-	struct BlockPoolData *l_pData;
+    struct BlockPoolData *l_pData;
 
     ASSERT (item != NULL);
     if (item == NULL) {
@@ -236,12 +236,12 @@ BlockPool_AddData (struct BlockPoolItem *item, uint8_t * data,
 
     Mutex_Lock(sg_sizeMutex);
     if ((Config_getBlockPoolMaxSize() > 0) &&
-    		((sg_size +length )>= Config_getBlockPoolMaxSize())) {
-		rzb_log(LOG_ERR, LOG_C_CORE, "%s: Block pool global size limit exceeded", __func__);
+            ((sg_size +length )>= Config_getBlockPoolMaxSize())) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Block pool global size limit exceeded", __func__);
         Mutex_Unlock(sg_sizeMutex);
         return false;
     }
-	sg_size +=length;
+    sg_size +=length;
     Mutex_Unlock(sg_sizeMutex);
 
     BlockPool_Item_Lock(item);
@@ -287,12 +287,12 @@ BlockPool_AddData (struct BlockPoolItem *item, uint8_t * data,
         item->pDataTail = l_pData;
     }
 
-	BlockPool_Item_Unlock(item);
+    BlockPool_Item_Unlock(item);
 
     return true;
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 BlockPool_FinalizeItem (struct BlockPoolItem *p_pItem) {
     ASSERT (p_pItem->iStatus == BLOCK_POOL_STATUS_COLLECTING);
 
@@ -373,7 +373,7 @@ BlockPool_DestroyItemData(struct BlockPoolItem *p_pItem) {
     free(p_pItem);
 }
 
-SO_PUBLIC bool 
+SO_PUBLIC bool
 BlockPool_DestroyItem (struct BlockPoolItem *p_pItem) {
     ASSERT(p_pItem != NULL);
     if (p_pItem == NULL) {
@@ -397,7 +397,7 @@ BlockPool_ForEachItem(int (*function) (struct BlockPoolItem *, void *), void *us
     List_ForEach(sg_bpList, (int (*)(void *, void *))function, userData);
 }
 
-void 
+void
 BlockPool_SetStatus(struct BlockPoolItem *p_pItem, uint32_t p_iStatus) {
     ASSERT(p_pItem != NULL);
     if (p_pItem == NULL) {
@@ -409,7 +409,7 @@ BlockPool_SetStatus(struct BlockPoolItem *p_pItem, uint32_t p_iStatus) {
         ( p_pItem->iStatus & BLOCK_POOL_FLAG_MASK);
 }
 
-uint32_t 
+uint32_t
 BlockPool_GetStatus(struct BlockPoolItem *p_pItem) {
     ASSERT(p_pItem != NULL);
     if (p_pItem == NULL) {
@@ -420,7 +420,7 @@ BlockPool_GetStatus(struct BlockPoolItem *p_pItem) {
     return (p_pItem->iStatus & BLOCK_POOL_STATUS_MASK );
 }
 
-void 
+void
 BlockPool_SetFlags(struct BlockPoolItem *p_pItem, uint32_t p_iFlags) {
     ASSERT(p_pItem != NULL);
     if (p_pItem == NULL) {
