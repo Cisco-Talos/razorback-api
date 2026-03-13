@@ -328,7 +328,11 @@ HTTP_Try_Fetch(void *i, void*ud)
 
 
     rewind(status->fd);
-    ftruncate(fileno(status->fd), 0);
+    if (ftruncate(fileno(status->fd), 0) != 0) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: Failed to truncate fetch file", __func__);
+        status->status = TRANSFER_FAIL_LOCAL;
+        return LIST_EACH_OK;
+    }
     status->size = 0;
     if (asprintf(&url, "http://%s:%d/%c/%c/%c/%c/%s",
                  address,
