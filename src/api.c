@@ -57,6 +57,7 @@ void initApi(void) {
             Context_Cmp,
             Context_KeyCmp,
             NULL, NULL, NULL, NULL);
+}
 
 static void
 Razorback_Remove_Context(struct RazorbackContext *context) {
@@ -494,4 +495,3 @@ Context_Cmp(void *a, void *b) {
         return 0;
     return uuid_compare(cA->uuidNuggetId, cB->uuidNuggetId);
 }
-
