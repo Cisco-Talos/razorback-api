@@ -367,23 +367,27 @@ static int get_clock(uint32_t *clock_high, uint32_t *clock_low,
 		last.tv_sec--;
 	}
 
-try_again:
-	gettimeofday(&tv, 0);
-	if ((tv.tv_sec < last.tv_sec) ||
-	    ((tv.tv_sec == last.tv_sec) &&
-	     (tv.tv_usec < last.tv_usec))) {
-		clock_seq = (clock_seq+1) & 0x3FFF;
-		adjustment = 0;
-		last = tv;
-	} else if ((tv.tv_sec == last.tv_sec) &&
-	    (tv.tv_usec == last.tv_usec)) {
-		if (adjustment >= MAX_ADJUSTMENT)
-			goto try_again;
-		adjustment++;
-	} else {
-		adjustment = 0;
-		last = tv;
-	}
+		for (;;) {
+			gettimeofday(&tv, 0);
+			if ((tv.tv_sec < last.tv_sec) ||
+			    ((tv.tv_sec == last.tv_sec) &&
+			     (tv.tv_usec < last.tv_usec))) {
+				clock_seq = (clock_seq+1) & 0x3FFF;
+				adjustment = 0;
+				last = tv;
+				break;
+			}
+			if ((tv.tv_sec == last.tv_sec) &&
+			    (tv.tv_usec == last.tv_usec)) {
+				if (adjustment >= MAX_ADJUSTMENT)
+					continue;
+				adjustment++;
+			} else {
+				adjustment = 0;
+				last = tv;
+			}
+			break;
+		}
 
 	clock_reg = tv.tv_usec*10 + adjustment;
 	clock_reg += ((uint64_t) tv.tv_sec)*10000000;
@@ -424,15 +428,17 @@ static ssize_t read_all(int fd, char *buf, size_t count)
 	ssize_t c = 0;
 	int tries = 0;
 
-	memset(buf, 0, count);
-	while (count > 0) {
-		ret = read(fd, buf, count);
-		if (ret <= 0) {
-			if ((errno == EAGAIN || errno == EINTR || ret == 0) &&
-			    (tries++ < 5))
-				continue;
-			return c ? c : -1;
-		}
+		memset(buf, 0, count);
+		while (count > 0) {
+			ret = read(fd, buf, count);
+			if (ret <= 0) {
+				int retryable = (errno == EAGAIN || errno == EINTR || ret == 0);
+				if (retryable && tries < 5) {
+					tries++;
+					continue;
+				}
+				return c ? c : -1;
+			}
 		if (ret > 0)
 			tries = 0;
 		count -= ret;
@@ -496,20 +502,21 @@ static int get_uuid_via_daemon(int op, uuid_t out, int *num)
 	srv_addr.sun_family = AF_UNIX;
 	strcpy(srv_addr.sun_path, UUIDD_SOCKET_PATH);
 
-	if (connect(s, (const struct sockaddr *) &srv_addr,
-		    sizeof(struct sockaddr_un)) < 0) {
-		if (access_ret == -2)
-			access_ret = access(uuidd_path, X_OK);
-		if (access_ret == 0)
-			access_ret = stat(uuidd_path, &st);
-		if (access_ret == 0 && (st.st_mode & (S_ISUID | S_ISGID)) == 0)
-			access_ret = access(UUIDD_DIR, W_OK);
-		if (access_ret == 0 && start_attempts++ < 5) {
-			if ((pid = fork()) == 0) {
-				close_all_fds();
-				execl(uuidd_path, "uuidd", "-qT", "300",
-				      (char *) NULL);
-				exit(1);
+		if (connect(s, (const struct sockaddr *) &srv_addr,
+			    sizeof(struct sockaddr_un)) < 0) {
+			if (access_ret == -2)
+				access_ret = access(uuidd_path, X_OK);
+			if (access_ret == 0)
+				access_ret = stat(uuidd_path, &st);
+			if (access_ret == 0 && (st.st_mode & (S_ISUID | S_ISGID)) == 0)
+				access_ret = access(UUIDD_DIR, W_OK);
+			if (access_ret == 0 && start_attempts < 5) {
+				start_attempts++;
+				if ((pid = fork()) == 0) {
+					close_all_fds();
+					execl(uuidd_path, "uuidd", "-qT", "300",
+					      (char *) NULL);
+					exit(1);
 			}
 			(void) waitpid(pid, 0, 0);
 			if (connect(s, (const struct sockaddr *) &srv_addr,

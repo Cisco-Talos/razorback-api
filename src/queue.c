@@ -381,7 +381,7 @@ Queue_Create_With_Host (const char * p_sQueueName,
                         uint32_t p_iPrefetch
 )
 {
-    struct Queue *l_pQueue;
+    struct Queue *l_pQueue = NULL;
 
     ASSERT (p_sQueueName != NULL);
 
@@ -402,15 +402,16 @@ Queue_Create_With_Host (const char * p_sQueueName,
     if ((l_pQueue->sName = (char *)calloc(strlen((char *)p_sQueueName)+1, sizeof(char))) == NULL)
     {
         rzb_log (LOG_ERR,LOG_C_STOMP, "%s: Failed to alloc new queue name", __func__);
-        free(l_pQueue);
-        return NULL;
+        goto error;
     }
     strcpy(l_pQueue->sName, (char *)p_sQueueName);
-    if (((l_pQueue->mReadMutex = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL) ||
-        ((l_pQueue->mWriteMutex = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL))
+    if ((l_pQueue->mReadMutex = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL)
     {
-        free(l_pQueue);
-        return NULL;
+        goto error;
+    }
+    if ((l_pQueue->mWriteMutex = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL)
+    {
+        goto error;
     }
     l_pQueue->iFlags = p_iFlags;
     if (!Queue_Connect(l_pQueue))
@@ -421,6 +422,18 @@ Queue_Create_With_Host (const char * p_sQueueName,
         return NULL;
     }
     return l_pQueue;
+
+error:
+    if (l_pQueue != NULL)
+    {
+        if (l_pQueue->mReadMutex != NULL)
+            Mutex_Destroy(l_pQueue->mReadMutex);
+        if (l_pQueue->mWriteMutex != NULL)
+            Mutex_Destroy(l_pQueue->mWriteMutex);
+        free(l_pQueue->sName);
+        free(l_pQueue);
+    }
+    return NULL;
 }
 
 SO_PUBLIC void

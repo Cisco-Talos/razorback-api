@@ -49,9 +49,28 @@
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
+#include <string.h>
 #include <time.h>
 
 #include "uuidP.h"
+
+static const char *
+format_time_string(time_t value, char *buffer, size_t size)
+{
+#ifdef _MSC_VER
+	if (ctime_s(buffer, size, &value) != 0)
+		return "invalid time";
+#else
+	if (ctime_r(&value, buffer) == NULL)
+		return "invalid time";
+#endif
+	if (buffer[0] != '\0') {
+		size_t len = strlen(buffer);
+		if (len > 0 && buffer[len - 1] == '\n')
+			buffer[len - 1] = '\0';
+	}
+	return buffer;
+}
 
 SO_PUBLIC time_t uuid_time(const uuid_t uu, struct timeval *ret_tv)
 {
@@ -122,6 +141,7 @@ main(int argc, char **argv)
 	uuid_t		buf;
 	time_t		time_reg;
 	struct timeval	tv;
+	char		time_buf[32];
 	int		type, variant;
 
 	if (argc != 2) {
@@ -164,7 +184,7 @@ main(int argc, char **argv)
 		       "decoding will likely not work!\n");
 	}
 	printf("UUID time is: (%ld, %ld): %s\n", tv.tv_sec, tv.tv_usec,
-	       ctime(&time_reg));
+	       format_time_string(time_reg, time_buf, sizeof(time_buf)));
 
 	return 0;
 }
