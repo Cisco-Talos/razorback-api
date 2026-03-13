@@ -70,6 +70,9 @@ typedef struct
     bool (*parseString) (const char *, conf_int_t *);  ///< Call back to convert the passed string into an int.
 } RZBConfCallBack;
 
+/**
+ * Configuration array binding.
+ */
 struct ConfArray
 {
     RZB_CONF_KEY_TYPE_t type;
@@ -88,6 +91,9 @@ typedef struct
     void *callback;            ///< Callback structure.
 } RZBConfKey_t;
 
+/**
+ * Configuration list binding.
+ */
 struct ConfList
 {
     void **data;
@@ -95,23 +101,32 @@ struct ConfList
     RZBConfKey_t *items;
 };
 
-/** Read a component configuration file.
- * @param *configDir the dir to look in
- * @param *configFile the file read
- * @param *config the structure of the file.
- * @return true on success false on error
+/**
+ * Read a component configuration file.
+ * @param configDir the dir to look in.
+ * @param configFile the file read.
+ * @param config the structure of the file.
+ * @return true on success false on error.
  */
-SO_PUBLIC extern bool readMyConfig (const char *configDir, const char *configFile,
-                          RZBConfKey_t * config);
+SO_PUBLIC extern bool readMyConfig(
+    const char *configDir,
+    const char *configFile,
+    RZBConfKey_t * config
+);
 
-/** Generate the path to the provided config file
+/**
+ * Generate the path to the provided config file.
+ * @param configDir Configuration directory path.
+ * @param configFile Configuration file name.
+ * @return Allocated string on success, or NULL on failure.
  */
-SO_PUBLIC extern char * getConfigFile (const char *configDir, const char *configFile);
+SO_PUBLIC extern char * getConfigFile(const char *configDir, const char *configFile);
 
-/** Clean the memory allocated by ::readApiConfig and ::readMyConfig
- *
+/**
+ * Clean the memory allocated by ::readApiConfig and ::readMyConfig.
+ * @return No return value.
  */
-SO_PUBLIC extern void rzbConfCleanUp (void);
+SO_PUBLIC extern void rzbConfCleanUp(void);
 
 #ifdef __cplusplus
 }

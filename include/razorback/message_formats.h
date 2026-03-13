@@ -26,6 +26,9 @@
 #include <razorback/types.h>
 
 
+/**
+ * Message container.
+ */
 struct Message
 {
     uint32_t type;                          ///< Message type

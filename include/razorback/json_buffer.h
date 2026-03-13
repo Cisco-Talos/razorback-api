@@ -32,109 +32,486 @@
 extern "C" {
 #endif
 
-SO_PUBLIC extern bool JsonBuffer_Put_bool (json_object * parent,
-                                              const char *name, bool p_iValue);
-SO_PUBLIC extern bool JsonBuffer_Put_uint8_t (json_object * parent,
-                                    const char *name, uint8_t p_iValue);
+/**
+ * Add a boolean value to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_iValue Value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_bool(json_object * parent, const char *name, bool p_iValue);
 
-SO_PUBLIC extern bool JsonBuffer_Put_uint16_t (json_object * parent, const char * name, uint16_t p_iValue);
+/**
+ * Add an 8-bit unsigned integer value to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_iValue Value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_uint8_t(
+    json_object * parent,
+    const char *name,
+    uint8_t p_iValue
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_uint32_t (json_object * parent, const char * name, uint32_t p_iValue);
+/**
+ * Add a 16-bit unsigned integer value to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_iValue Value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_uint16_t(
+    json_object * parent,
+    const char * name,
+    uint16_t p_iValue
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_uint64_t (json_object * parent, const char * name, uint64_t p_iValue);
+/**
+ * Add a 32-bit unsigned integer value to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_iValue Value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_uint32_t(
+    json_object * parent,
+    const char * name,
+    uint32_t p_iValue
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_ByteArray (json_object * parent, const char *name,
-                                      uint32_t p_iSize,
-                                      const uint8_t * p_pByteArray);
+/**
+ * Add a 64-bit unsigned integer value to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_iValue Value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_uint64_t(
+    json_object * parent,
+    const char * name,
+    uint64_t p_iValue
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_String (json_object * parent, const char * name,
-                                   const char * p_sString);
+/**
+ * Add a byte array to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_iSize Size value.
+ * @param p_pByteArray Byte array value.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_ByteArray(
+    json_object * parent,
+    const char *name,
+    uint32_t p_iSize,
+    const uint8_t * p_pByteArray
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_bool (json_object * parent, const char * name, bool * p_pValue);
-SO_PUBLIC extern bool JsonBuffer_Get_uint8_t (json_object * parent, const char * name, uint8_t * p_pValue);
+/**
+ * Add a string value to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_sString String value.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_String(
+    json_object * parent,
+    const char * name,
+    const char * p_sString
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_uint16_t (json_object * parent, const char * name,
-                                     uint16_t * p_pValue);
+/**
+ * Get a boolean value from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pValue Value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_bool(json_object * parent, const char * name, bool * p_pValue);
 
-SO_PUBLIC extern bool JsonBuffer_Get_uint32_t (json_object * parent, const char *name,
-                                     uint32_t * p_pValue);
+/**
+ * Get an 8-bit unsigned integer value from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pValue Value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_uint8_t(
+    json_object * parent,
+    const char * name,
+    uint8_t * p_pValue
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_uint64_t (json_object * parent, const char *name,
-                                     uint64_t * p_pValue);
+/**
+ * Get a 16-bit unsigned integer value from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pValue Value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_uint16_t(
+    json_object * parent,
+    const char * name,
+    uint16_t * p_pValue
+);
 
-SO_PUBLIC extern char *JsonBuffer_Get_String (json_object * parent, const char * name);
+/**
+ * Get a 32-bit unsigned integer value from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pValue Value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_uint32_t(
+    json_object * parent,
+    const char *name,
+    uint32_t * p_pValue
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_ByteArray (json_object * parent, const char * name,
-                                      uint32_t * p_iSize,
-                                      uint8_t ** p_pByteArray);
+/**
+ * Get a 64-bit unsigned integer value from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pValue Value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_uint64_t(
+    json_object * parent,
+    const char *name,
+    uint64_t * p_pValue
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_UUID (json_object * parent, const char *name, uuid_t p_uuid);
-SO_PUBLIC extern bool JsonBuffer_Put_UUID (json_object * parent, const char * name, uuid_t p_uuid);
+/**
+ * Get a string value from a JSON object.
+ * @param parent Parent object.
+ * @param name Name of the JSON field to read.
+ * @return Allocated string on success, or NULL on failure.
+ */
+SO_PUBLIC extern char * JsonBuffer_Get_String(json_object * parent, const char * name);
 
-SO_PUBLIC extern bool JsonBuffer_Put_NTLVList (json_object * parent, const char * name,
-                                     List_t *p_pList);
+/**
+ * Get a byte array from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_iSize Size value.
+ * @param p_pByteArray Destination for byte array.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_ByteArray(
+    json_object * parent,
+    const char * name,
+    uint32_t * p_iSize,
+    uint8_t ** p_pByteArray
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_NTLVList (json_object * parent, const char * name,
-                                     List_t **p_pList);
+/**
+ * Get a UUID value from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_uuid Destination UUID value.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_UUID(json_object * parent, const char *name, uuid_t p_uuid);
 
-SO_PUBLIC extern bool JsonBuffer_Put_Hash (json_object * parent, const char * name,
-                                 const struct Hash *p_pHash);
+/**
+ * Add a UUID value to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_uuid UUID value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_UUID(json_object * parent, const char * name, uuid_t p_uuid);
 
-SO_PUBLIC extern bool JsonBuffer_Get_Hash (json_object * parent, const char *name, struct Hash **p_pHash);
+/**
+ * Add an NTLV list to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pList NTLV list to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_NTLVList(
+    json_object * parent,
+    const char * name,
+    List_t *p_pList
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_BlockId (json_object * parent, const char *name,
-                                    struct BlockId *p_pId);
+/**
+ * Get an NTLV list from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pList Destination for the NTLV list.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_NTLVList(
+    json_object * parent,
+    const char * name,
+    List_t **p_pList
+);
 
+/**
+ * Add a hash value to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pHash Hash value to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_Hash(
+    json_object * parent,
+    const char * name,
+    const struct Hash *p_pHash
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_BlockId (json_object * parent, const char * name,
-                                    struct BlockId **p_pId);
+/**
+ * Get a hash value from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pHash Destination for the hash value.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_Hash(
+    json_object * parent,
+    const char *name,
+    struct Hash **p_pHash
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_Block (json_object * parent, const char * name,
-                                  struct Block *p_pBlock);
+/**
+ * Add a block identifier to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pId Block identifier to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_BlockId(
+    json_object * parent,
+    const char *name,
+    struct BlockId *p_pId
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_Block (json_object * parent, const char * name,
-                                  struct Block **p_pBlock);
+/**
+ * Get a block identifier from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pId Destination for the block identifier.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_BlockId(
+    json_object * parent,
+    const char * name,
+    struct BlockId **p_pId
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_Event (json_object * parent, const char * name,
-                                  struct Event *p_pEvent);
+/**
+ * Add a block to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pBlock Block to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_Block(
+    json_object * parent,
+    const char * name,
+    struct Block *p_pBlock
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_Event (json_object * parent, const char * name,
-                                  struct Event **p_pEvent);
+/**
+ * Get a block from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pBlock Destination for the block.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_Block(
+    json_object * parent,
+    const char * name,
+    struct Block **p_pBlock
+);
 
+/**
+ * Add an event to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pEvent Event to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_Event(
+    json_object * parent,
+    const char * name,
+    struct Event *p_pEvent
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_EventId (json_object * parent, const char * name,
-                                    struct EventId *p_pEventId);
+/**
+ * Get an event from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pEvent Destination for the event.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_Event(
+    json_object * parent,
+    const char * name,
+    struct Event **p_pEvent
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_EventId (json_object * parent, const char * name,
-                                    struct EventId **p_pEventId);
+/**
+ * Add an event identifier to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pEventId Event identifier to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_EventId(
+    json_object * parent,
+    const char * name,
+    struct EventId *p_pEventId
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_Judgment (json_object * parent, const char * name,
-                                     struct Judgment *p_pJudgment);
+/**
+ * Get an event identifier from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pEventId Destination for the event identifier.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_EventId(
+    json_object * parent,
+    const char * name,
+    struct EventId **p_pEventId
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_Judgment (json_object * parent, const char * name,
-                                     struct Judgment **p_pJudgment);
+/**
+ * Add a judgment to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pJudgment Judgment to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_Judgment(
+    json_object * parent,
+    const char * name,
+    struct Judgment *p_pJudgment
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_Nugget (json_object * parent, const char * name,
-                                           struct Nugget * nugget);
+/**
+ * Get a judgment from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_pJudgment Destination for the judgment.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_Judgment(
+    json_object * parent,
+    const char * name,
+    struct Judgment **p_pJudgment
+);
 
-SO_PUBLIC extern bool JsonBuffer_Get_Nugget (json_object * parent, const char * name,
-                                           struct Nugget ** r_nugget);
+/**
+ * Add a nugget to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param nugget Nugget to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_Nugget(
+    json_object * parent,
+    const char * name,
+    struct Nugget * nugget
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_UUIDList (json_object * parent, const char * name,
-                                           List_t * list);
-SO_PUBLIC extern bool JsonBuffer_Get_UUIDList (json_object * parent, const char * name,
-                                           List_t ** r_list);
+/**
+ * Get a nugget from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param r_nugget Destination for the nugget.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_Nugget(
+    json_object * parent,
+    const char * name,
+    struct Nugget ** r_nugget
+);
 
-SO_PUBLIC extern bool JsonBuffer_Put_StringList (json_object * parent, const char * name,
-                                           List_t * list);
-SO_PUBLIC extern bool JsonBuffer_Get_StringList (json_object * parent, const char * name,
-                                           List_t ** r_list);
-SO_PUBLIC extern bool
-JsonBuffer_Put_uint8List (json_object * parent, const char * name,
-                                           uint8_t *list, uint32_t count);
-SO_PUBLIC extern bool
-JsonBuffer_Get_uint8List (json_object * parent, const char * name,
-                                           uint8_t **list, uint32_t *count);
+/**
+ * Add a UUID list to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param list UUID list to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_UUIDList(
+    json_object * parent,
+    const char * name,
+    List_t * list
+);
+
+/**
+ * Get a UUID list from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param r_list Destination for the UUID list.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_UUIDList(
+    json_object * parent,
+    const char * name,
+    List_t ** r_list
+);
+
+/**
+ * Add a string list to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param list String list to store.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_StringList(
+    json_object * parent,
+    const char * name,
+    List_t * list
+);
+
+/**
+ * Get a string list from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param r_list Destination for the string list.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_StringList(
+    json_object * parent,
+    const char * name,
+    List_t ** r_list
+);
+
+/**
+ * Add an 8-bit unsigned integer list to a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param list 8-bit unsigned integer list to store.
+ * @param count Number of list elements.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_uint8List(
+    json_object * parent,
+    const char * name,
+    uint8_t *list,
+    uint32_t count
+);
+
+/**
+ * Get an 8-bit unsigned integer list from a JSON object.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param list Destination for the 8-bit unsigned integer list.
+ * @param count Destination for the number of list elements.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Get_uint8List(
+    json_object * parent,
+    const char * name,
+    uint8_t **list,
+    uint32_t *count
+);
 #ifdef __cplusplus
 }
 #endif

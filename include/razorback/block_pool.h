@@ -52,66 +52,99 @@ extern "C" {
 #define BLOCK_POOL_DATA_FLAG_MALLOCD    0x02    ///< Data block is malloc'd
 #define BLOCK_POOL_DATA_FLAG_MANAGED    0x04    ///< Data block is managed by the user
 
-
-
-/** Create a new item in the pool.
- * @return NULL on error or a pointer to a BlockPoolItem
+/**
+ * Create a new item in the pool.
+ * @param p_pContext Context to operate on.
+ * @return NULL on error or a pointer to a BlockPoolItem.
  */
-SO_PUBLIC extern struct BlockPoolItem *BlockPool_CreateItem (struct RazorbackContext *p_pContext);
+SO_PUBLIC extern struct BlockPoolItem * BlockPool_CreateItem(struct RazorbackContext *p_pContext);
 
-/** Get the number of items in the block pool
+/**
+ * Get the number of items in the block pool.
  * @return the number of items in the block pool.
  */
-SO_PUBLIC extern size_t BlockPool_GetItemCount();
- /** Get the memory allocated to the block pool
+SO_PUBLIC extern size_t BlockPool_GetItemCount(void);
+
+/**
+ * Get the memory allocated to the block pool.
  * @return the size of the memory allocated to the block pool.
  */
-SO_PUBLIC extern size_t BlockPool_GetSize();
+SO_PUBLIC extern size_t BlockPool_GetSize(void);
 
-/** Add data to a item in the block pool
- * @param *p_pItem the item to add data to.
- * @param *p_sName the data type name
+/**
+ * Add data to a item in the block pool.
+ * @param p_pItem the item to add data to.
+ * @param p_sName the data type name.
  * @return true on success false on error.
  */
 SO_PUBLIC extern bool BlockPool_SetItemDataType(struct BlockPoolItem *p_pItem, char * p_sName);
 
-/** Add data to a item in the block pool
- * @param *p_pItem the item to add data to.
- * @param *p_pData the data to add.
+/**
+ * Add data to a item in the block pool.
+ * @param p_pItem the item to add data to.
+ * @param p_pData the data to add.
  * @param p_iLength the length of the data to add.
- * @param p_iFlags the data block flags
+ * @param p_iFlags the data block flags.
  * @return true on success false on error.
  */
-SO_PUBLIC extern bool BlockPool_AddData (struct BlockPoolItem *p_pItem, uint8_t * p_pData,
-                               uint32_t p_iLength, int p_iFlags);
-SO_PUBLIC extern bool BlockPool_AddData_FromFile(struct BlockPoolItem *item, char *fileName, bool tempFile);
+SO_PUBLIC extern bool BlockPool_AddData(
+    struct BlockPoolItem *p_pItem,
+    uint8_t * p_pData,
+    uint32_t p_iLength,
+    int p_iFlags
+);
 
-/** Finalize the block pool item for submission
- * @param *p_pItem the item to finalize
+/**
+ * Add file-backed data to a block pool item.
+ * @param item Item to operate on.
+ * @param fileName File name.
+ * @param tempFile Temp file value.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool BlockPool_AddData_FromFile(
+    struct BlockPoolItem *item,
+    char *fileName,
+    bool tempFile
+);
+
+/**
+ * Finalize the block pool item for submission.
+ * @param p_pItem the item to finalize.
+ * @return true on success, false on failure.
  * @ return true on success false on failure.
  */
-SO_PUBLIC extern bool BlockPool_FinalizeItem (struct BlockPoolItem *p_pItem);
+SO_PUBLIC extern bool BlockPool_FinalizeItem(struct BlockPoolItem *p_pItem);
 
-SO_PUBLIC extern struct Hash * BlockPool_GetHash (struct BlockPoolItem *p_pItem);
+/**
+ * Get the hash for a block pool item.
+ * @param p_pItem Item to operate on.
+ * @return Requested object on success, or NULL on failure.
+ */
+SO_PUBLIC extern struct Hash * BlockPool_GetHash(struct BlockPoolItem *p_pItem);
 
-/** Remove an item from the block pool.
- * @param *p_pItem the item to remove.
+/**
+ * Remove an item from the block pool.
+ * @param p_pItem the item to remove.
  * @return true on success false on error.
  */
-SO_PUBLIC extern bool BlockPool_DestroyItem (struct BlockPoolItem *p_pItem);
+SO_PUBLIC extern bool BlockPool_DestroyItem(struct BlockPoolItem *p_pItem);
 
-/** Add MetaData to a block pool item.
+/**
+ * Add MetaData to a block pool item.
  * @param block The block pool item to add metadata to.
- * @param uuidName The UUID of the metadata name
+ * @param uuidName The UUID of the metadata name.
  * @param uuidType The UUID of the metadata data type.
- * @param data The data
+ * @param data The data.
  * @param size The size of the data.
  * @return true on success false on error.
  */
-SO_PUBLIC extern bool
-BlockPool_MetaData_Add(struct BlockPoolItem *block,
-                            uuid_t uuidName, uuid_t uuidType,
-                            uint8_t *data, uint32_t size);
+SO_PUBLIC extern bool BlockPool_MetaData_Add(
+    struct BlockPoolItem *block,
+    uuid_t uuidName,
+    uuid_t uuidType,
+    uint8_t *data,
+    uint32_t size
+);
 #ifdef __cplusplus
 }
 #endif

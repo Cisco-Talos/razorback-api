@@ -68,29 +68,36 @@ struct Queue
 #define QUEUE_FLAG_RECV 0x02
 #define QUEUE_FLAG_EXTERNAL_MODE 0x04
 
-/** Initializes the queue
+/**
+ * Initializes the queue.
  * This method connects to the message broker provided in the API configuration file.
- * @param *p_sQueueName the name of the queue
- * @param p_bTopic true if this is a topic, false if a queue
- * @param *p_iFlags Flags for the connection (read/write mode, etc)
+ * @param p_sQueueName the name of the queue.
+ * @param p_bTopic true if this is a topic, false if a queue.
+ * @param p_iFlags Flags for the connection (read/write mode, etc).
  * @return a pointer to a new Queue Struct or NULL on error.
  */
-SO_PUBLIC extern struct Queue *Queue_Create (const char * p_sQueueName, bool p_bTopic,
-                                       int p_iFlags);
-/** Initializes the queue
+SO_PUBLIC extern struct Queue * Queue_Create(
+    const char * p_sQueueName,
+    bool p_bTopic,
+    int p_iFlags
+);
+
+/**
+ * Initializes the queue.
  * This method allows connections to other external message brokers if required.
- * @param *p_sQueueName the name of the queue
- * @param p_bTopic true if this is a topic, false if a queue
- * @param *p_iFlags Flags for the connection (read/write mode, etc)
- * @param *p_sHost Host name of the broker
- * @param p_iPort Port number to connect to
- * @param *p_sUser User name to connect to the broker with
- * @param *p_sPassword Password to connect to the broker with
- * @param *p_sVhost Virtual host to connect to on the broker
- * @param p_bUseSSL Enable SSL for the broker connection
+ * @param p_sQueueName the name of the queue.
+ * @param p_bTopic true if this is a topic, false if a queue.
+ * @param p_iFlags Flags for the connection (read/write mode, etc).
+ * @param p_sHost Host name of the broker.
+ * @param p_iPort Port number to connect to.
+ * @param p_sUser User name to connect to the broker with.
+ * @param p_sPassword Password to connect to the broker with.
+ * @param p_sVhost Virtual host to connect to on the broker.
+ * @param p_bUseSSL Enable SSL for the broker connection.
+ * @param p_iPrefetch Prefetch value.
  * @return a pointer to a new Queue Struct or NULL on error.
  */
-SO_PUBLIC extern struct Queue *Queue_Create_With_Host (
+SO_PUBLIC extern struct Queue * Queue_Create_With_Host(
     const char * p_sQueueName,
     bool p_bTopic,
     int p_iFlags,
@@ -101,40 +108,55 @@ SO_PUBLIC extern struct Queue *Queue_Create_With_Host (
     const char * p_sVhost,
     bool p_bUseSSL,
     uint32_t p_iPrefetch
-    );
+);
 
-/** Terminates the queue
- * @param p_pQ the queue to terminate
+/**
+ * Terminates the queue.
+ * @param p_pQ the queue to terminate.
+ * @return No return value.
  */
-SO_PUBLIC extern void Queue_Terminate (struct Queue *p_pQ);
+SO_PUBLIC extern void Queue_Terminate(struct Queue *p_pQ);
 
-/** Gets a message from the queue
- * @param queue the queue
- * @return A message struct, NULL on error
+/**
+ * Gets a message from the queue.
+ * @param queue the queue.
+ * @return A message struct, NULL on error.
  */
-SO_PUBLIC extern struct Message *Queue_Get (struct Queue *queue);
+SO_PUBLIC extern struct Message * Queue_Get(struct Queue *queue);
 
-/** Sends a message to the queue
- * @param queue the queue
- * @param *message the message to send
- * @return true if ok, false if error or timeout (errno==EAGAIN if timeout)
+/**
+ * Sends a message to the queue.
+ * @param queue the queue.
+ * @param message the message to send.
+ * @return true if ok, false if error or timeout (errno==EAGAIN if timeout).
  */
-SO_PUBLIC extern bool Queue_Put (struct Queue *queue, struct Message *message);
+SO_PUBLIC extern bool Queue_Put(struct Queue *queue, struct Message *message);
 
-/** Sends a message to the queue overriding the default destination
- * @param queue the queue
- * @param *message the message to send
- * @param *dest the destination queue/topic name
- * @return true if ok, false if error or timeout (errno==EAGAIN if timeout)
- */SO_PUBLIC extern bool Queue_Put_Dest (struct Queue *queue, struct Message *message, char *dest);
-
-/** Gets a queue name from a uuid_t
- * @param p_sLeading the leading text
- * @param p_pId the uuid
- * @param p_sQueueName the destination text
+/**
+ * Send a message to the queue while overriding the default destination.
+ * @param queue The queue.
+ * @param message The message to send.
+ * @param dest Destination queue or topic name.
+ * @return true if ok, false if error or timeout (errno==EAGAIN if timeout).
  */
-SO_PUBLIC extern void Queue_GetQueueName (const char * p_sLeading,
-                                uuid_t p_pId, char * p_sQueueName);
+SO_PUBLIC extern bool Queue_Put_Dest(
+    struct Queue *queue,
+    struct Message *message,
+    char *dest
+);
+
+/**
+ * Gets a queue name from a uuid_t.
+ * @param p_sLeading the leading text.
+ * @param p_pId the uuid.
+ * @param p_sQueueName the destination text.
+ * @return No return value.
+ */
+SO_PUBLIC extern void Queue_GetQueueName(
+    const char * p_sLeading,
+    uuid_t p_pId,
+    char * p_sQueueName
+);
 #ifdef __cplusplus
 }
 #endif

@@ -29,31 +29,38 @@
 extern "C" {
 #endif
 
-/** Create an EventId.
+/**
+ * Create an EventId.
  * @return A new EventId or NULL on error.
  */
-SO_PUBLIC extern struct EventId * EventId_Create (void);
+SO_PUBLIC extern struct EventId * EventId_Create(void);
 
-/** Clone an event ID.
- * @param event The EventId to clone
+/**
+ * Clone an event ID.
+ * @param event The EventId to clone.
  * @return A new event object or NULL on error.
  */
-SO_PUBLIC extern struct EventId * EventId_Clone (struct EventId *event);
+SO_PUBLIC extern struct EventId * EventId_Clone(struct EventId *event);
 
-/** Destroy an EventID
+/**
+ * Destroy an EventID.
  * @param event The EventId to destroy.
+ * @return No return value.
  */
-SO_PUBLIC extern void EventId_Destroy (struct EventId *event);
+SO_PUBLIC extern void EventId_Destroy(struct EventId *event);
 
-/** Create an Event.
+/**
+ * Create an Event.
  * @return A new event or NULL on error.
  */
-SO_PUBLIC extern struct Event * Event_Create (void);
+SO_PUBLIC extern struct Event * Event_Create(void);
 
-/** Destroy an Event.
+/**
+ * Destroy an Event.
  * @param event The Event to destroy.
+ * @return No return value.
  */
-SO_PUBLIC extern void Event_Destroy (struct Event *event);
+SO_PUBLIC extern void Event_Destroy(struct Event *event);
 
 #ifdef __cplusplus
 }

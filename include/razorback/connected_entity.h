@@ -58,27 +58,63 @@ struct ConnectedEntity
     struct DispatcherEntity *dispatcher;  ///< Dispatcher entity information
 };
 
-/** Updates the timestamp an entry in the list
+/**
+ * Updates the timestamp an entry in the list.
  * @param message A hello message from the nugget.
- * @return true on success, false otherwise
+ * @return true on success, false otherwise.
  */
-SO_PUBLIC extern bool ConnectedEntityList_Update (struct Message *message);
+SO_PUBLIC extern bool ConnectedEntityList_Update(struct Message *message);
 
-/** Counts the number of entries in the list
+/**
+ * Counts the number of entries in the list.
  * @return the number of items in the list.
  */
-SO_PUBLIC extern uint32_t ConnectedEntityList_Count (void);
+SO_PUBLIC extern uint32_t ConnectedEntityList_Count(void);
+
+/**
+ * Destroy a connected entity.
+ * @param entity Entity object.
+ * @return No return value.
+ */
 SO_PUBLIC extern void ConnectedEntity_Destroy(struct ConnectedEntity *entity);
 
-SO_PUBLIC extern bool
-ConnectedEntityList_AddPruneListener(void (*entityRemoved) (struct ConnectedEntity *entity, uint32_t remainingCount));
+/**
+ * Register a prune listener for connected entities.
+ * @param entityRemoved Callback invoked when an entity is pruned.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool ConnectedEntityList_AddPruneListener(
+    void (*entityRemoved)(struct ConnectedEntity *entity, uint32_t remainingCount)
+);
 
-SO_PUBLIC extern bool
-ConnectedEntityList_ForEach_Entity (int (*function) (struct ConnectedEntity *, void *), void *userData);
+/**
+ * Iterate over each connected entity.
+ * @param function Callback invoked for each connected entity.
+ * @param userData User data value.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool ConnectedEntityList_ForEach_Entity(
+    int (*function)(struct ConnectedEntity *, void *),
+    void *userData
+);
 
-SO_PUBLIC extern struct ConnectedEntity *ConnectedEntityList_GetDedicatedDispatcher(void);
-SO_PUBLIC extern struct ConnectedEntity * ConnectedEntityList_GetDispatcher_HighestPriority();
+/**
+ * Get the dedicated dispatcher entity.
+ * @return Requested object on success, or NULL on failure.
+ */
+SO_PUBLIC extern struct ConnectedEntity * ConnectedEntityList_GetDedicatedDispatcher(void);
 
+/**
+ * Get the highest-priority dispatcher entity.
+ * @return Requested object on success, or NULL on failure.
+ */
+SO_PUBLIC extern struct ConnectedEntity * ConnectedEntityList_GetDispatcher_HighestPriority(void);
+
+/**
+ * Check whether a slave exists in a locality.
+ * @param locality Locality value.
+ * @return true on success, false on failure.
+ */
 SO_PUBLIC extern bool ConnectedEntityList_SlaveInLocality(uint8_t locality);
 
 #ifdef __cplusplus

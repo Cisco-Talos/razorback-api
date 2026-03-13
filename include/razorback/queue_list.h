@@ -39,47 +39,54 @@ struct QueueListEntry
     struct QueueListEntry *pNext;  ///< the next item in the list
 };
 
-/** Initializes a queue list
- * @param p_pList the list
+/**
+ * Create a queue list.
+ * @return Requested object on success, or NULL on failure.
  */
-SO_PUBLIC extern List_t * QueueList_Create (void);
+SO_PUBLIC extern List_t * QueueList_Create(void);
 
-/** finds a queue in a list
- * @param p_pList the list
- * @param p_pId the id of the queue to find
- * @return a pointer to the queue or null if not found
+/**
+ * finds a queue in a list.
+ * @param p_pList the list.
+ * @param p_pId the id of the queue to find.
+ * @return a pointer to the queue or null if not found.
  */
-SO_PUBLIC extern struct Queue *QueueList_Find (List_t *p_pList,
-                                     const uuid_t p_pId);
+SO_PUBLIC extern struct Queue * QueueList_Find(List_t *p_pList, const uuid_t p_pId);
 
-/** adds a queue to a list
- * @param p_pList the list
- * @param p_pId the id of the queue to add
- * @return a pointer to the queue or null if not found
+/**
+ * adds a queue to a list.
+ * @param p_pList the list.
+ * @param p_pQ Q object.
+ * @param p_pId the id of the queue to add.
+ * @return true on success, false on failure.
  */
-SO_PUBLIC extern bool QueueList_Add (List_t *p_pList,
-                           struct Queue *p_pQ, const uuid_t p_pId);
+SO_PUBLIC extern bool QueueList_Add(List_t *p_pList, struct Queue *p_pQ, const uuid_t p_pId);
 
-/** Remove a queue to a list
- * @param p_pList the list
- * @param p_pId the id of the queue to add
- * @return a pointer to the queue or null if not found
+/**
+ * Remove a queue to a list.
+ * @param p_pList the list.
+ * @param p_pId the id of the queue to add.
+ * @return true on success, false on failure.
  */
-SO_PUBLIC extern bool QueueList_Remove (List_t *p_pList,
-                           const uuid_t p_pId);
+SO_PUBLIC extern bool QueueList_Remove(List_t *p_pList, const uuid_t p_pId);
 
-/** first entry in a queue list
- * @param p_pList the list
+/**
+ * Get the first queue list entry.
+ * @param p_pList the list.
+ * @return Requested object on success, or NULL on failure.
  */
-SO_PUBLIC extern struct QueueListEntry *QueueList_First (const List_t *p_pList);
+SO_PUBLIC extern struct QueueListEntry * QueueList_First(const List_t *p_pList);
 
-/** next entry in a queue list
- * @param p_pList the list
- * @param p_pCurrent the current entry
+/**
+ * Get the next queue list entry.
+ * @param p_pList the list.
+ * @param p_pCurrent the current entry.
+ * @return Requested object on success, or NULL on failure.
  */
-SO_PUBLIC extern struct QueueListEntry *QueueList_Next (const List_t *p_pList,
-                                              const struct QueueListEntry
-                                              *p_pCurrent);
+SO_PUBLIC extern struct QueueListEntry * QueueList_Next(
+    const List_t *p_pList,
+    const struct QueueListEntry *p_pCurrent
+);
 #ifdef __cplusplus
 }
 #endif

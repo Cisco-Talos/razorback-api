@@ -30,6 +30,9 @@
 extern "C" {
 #endif
 
+/**
+ * UUID list entry.
+ */
 struct UUIDListNode
 {
     uuid_t uuid;
@@ -124,50 +127,84 @@ struct UUIDListNode
 
 /// @}
 
-/** Get the UUID for the listed name and type
- * @param p_sName The UUID name
- * @param p_uType The UUID type
- * @param r_uuid The place to put the uuid
- * @return true on success false on error
+/**
+ * Get the UUID for the listed name and type.
+ * @param p_sName The UUID name.
+ * @param p_iType The UUID type.
+ * @param r_uuid The place to put the uuid.
+ * @return true on success false on error.
  */
-SO_PUBLIC extern bool UUID_Get_UUID (const char *p_sName, int p_iType, uuid_t r_uuid);
+SO_PUBLIC extern bool UUID_Get_UUID(const char *p_sName, int p_iType, uuid_t r_uuid);
 
-/** Get the description for the listed name and type
+/**
+ * Get the description for the listed name and type.
  * The string should be free'd when its finished with.
- * @param p_sName The UUID name
- * @param p_uType The UUID type
- * @return NULL on error
+ * @param p_sName The UUID name.
+ * @param p_iType The UUID type.
+ * @return NULL on error.
  */
-SO_PUBLIC extern char *UUID_Get_Description (const char *p_sName, int p_iType);
+SO_PUBLIC extern char * UUID_Get_Description(const char *p_sName, int p_iType);
 
-/** Get the name for the listed uuid and type
+/**
+ * Get the name for the listed uuid and type.
  * The string should be free'd when its finished with.
- * @param p_uuid The UUID
- * @param p_iType The UUID type
- * @return NULL on error
+ * @param p_uuid The UUID.
+ * @param p_iType The UUID type.
+ * @return NULL on error.
  */
+SO_PUBLIC extern char * UUID_Get_NameByUUID(uuid_t p_uuid, int p_iType);
 
-SO_PUBLIC extern char *UUID_Get_NameByUUID (uuid_t p_uuid, int p_iType);
-/** Get the description for the listed uuid and type
+/**
+ * Get the description for the listed uuid and type.
  * The string should be free'd when its finished with.
- * @param p_uuid The UUID
- * @param p_iType The UUID type
- * @return NULL on error
+ * @param p_uuid The UUID.
+ * @param p_iType The UUID type.
+ * @return NULL on error.
  */
-SO_PUBLIC extern char *UUID_Get_DescriptionByUUID (uuid_t p_uuid, int p_iType);
+SO_PUBLIC extern char * UUID_Get_DescriptionByUUID(uuid_t p_uuid, int p_iType);
 
-/** Get the UUID in string form for the listed name and type
+/**
+ * Get the UUID in string form for the listed name and type.
  * The string should be free'd when its finished with.
- * @param p_sName The UUID name
- * @param p_uType The UUID type
- * @return NULL on error
+ * @param p_sName The UUID name.
+ * @param p_iType The UUID type.
+ * @return NULL on error.
  */
-SO_PUBLIC extern char *UUID_Get_UUIDAsString (const char *p_sName, int p_iType);
+SO_PUBLIC extern char * UUID_Get_UUIDAsString(const char *p_sName, int p_iType);
 
-SO_PUBLIC extern List_t * UUID_Create_List (void);
-SO_PUBLIC extern bool UUID_Add_List_Entry(List_t *list, uuid_t uuid, const char *name, const char *desc);
+/**
+ * Create a UUID list.
+ * @return Requested object on success, or NULL on failure.
+ */
+SO_PUBLIC extern List_t * UUID_Create_List(void);
 
+/**
+ * Add an entry to a UUID list.
+ * @param list List to operate on.
+ * @param uuid UUID value.
+ * @param name Name string.
+ * @param desc Desc string.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool UUID_Add_List_Entry(
+    List_t *list,
+    uuid_t uuid,
+    const char *name,
+    const char *desc
+);
+
+/**
+ * Get the UUID list for a type.
+ * @param type Type value.
+ * @return Requested object on success, or NULL on failure.
+ */
 SO_PUBLIC extern List_t * UUID_Get_List(int type);
+
+/**
+ * Get the serialized size of a UUID list.
+ * @param list List to operate on.
+ * @return Requested size value.
+ */
 SO_PUBLIC extern size_t UUIDList_BinarySize(List_t *list);
 
 #ifdef __cplusplus

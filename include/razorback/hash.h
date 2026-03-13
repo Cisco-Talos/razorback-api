@@ -30,66 +30,94 @@
 extern "C" {
 #endif
 
-/** Determines whether to hashes are equal
- * @param p_pHashA the first hash
- * @param p_pHashB the second hash
- * @return true if equal, false otherwise
+/**
+ * Determines whether to hashes are equal.
+ * @param p_pHashA the first hash.
+ * @param p_pHashB the second hash.
+ * @return true if equal, false otherwise.
  */
-SO_PUBLIC extern bool Hash_IsEqual (const struct Hash *p_pHashA,
-                          const struct Hash *p_pHashB);
+SO_PUBLIC extern bool Hash_IsEqual(const struct Hash *p_pHashA, const struct Hash *p_pHashB);
 
-/** Converts a hash to text
- * @param p_pHash the hash
+/**
+ * Converts a hash to text.
+ * @param p_pHash the hash.
  * @return The string (requires free'ing) or NULL on error.
  */
-SO_PUBLIC extern char * Hash_ToText (const struct Hash *p_pHash);
+SO_PUBLIC extern char * Hash_ToText(const struct Hash *p_pHash);
 
-/** Create a hash
+/**
+ * Create a hash.
  * @return a new hash on success NULL on error.
  */
-SO_PUBLIC extern struct Hash * Hash_Create (void);
-SO_PUBLIC extern struct Hash * Hash_Create_Type (uint32_t p_iType);
+SO_PUBLIC extern struct Hash * Hash_Create(void);
+
+/**
+ * Create a hash with a specific algorithm type.
+ * @param p_iType Type value.
+ * @return Requested object on success, or NULL on failure.
+ */
+SO_PUBLIC extern struct Hash * Hash_Create_Type(uint32_t p_iType);
+
+/**
+ * Create a hash from a string representation.
+ * @param p_iType Type value.
+ * @param p_sHash Hash value.
+ * @return Requested object on success, or NULL on failure.
+ */
 SO_PUBLIC extern struct Hash * Hash_Create_From_String(uint32_t p_iType, const char *p_sHash);
-/** Return the size of the digest in bytes.
+
+/**
+ * Return the size of the digest in bytes.
  * @param p_pHash the hash.
  * @return the length in bytes.
  */
-SO_PUBLIC extern uint32_t Hash_DigestLength (struct Hash *p_pHash);
+SO_PUBLIC extern uint32_t Hash_DigestLength(struct Hash *p_pHash);
 //SO_PUBLIC extern uint32_t Hash_BinaryLength (struct Hash *p_pHash);
 
-/** Return the size of the string required to hold the hex encoded digets.
+/**
+ * Return the size of the string required to hold the hex encoded digets.
  * @param p_pHash the hash.
- * @return the length of the array including null
+ * @return the length of the array including null.
  */
-SO_PUBLIC extern uint32_t Hash_StringLength (struct Hash *p_pHash);
+SO_PUBLIC extern uint32_t Hash_StringLength(struct Hash *p_pHash);
 
-/** Update the hash with new data.
- * @param *p_pHash The hash to update.
- * @param *p_pData The data to compute the hash of.
- * @param *p_iLength The length of the data.
+/**
+ * Update the hash with new data.
+ * @param p_pHash The hash to update.
+ * @param p_pData The data to compute the hash of.
+ * @param p_iLength The length of the data.
  * @return true on sucess false on error.
  */
-SO_PUBLIC extern bool Hash_Update (struct Hash *p_pHash, uint8_t * p_pData,
-                         uint32_t p_iLength);
-SO_PUBLIC extern bool
-Hash_Update_File (struct Hash * p_pHash, FILE *file);
+SO_PUBLIC extern bool Hash_Update(struct Hash *p_pHash, uint8_t * p_pData, uint32_t p_iLength);
 
-/** Finalize the has value.
- * @param *p_pHash The hash object.
+/**
+ * Update a hash with data from a file.
+ * @param p_pHash Hash value.
+ * @param file File path.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool Hash_Update_File(struct Hash * p_pHash, FILE *file);
+
+/**
+ * Finalize the has value.
+ * @param p_pHash The hash object.
  * @return true on success false on error.
  */
-SO_PUBLIC extern bool Hash_Finalize (struct Hash *p_pHash);
+SO_PUBLIC extern bool Hash_Finalize(struct Hash *p_pHash);
 
-/** destroys a hash
- * @param p_pHash the hash
+/**
+ * destroys a hash.
+ * @param p_pHash the hash.
+ * @return No return value.
  */
-SO_PUBLIC extern void Hash_Destroy (struct Hash *p_pHash);
+SO_PUBLIC extern void Hash_Destroy(struct Hash *p_pHash);
 
-/** copies a hash
- * @param p_pDestination the destination
- * @param p_pSource the source
+/**
+ * copies a hash.
+ * @param p_pSource the source.
+ * @return Requested object on success, or NULL on failure.
  */
-SO_PUBLIC extern struct Hash * Hash_Clone (const struct Hash *p_pSource);
+SO_PUBLIC extern struct Hash * Hash_Clone(const struct Hash *p_pSource);
 #ifdef __cplusplus
 }
 #endif

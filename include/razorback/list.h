@@ -52,48 +52,53 @@ extern "C" {
 #define LIST_EACH_END       3   ///< Node successfully processed, end to loop
 /// @}
 
-
-
-/** Create a new List.
- * @param mode The list operation mode
+/**
+ * Create a new List.
+ * @param mode The list operation mode.
  * @param cmp Function pointer to the node comparator.
  * @param keyCmp Function pointer to the node key comparator.
  * @param destroy Function pointer to the node data destructor.
- * @param clone Function pointer to the node clone routine. (Optional - Use NULL if cloning is not supported)
- * @param nodeLock Function pointer to the node lock routine. (Optional - Use NULL if node locking is not required)
- * @param nodeUnlock Function pointer to the node unlock routine. (Optional - Use NULL if node locking is not required)
+ * @param clone Function pointer to the node clone routine. (Optional - Use NULL if cloning is not supported).
+ * @param nodeLock Function pointer to the node lock routine. (Optional - Use NULL if node locking is not required).
+ * @param nodeUnlock Function pointer to the node unlock routine. (Optional - Use NULL if node locking is not required).
  * @return A new List on success, NULL on error.
  */
-SO_PUBLIC extern List_t * List_Create(int mode,
-        int (*cmp)(void *, void *),
-        int (*keyCmp)(void *, void *),
-        void (*destroy)(void *),
-        void *(*clone)(void *),
-        void (*nodeLock)(void *),
-        void (*nodeUnlock)(void *));
+SO_PUBLIC extern List_t * List_Create(
+    int mode,
+    int (*cmp)(void *, void *),
+    int (*keyCmp)(void *, void *),
+    void (*destroy)(void *),
+    void *(*clone)(void *),
+    void (*nodeLock)(void *),
+    void (*nodeUnlock)(void *)
+);
 
-/** Add an item to a List.
+/**
+ * Add an item to a List.
  * @param list The List to add the item to.
  * @param item The item to add.
  * @return true on success, false on error.
  */
 SO_PUBLIC extern bool List_Push(List_t *list, void *item);
 
-/** Remove the next item from a List.
- * @note For a list in queue or stack mode, this function will block until an item is available. In gerneral mode NULL will be returned if there is item to remove.
+/**
+ * Remove the next item from a List.
  * @param list The List to remove the item from.
  * @return A pointer to the removed item on success, NULL on failure.
+ * @note For a list in queue or stack mode, this function will block until an item is available. In gerneral mode NULL will be returned if there is item to remove.
  */
 SO_PUBLIC extern void * List_Pop(List_t *list);
 
-/** Remove the item from the list.
+/**
+ * Remove the item from the list.
  * @param list The List to remove the item from.
  * @param item The item to remove.
  * @return true if the item was removed, false if the item was not found.
  */
 SO_PUBLIC extern bool List_Remove(List_t *list, void *item);
 
-/** Search a list for the item by key.
+/**
+ * Search a list for the item by key.
  * @param list The List to search.
  * @param id The node key.
  * @return A pointer to the item if found, NULL if not.
@@ -101,7 +106,8 @@ SO_PUBLIC extern bool List_Remove(List_t *list, void *item);
  */
 SO_PUBLIC extern void * List_Find(List_t *list, void *id);
 
-/** Iterate all items in a list executing op for each node.
+/**
+ * Iterate all items in a list executing op for each node.
  * @param list The List to iterate.
  * @param op Function pointer to the routine to run on every node. Op should return on of the list iteration status.
  * @param userData User data to pass as the ud argument to op.
@@ -109,42 +115,50 @@ SO_PUBLIC extern void * List_Find(List_t *list, void *id);
  */
 SO_PUBLIC extern bool List_ForEach(List_t *list, int (*op)(void *i, void *ud), void *userData);
 
-/** Get the number of items in a List in a thread safe fashion.
- * @param list The list to get the size of
+/**
+ * Get the number of items in a List in a thread safe fashion.
+ * @param list The list to get the size of.
  * @return The number of items in the list.
  */
 SO_PUBLIC extern size_t List_Length(List_t *list);
 
-/** Remove all items from a List.
+/**
+ * Remove all items from a List.
  * @param list The List to clear.
+ * @return No return value.
  */
 SO_PUBLIC extern void List_Clear(List_t *list);
 
-/** Set the max size for a list.
+/**
+ * Set the max size for a list.
  * @param list The List to set the limit on.
  * @param limit The maximum number of items to allow in the list.
- * @return true on success, false on error.
+ * @return No return value.
  */
 SO_PUBLIC extern void List_SetLimit(List_t *list, size_t limit);
 
-/** Destroy a List
+/**
+ * Destroy a List.
  * @param list The List to destroy.
+ * @return No return value.
  */
 SO_PUBLIC extern void List_Destroy(List_t *list);
 
-/** Clone a list and its contents.
- * @note The list must have been created with a none NULL clone function pointer.
- * @param list The List to clone.
+/**
+ * Clone a list and its contents.
+ * @param source Source value.
  * @return A new list on success, NULL on error.
+ * @note The list must have been created with a none NULL clone function pointer.
  */
-SO_PUBLIC extern List_t* List_Clone (List_t *source);
+SO_PUBLIC extern List_t * List_Clone(List_t *source);
 
-/** Transfer list contents
- * @param dest The destination list
- * @param source The source list
+/**
+ * Transfer list contents.
+ * @param dest The destination list.
+ * @param source The source list.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern bool List_Transfer (List_t *dest, List_t *source);
+SO_PUBLIC extern bool List_Transfer(List_t *dest, List_t *source);
 
 #ifdef __cplusplus
 }

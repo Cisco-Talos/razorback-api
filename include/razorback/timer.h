@@ -52,16 +52,23 @@ struct Timer
    void (*function)(void *);  ///< Function to call when the timer expires, userData will be passed as the argument.
 };
 
-/** Create a timer.
+/**
+ * Create a timer.
  * @param interval Timer interval in seconds.
  * @param handler Function poitner to the routine to run when the timer expires.
  * @param userData Pointer to data to be passed as the argument to handler when the timer expires.
  * @return A new Timer or NULL on error.
  */
-SO_PUBLIC extern struct Timer * Timer_Create(uint32_t interval, void (*handler)(void *), void *userData);
+SO_PUBLIC extern struct Timer * Timer_Create(
+    uint32_t interval,
+    void (*handler)(void *),
+    void *userData
+);
 
-/** Destroy a timer.
+/**
+ * Destroy a timer.
  * @param timer The Timer to stop and destroy.
+ * @return No return value.
  */
 SO_PUBLIC extern void Timer_Destroy(struct Timer *timer);
 

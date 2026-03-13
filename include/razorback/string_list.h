@@ -28,25 +28,47 @@
 extern "C" {
 #endif
 
+/**
+ * Create a string list.
+ * @return Requested object on success, or NULL on failure.
+ */
 SO_PUBLIC extern List_t * StringList_Create(void);
-/** Add a new entry to a user data list
- * @param *p_pList The destination
+
+/**
+ * Add a new entry to a user data list.
+ * @param p_pList The destination.
  * @param string The string to add.
  * @return true on success, false on failure.
  */
-SO_PUBLIC extern bool StringList_Add (List_t *p_pList, const char *string);
+SO_PUBLIC extern bool StringList_Add(List_t *p_pList, const char *string);
 
 
 #if 0
-SO_PUBLIC extern bool NTLVList_Get (List_t *p_pList, uuid_t uuidName,
-                          uuid_t uuidType, uint32_t *p_iSize,
-                          const uint8_t ** p_pData);
+
+/**
+ * Get an entry from an NTLV list.
+ * @param p_pList List to operate on.
+ * @param uuidName Name UUID value.
+ * @param uuidType Type UUID value.
+ * @param p_iSize Size value.
+ * @param p_pData Data value.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool NTLVList_Get(
+    List_t *p_pList,
+    uuid_t uuidName,
+    uuid_t uuidType,
+    uint32_t *p_iSize,
+    const uint8_t ** p_pData
+);
 #endif
-/** Get the size of the items in a list
- * @param *p_pList The list
+
+/**
+ * Get the size of the items in a list.
+ * @param list The list.
  * @return The size of the items in the list.
  */
-SO_PUBLIC extern uint32_t StringList_Size (List_t *list);
+SO_PUBLIC extern uint32_t StringList_Size(List_t *list);
 
 #ifdef __cplusplus
 }

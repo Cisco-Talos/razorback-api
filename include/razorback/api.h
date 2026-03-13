@@ -134,15 +134,16 @@ struct RazorbackContext
     } dispatcher;
 };
 
-
-/** Initialize an API context.
- * @param context The context to initialize
+/**
+ * Initialize an API context.
+ * @param context The context to initialize.
  * @return true on success false on failure.
  */
-SO_PUBLIC extern bool Razorback_Init_Context (struct RazorbackContext *context);
+SO_PUBLIC extern bool Razorback_Init_Context(struct RazorbackContext *context);
 
-/** Initialize an Inspection API context.
- * @param nuggetId the nugget uuid
+/**
+ * Initialize an Inspection API context.
+ * @param nuggetId the nugget uuid.
  * @param applicationType the application type.
  * @param dataTypeCount the number of data types.
  * @param dataTypeList the list of data types.
@@ -151,58 +152,75 @@ SO_PUBLIC extern bool Razorback_Init_Context (struct RazorbackContext *context);
  * @param maxThreads Maximum number of threads that can be launched.
  * @return An initialized inspection context on success, NULL on failure.
  */
-SO_PUBLIC extern struct RazorbackContext * Razorback_Init_Inspection_Context (
-        uuid_t nuggetId, uuid_t applicationType,
-        uint32_t dataTypeCount, uuid_t *dataTypeList,
-        struct RazorbackInspectionHooks *inspectionHooks,
-        uint32_t initialThreads, uint32_t maxThreads);
+SO_PUBLIC extern struct RazorbackContext * Razorback_Init_Inspection_Context(
+    uuid_t nuggetId,
+    uuid_t applicationType,
+    uint32_t dataTypeCount,
+    uuid_t *dataTypeList,
+    struct RazorbackInspectionHooks *inspectionHooks,
+    uint32_t initialThreads,
+    uint32_t maxThreads
+);
 
-/** Initialize an Output Context
- * @param nuggetId The nugget UUID
+/**
+ * Initialize an Output Context.
+ * @param nuggetId The nugget UUID.
  * @param applicationType The application type UUID.
  * @return An initialized output context on success, NULL on failure.
  */
-SO_PUBLIC extern struct RazorbackContext * Razorback_Init_Output_Context (
-        uuid_t nuggetId, uuid_t applicationType);
+SO_PUBLIC extern struct RazorbackContext * Razorback_Init_Output_Context(
+    uuid_t nuggetId,
+    uuid_t applicationType
+);
 
-/** Initialize a Collection API context.
- * @param nuggetId the nugget uuid
+/**
+ * Initialize a Collection API context.
+ * @param nuggetId the nugget uuid.
  * @param applicationType the application type.
  * @return An initialized output context on success, NULL on failure.
  */
-SO_PUBLIC extern struct RazorbackContext * Razorback_Init_Collection_Context (
-        uuid_t nuggetId, uuid_t applicationType);
+SO_PUBLIC extern struct RazorbackContext * Razorback_Init_Collection_Context(
+    uuid_t nuggetId,
+    uuid_t applicationType
+);
 
-/** Lookup a Context by UUID.
+/**
+ * Lookup a Context by UUID.
  * @param nuggetId The nugget ID uuid.
  * @return the context or NULL if there is no such context.
  */
-SO_PUBLIC extern struct RazorbackContext * Razorback_LookupContext (uuid_t nuggetId);
+SO_PUBLIC extern struct RazorbackContext * Razorback_LookupContext(uuid_t nuggetId);
 
-/** Shutdown a context.
+/**
+ * Shutdown a context.
  * @param context The context to shutdown.
+ * @return No return value.
  */
-SO_PUBLIC extern void Razorback_Shutdown_Context (struct RazorbackContext *context);
+SO_PUBLIC extern void Razorback_Shutdown_Context(struct RazorbackContext *context);
 
-/** Render a verdict on a block.
- * @param judgment The judgment information.
+/**
+ * Render a verdict on a block.
+ * @param p_pJudgment The judgment information.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern bool Razorback_Render_Verdict (struct Judgment *p_pJudgment);
+SO_PUBLIC extern bool Razorback_Render_Verdict(struct Judgment *p_pJudgment);
 
-/** Launch output threads.
- * @param context The output context
+/**
+ * Launch output threads.
+ * @param context The output context.
  * @param hooks The output hook structure.
- * @return true on success, false on error
+ * @return true on success, false on error.
  */
-SO_PUBLIC extern bool
-Razorback_Output_Launch (struct RazorbackContext *context, struct RazorbackOutputHooks *hooks);
+SO_PUBLIC extern bool Razorback_Output_Launch(
+    struct RazorbackContext *context,
+    struct RazorbackOutputHooks *hooks
+);
 
-
-/** Get the transfer server protocol
+/**
+ * Get the transfer server protocol.
  * @return The password.
  */
-SO_PUBLIC extern char * Razorback_Get_Transfer_Password();
+SO_PUBLIC extern char * Razorback_Get_Transfer_Password(void);
 
 /* Make APIs standardized while keeping function naming convention */
 #define RZB_Register_Collector          Razorback_Init_Collection_Context

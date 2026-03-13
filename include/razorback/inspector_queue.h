@@ -31,17 +31,20 @@
 extern "C" {
 #endif
 
-/** Initializes the inspector queue
- * @param p_iFlags flags
- * @param p_pApplicationType the application type
+/**
+ * Initializes the inspector queue.
+ * @param p_pApplicationType the application type.
+ * @param p_iFlags flags.
  * @return a pointer to the Queue object or NULL on an error.
  */
-SO_PUBLIC extern struct Queue * InspectorQueue_Initialize (uuid_t p_pApplicationType,
-                                       int p_iFlags);
+SO_PUBLIC extern struct Queue * InspectorQueue_Initialize(uuid_t p_pApplicationType, int p_iFlags);
 
-/** Terminates the inspector queue
+/**
+ * Terminates the inspector queue.
+ * @param p_pApplicationType Application type identifier.
+ * @return No return value.
  */
-SO_PUBLIC extern void InspectorQueue_Terminate (uuid_t p_pApplicationType);
+SO_PUBLIC extern void InspectorQueue_Terminate(uuid_t p_pApplicationType);
 
 #ifdef __cplusplus
 }

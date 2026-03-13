@@ -29,10 +29,13 @@
 extern "C" {
 #endif
 
-/** Daemonize the application.
+/**
+ * Daemonize the application.
+ * @param sighandler Signal handler callback.
+ * @param pidFile PID file path.
  * @return true on successful daemonisation false on error.
  */
-SO_PUBLIC extern bool rzb_daemonize (void (*sighandler) (int), const char *pidFile);
+SO_PUBLIC extern bool rzb_daemonize(void (*sighandler)(int), const char *pidFile);
 #ifdef __cplusplus
 }
 #endif

@@ -82,35 +82,51 @@ typedef enum
 #define LOG_C_DISPATCHER  (1<<10)
 #define LOG_C_NUGGET      (1<<11)
 
-/** Log a message to the system message log
- * @param level The message level as defined in syslog.h
-* @param component The component the message is associated with.
- * @param fmt The format string for the message
+/**
+ * Log a message to the system message log.
+ * @param level The message level as defined in syslog.h.
+ * @param component The component the message is associated with.
+ * @param fmt The format string for the message.
  * @param ... The data to be formatted.
+ * @return No return value.
  */
-SO_PUBLIC extern void rzb_log (unsigned level, uint64_t component, const char *fmt, ...);
-SO_PUBLIC extern void
-rzb_log_remote (uint8_t level, struct EventId *eventId, const char *fmt, ...);
+SO_PUBLIC extern void rzb_log(unsigned level, uint64_t component, const char *fmt, ...);
 
-/** Log a standard error.
+/**
+ * Log a message associated with a remote event.
+ * @param level Level value.
+ * @param eventId Event identifier associated with the log message.
+ * @param fmt Format string.
+ * @param ... Additional arguments for the format string.
+ * @return No return value.
+ */
+SO_PUBLIC extern void rzb_log_remote(uint8_t level, struct EventId *eventId, const char *fmt, ...);
+
+/**
+ * Log a standard error.
  * @param component The component the error is associated with.
  * @param message the log message associated with the error.
+ * @return No return value.
  */
-SO_PUBLIC extern void rzb_perror (uint64_t component, const char *message);
+SO_PUBLIC extern void rzb_perror(uint64_t component, const char *message);
 
-/** Get the currently configured log level
- * @return One of the log levels defined in syslog.h
+/**
+ * Get the currently configured log level.
+ * @return One of the log levels defined in syslog.h.
  */
-SO_PUBLIC extern int rzb_get_log_level ();
+SO_PUBLIC extern int rzb_get_log_level(void);
 
-/** Get the currently configured log destination
+/**
+ * Get the currently configured log destination.
  * @return The current log distination.
  */
-SO_PUBLIC extern RZB_LOG_DEST_t rzb_get_log_dest ();
+SO_PUBLIC extern RZB_LOG_DEST_t rzb_get_log_dest(void);
 
-/** Set logging to debug mode.
+/**
+ * Set logging to debug mode.
+ * @return No return value.
  */
-SO_PUBLIC extern void rzb_debug_logging ();
+SO_PUBLIC extern void rzb_debug_logging(void);
 #ifdef __cplusplus
 }
 #endif

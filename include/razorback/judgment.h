@@ -30,13 +30,31 @@
 extern "C" {
 #endif
 
-SO_PUBLIC extern struct Judgment * Judgment_Create (struct EventId *eventId, struct BlockId *blockId);
-SO_PUBLIC extern void Judgment_Destroy (struct Judgment *judgment);
-
-/** Render a verdict on a block
+/**
+ * Create a judgment.
+ * @param eventId Event identifier.
+ * @param blockId Block identifier.
+ * @return Requested object on success, or NULL on failure.
  */
-SO_PUBLIC extern bool
-Judgment_Render_Verdict (uint8_t p_iLevel, struct Judgment *p_pJudgment);
+SO_PUBLIC extern struct Judgment * Judgment_Create(
+    struct EventId *eventId,
+    struct BlockId *blockId
+);
+
+/**
+ * Destroy a judgment.
+ * @param judgment Judgment to operate on.
+ * @return No return value.
+ */
+SO_PUBLIC extern void Judgment_Destroy(struct Judgment *judgment);
+
+/**
+ * Render a verdict on a block.
+ * @param p_iLevel Level value.
+ * @param p_pJudgment Judgment to operate on.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool Judgment_Render_Verdict(uint8_t p_iLevel, struct Judgment *p_pJudgment);
 #ifdef __cplusplus
 }
 #endif

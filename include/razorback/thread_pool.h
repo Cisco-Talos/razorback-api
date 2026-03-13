@@ -56,46 +56,52 @@ struct ThreadPool
     List_t *list;                       ///< Worker list.
 };
 
-/** Create a ThreadPool
- * @param intialThread The number of threads to launch on creation.
+/**
+ * Create a ThreadPool.
+ * @param initialThreads Number of threads to launch initially.
  * @param maxThreads The maximum number of workers allowed in the pool.
  * @param context The context of the worker threads.
- * @param namePattern The printf pattern for the worker thread names, must contain %d
+ * @param namePattern The printf pattern for the worker thread names, must contain %d.
  * @param mainFunction The main routine for the threads.
  * @return A new ThreadPool or NULL on error.
  */
-SO_PUBLIC extern struct ThreadPool *
-ThreadPool_Create(int initialThreads, int maxThreads, struct RazorbackContext *context, const char* namePattern, void (*mainFunction) (Thread_t *));
+SO_PUBLIC extern struct ThreadPool * ThreadPool_Create(
+    int initialThreads,
+    int maxThreads,
+    struct RazorbackContext *context,
+    const char * namePattern,
+    void (*mainFunction)(Thread_t *)
+);
 
-/** Launch a worker
+/**
+ * Launch a worker.
  * @param pool The ThreadPool to spawn a worker in.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern bool
-ThreadPool_LaunchWorker(struct ThreadPool *pool);
+SO_PUBLIC extern bool ThreadPool_LaunchWorker(struct ThreadPool *pool);
 
-/** Launch several workers.
+/**
+ * Launch several workers.
  * @param pool The ThreadPool to spawn the workers in.
  * @param count The number of workers to spawn.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern bool
-ThreadPool_LaunchWorkers(struct ThreadPool *pool, int count);
+SO_PUBLIC extern bool ThreadPool_LaunchWorkers(struct ThreadPool *pool, int count);
 
-/** Kill a worker
+/**
+ * Kill a worker.
  * @param pool The ThreadPool to which the worker belongs.
  * @param id The workers id.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern bool
-ThreadPool_KillWorker(struct ThreadPool *pool, int id);
+SO_PUBLIC extern bool ThreadPool_KillWorker(struct ThreadPool *pool, int id);
 
-/** Kill all workers
+/**
+ * Kill all workers.
  * @param pool The ThreadPool to kill the workers in.
- * @return true on success, false on error
+ * @return true on success, false on error.
  */
-SO_PUBLIC extern bool
-ThreadPool_KillWorkers(struct ThreadPool *pool);
+SO_PUBLIC extern bool ThreadPool_KillWorkers(struct ThreadPool *pool);
 
 #ifdef __cplusplus
 }

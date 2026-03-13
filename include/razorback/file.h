@@ -29,8 +29,9 @@
 extern "C" {
 #endif
 
-/** Delete a file from the block store.
- * @param block The block to remove
+/**
+ * Delete a file from the block store.
+ * @param block The block to remove.
  * @return true on success, false on error.
  */
 SO_PUBLIC extern bool File_Delete(struct Block *block);

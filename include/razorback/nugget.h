@@ -29,8 +29,10 @@
 extern "C" {
 #endif
 
-/** Destroy a nugget descriptor.
+/**
+ * Destroy a nugget descriptor.
  * @param nugget The Nugget to destroy.
+ * @return No return value.
  */
 SO_PUBLIC extern void Nugget_Destroy(struct Nugget *nugget);
 
