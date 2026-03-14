@@ -538,8 +538,8 @@ static bool
 List_Stack_Push(List_t *list, struct ListNode *node) {
     ASSERT(list != NULL);
     ASSERT(node != NULL);
-    if (list == NULL) {
-        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list is NULL", __func__);
+    if (list == NULL || node == NULL) {
+        rzb_log(LOG_ERR, LOG_C_LIST, "%s: list or node is NULL", __func__);
         return false;
     }
 
@@ -619,4 +619,3 @@ ListNode * List_Queue_Pop(List_t *list) {
 
     return ret;
 }
-

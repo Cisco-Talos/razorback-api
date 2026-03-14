@@ -536,6 +536,18 @@ Socket_Connect (const char *destinationAddress, uint16_t port)
 #endif
 
     ASSERT (destinationAddress != NULL);
+    if (destinationAddress == NULL)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: destinationAddress is NULL", __func__);
+        return NULL;
+    }
+
+    ASSERT (port > 0);
+    if (port <= 0)
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: port must be greater than zero", __func__);
+        return NULL;
+    }
 
     if ((sock = (struct Socket *)calloc (1, sizeof (struct Socket))) == NULL)
     {

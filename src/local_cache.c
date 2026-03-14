@@ -57,6 +57,7 @@ Lookup_Result checkLocalEntry(uint8_t *key, uint32_t size, uint32_t *sfflags, ui
     ENTRY *cachehit;
 
     //Set Cache pointer based on CACHETYPE value
+    ASSERT(type < ALL);
     if (type >= ALL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
         return R_ERROR;
@@ -64,6 +65,9 @@ Lookup_Result checkLocalEntry(uint8_t *key, uint32_t size, uint32_t *sfflags, ui
 
     cache = &Cache[type];
 
+    ASSERT(sfflags != NULL);
+    ASSERT(entflags != NULL);
+    ASSERT(key != NULL);
     if (sfflags == NULL || entflags == NULL || key == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL pointer passed as argument", __func__);
         return R_ERROR;
@@ -223,6 +227,7 @@ Lookup_Result updateLocalEntry(uint8_t *key, uint32_t size, uint32_t sfflags, ui
     ENTRY *entry;
     ENTRY temp;
 
+    ASSERT(type < ALL);
     if (type >= ALL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
         return R_ERROR;
@@ -230,6 +235,7 @@ Lookup_Result updateLocalEntry(uint8_t *key, uint32_t size, uint32_t sfflags, ui
 
     cache = &Cache[type];
 
+    ASSERT(key != NULL);
     if (key == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL key passed as argument", __func__);
         return R_ERROR;
@@ -264,6 +270,7 @@ Lookup_Result removeLocalEntry(uint8_t *key, uint32_t size, CacheType type) {
     ENTRY *entry;
     ENTRY temp;
 
+    ASSERT(type < ALL);
     if (type >= ALL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Invalid CacheType passed as argument", __func__);
         return R_ERROR;
@@ -271,6 +278,7 @@ Lookup_Result removeLocalEntry(uint8_t *key, uint32_t size, CacheType type) {
 
     cache = &Cache[type];
 
+    ASSERT(key != NULL);
     if (key == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL key passed as argument", __func__);
         return R_ERROR;

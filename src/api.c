@@ -135,6 +135,7 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
     uuid_t uuidInspector;
     UUID_Get_UUID (NUGGET_TYPE_INSPECTION, UUID_TYPE_NUGGET_TYPE, uuidInspector);
 
+    ASSERT(inspectionHooks != NULL);
     if (inspectionHooks == NULL){
         rzb_log (LOG_ERR, LOG_C_CORE, "%s: Inspection Hooks NULL", __func__);
         return NULL;

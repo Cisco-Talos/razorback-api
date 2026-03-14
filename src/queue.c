@@ -139,6 +139,10 @@ Queue_Connect_Socket(
     ASSERT (address != NULL);
     ASSERT (username != NULL);
     ASSERT (password != NULL);
+    if (address == NULL || username == NULL || password == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: address, username, and password must all be non-NULL", __func__);
+        return NULL;
+    }
 
     if ((socket = calloc(1, sizeof(AMQP_Socket_t))) == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating AMQP socket struct", __func__ );
@@ -186,10 +190,17 @@ static bool
 Queue_BeginReading (struct Queue *p_pQ)
 {
     amqp_bytes_t decQueuename;
-    const char *exchange = p_pQ->bTopic ? "amq.topic" : "amq.direct";
-    int autoDelete = p_pQ->bTopic ? 1 : 0;
+    const char *exchange;
+    int autoDelete;
 
     ASSERT (p_pQ != NULL);
+    if (p_pQ == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue is NULL", __func__);
+        return false;
+    }
+
+    exchange = p_pQ->bTopic ? "amq.topic" : "amq.direct";
+    autoDelete = p_pQ->bTopic ? 1 : 0;
 
     if (p_pQ->bTopic) {
        decQueuename = amqp_empty_bytes;
@@ -255,6 +266,10 @@ Queue_EndReading (struct Queue *p_pQ)
 {
 
     ASSERT (p_pQ != NULL);
+    if (p_pQ == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue is NULL", __func__);
+        return false;
+    }
 
     return true;
 }
@@ -384,6 +399,10 @@ Queue_Create_With_Host (const char * p_sQueueName,
     struct Queue *l_pQueue = NULL;
 
     ASSERT (p_sQueueName != NULL);
+    if (p_sQueueName == NULL) {
+        rzb_log (LOG_ERR,LOG_C_STOMP, "%s: queue name is NULL", __func__);
+        return NULL;
+    }
 
     if ((l_pQueue = (struct Queue *)calloc (1, sizeof (struct Queue))) == NULL)
     {
@@ -440,6 +459,10 @@ SO_PUBLIC void
 Queue_Terminate (struct Queue *p_pQ)
 {
     ASSERT (p_pQ != NULL);
+    if (p_pQ == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue is NULL", __func__);
+        return;
+    }
 
     Mutex_Lock (p_pQ->mReadMutex);
     Mutex_Lock (p_pQ->mWriteMutex);
@@ -476,6 +499,10 @@ Queue_Get (struct Queue *queue)
     int headerIndex = 0;
 
     ASSERT (queue);
+    if (queue == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue is NULL", __func__);
+        return NULL;
+    }
     Mutex_Lock (queue->mReadMutex);
 
     amqp_maybe_release_buffers(queue->pReadSocket->pConn);
