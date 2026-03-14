@@ -113,7 +113,7 @@ Block_Clone (const struct Block *p_pSource) {
 }
 
 SO_PUBLIC bool
-Block_MetaData_Add(struct Block *block, uuid_t uuidName, uuid_t uuidType, uint8_t *data, uint32_t size) {
+Block_MetaData_Add(struct Block *block, uuid_t uuidName, uuid_t uuidType, const uint8_t *data, uint32_t size) {
     ASSERT(block != NULL);
     ASSERT(data != NULL || size == 0);
     if (block == NULL || (data == NULL && size != 0)) {
@@ -137,10 +137,9 @@ Block_MetaData_Add_FileName(struct Block *block, const char * fileName) {
     if (
             UUID_Get_UUID(NTLV_NAME_FILENAME, UUID_TYPE_NTLV_NAME, uuidName) &&
             UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuidType)) {
-        return Block_MetaData_Add(block, uuidName, uuidType, (uint8_t *) fileName, strlen(fileName));
+        return Block_MetaData_Add(block, uuidName, uuidType, (const uint8_t *)fileName, strlen(fileName));
     }
 
     rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup uuids", __func__);
     return false;
 }
-

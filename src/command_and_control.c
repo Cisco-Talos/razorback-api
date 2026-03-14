@@ -143,7 +143,7 @@ CommandAndControl_Start (struct RazorbackContext *p_pContext) {
             sg_bQueueInitialized = true;
             if ((sg_tThread =
                          Thread_Launch(CommandAndControl_Thread, NULL,
-                                       (char *) "Command and Control", p_pContext)) == NULL) {
+                                       "Command and Control", p_pContext)) == NULL) {
                 rzb_log(LOG_ERR, LOG_C_CNC, "%s: C&C Error: Failed to launch C&C thread.", __func__);
                 return false;
             }

@@ -399,7 +399,6 @@ Razorback_Output_Thread (Thread_t *thread)
     struct Message *message;
     struct RazorbackOutputHooks *hooks;
     char *name;
-    const char *pat = NULL;
 
     ASSERT(thread != NULL);
     if (thread == NULL) {
@@ -416,22 +415,32 @@ Razorback_Output_Thread (Thread_t *thread)
 
     switch (hooks->messageType) {
         case MESSAGE_TYPE_ALERT_PRIMARY:
-            pat = "Alert.%s";
+            if (asprintf(&name, "Alert.%s", hooks->pattern) == -1) {
+                rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to allocate queue name", __func__);
+                return;
+            }
             break;
         case MESSAGE_TYPE_ALERT_CHILD:
-            pat = "ChildAlert.%s";
+            if (asprintf(&name, "ChildAlert.%s", hooks->pattern) == -1) {
+                rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to allocate queue name", __func__);
+                return;
+            }
             break;
         case MESSAGE_TYPE_OUTPUT_EVENT:
-            pat = "Event.%s";
+            if (asprintf(&name, "Event.%s", hooks->pattern) == -1) {
+                rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to allocate queue name", __func__);
+                return;
+            }
             break;
         case MESSAGE_TYPE_OUTPUT_LOG:
-            pat = "Log.%s";
+            if (asprintf(&name, "Log.%s", hooks->pattern) == -1) {
+                rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to allocate queue name", __func__);
+                return;
+            }
             break;
-    }
-
-    if (asprintf(&name, pat, hooks->pattern) == -1) {
-        rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to allocate queue name", __func__);
-        return;
+        default:
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unsupported output message type %u", __func__, hooks->messageType);
+            return;
     }
 
     if ((hooks->queue = Queue_Create (name, true, QUEUE_FLAG_RECV)) == NULL){
