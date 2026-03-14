@@ -53,7 +53,7 @@ struct _Thread
     Mutex_t * mMutex;                   ///< mutex protecting this struct
     bool bRunning;                      ///< true if executing, false if not:  must be managed explicitly by thread function
     void *pUserData;                    ///< Additional info for the thread
-    char *sName;                        ///< The thread name
+    const char *sName;                  ///< The thread name
     struct RazorbackContext *pContext;  ///< The Thread Context
     void (*mainFunction) (Thread_t *);  ///< Thread Main Function
     bool bShutdown;                     ///< Shutdown Flag
@@ -123,7 +123,7 @@ Thread_MainWrapper (void *arg)
 
 SO_PUBLIC Thread_t *
 Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
-        char *name, struct RazorbackContext *context)
+        const char *name, struct RazorbackContext *context)
 {
     Thread_t *thread;
 
@@ -535,10 +535,10 @@ Thread_GetUserData(Thread_t *thread)
     return data;
 }
 
-SO_PUBLIC char *
+SO_PUBLIC const char *
 Thread_GetName(Thread_t *thread)
 {
-    char *name;
+    const char *name;
     Thread_Lock(thread);
     name = thread->sName;
     Thread_Unlock(thread);

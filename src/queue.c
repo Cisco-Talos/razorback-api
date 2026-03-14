@@ -57,6 +57,8 @@ struct _AMQP_Socket {
 };
 
 static bool Queue_Reconnect(struct Queue *queue, int p_iSide);
+static char sg_messageTypeHeaderName[] = "rzb-msg-type";
+static char sg_messageVersionHeaderName[] = "rzb-msg-ver";
 
 static bool
 AMQP_error(amqp_rpc_reply_t x, char const *context) {
@@ -409,21 +411,21 @@ Queue_Create_With_Host (const char * p_sQueueName,
         rzb_log (LOG_ERR,LOG_C_STOMP, "%s: Failed to alloc new queue", __func__);
         return NULL;
     }
-    l_pQueue->sHostname = (char *)p_sHost;
+    l_pQueue->sHostname = p_sHost;
     l_pQueue->iPort = p_iPort;
-    l_pQueue->sUser = (char *)p_sUser;
-    l_pQueue->sPassword = (char*)p_sPassword;
-    l_pQueue->sVhost = (char*)p_sVhost;
+    l_pQueue->sUser = p_sUser;
+    l_pQueue->sPassword = p_sPassword;
+    l_pQueue->sVhost = p_sVhost;
     l_pQueue->bUseSSL = p_bUseSSL;
     l_pQueue->iPrefetch = p_iPrefetch;
     l_pQueue->bTopic = p_bTopic;
 
-    if ((l_pQueue->sName = (char *)calloc(strlen((char *)p_sQueueName)+1, sizeof(char))) == NULL)
+    if ((l_pQueue->sName = (char *)calloc(strlen(p_sQueueName) + 1, sizeof(char))) == NULL)
     {
         rzb_log (LOG_ERR,LOG_C_STOMP, "%s: Failed to alloc new queue name", __func__);
         goto error;
     }
-    strcpy(l_pQueue->sName, (char *)p_sQueueName);
+    strcpy(l_pQueue->sName, p_sQueueName);
     if ((l_pQueue->mReadMutex = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL)
     {
         goto error;
@@ -561,14 +563,14 @@ Queue_Get (struct Queue *queue)
     Mutex_Unlock (queue->mReadMutex);
 
     if ((queue->iFlags & QUEUE_FLAG_EXTERNAL_MODE) != QUEUE_FLAG_EXTERNAL_MODE) {
-        if ((header = (struct MessageHeader *) List_Find(ret->headers, (void *) "rzb-msg-type")) == NULL) {
+        if ((header = (struct MessageHeader *) List_Find(ret->headers, sg_messageTypeHeaderName)) == NULL) {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-type", __func__);
             Message_Destroy(ret);
             return NULL;
         }
         ret->type = strtoul(header->sValue, NULL, 10);
 
-        if ((header = (struct MessageHeader *) List_Find(ret->headers, (void *) "rzb-msg-ver")) == NULL) {
+        if ((header = (struct MessageHeader *) List_Find(ret->headers, sg_messageVersionHeaderName)) == NULL) {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-ver", __func__);
             Message_Destroy(ret);
             return NULL;
@@ -613,7 +615,7 @@ Message_Header_To_AMQP_TableEntry(void *h, void *c)
 }
 
 SO_PUBLIC bool
-Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
+Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *dest)
 {
     amqp_bytes_t message_bytes;
     char *messageType = NULL;
@@ -624,10 +626,13 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
     bool ret = true;
     ASSERT (queue != NULL);
     ASSERT (message != NULL);
+    ASSERT (dest != NULL);
 
     if (queue == NULL)
         return false;
     if (message == NULL)
+        return false;
+    if (dest == NULL)
         return false;
 
     Mutex_Lock (queue->mWriteMutex);
@@ -662,7 +667,8 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, char *dest)
         return false;
     }
 
-    message_bytes = amqp_cstring_bytes((char *)message->serialized);
+    message_bytes.len = message->length;
+    message_bytes.bytes = message->serialized;
     if (queue->bTopic) {
         // For topics the destination is the routing key
         exchange = amqp_cstring_bytes("amq.topic");

@@ -62,7 +62,7 @@ SO_PUBLIC extern bool Block_MetaData_Add(
     struct Block *block,
     uuid_t uuidName,
     uuid_t uuidType,
-    uint8_t *data,
+    const uint8_t *data,
     uint32_t size
 );
 

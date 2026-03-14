@@ -53,11 +53,11 @@ struct Queue
     int iFlags;                     ///< Flags (read/write/etc)
     Mutex_t *mReadMutex;            ///< Read Lock
     Mutex_t *mWriteMutex;           ///< Write lock
-    char *sHostname;                ///< Broker hostname
-    char *sVhost;                   ///< Broker virtual host
+    const char *sHostname;          ///< Broker hostname
+    const char *sVhost;             ///< Broker virtual host
     uint32_t iPort;                 ///< Broker port
-    char *sUser;                    ///< Broker username
-    char *sPassword;                ///< Broker password
+    const char *sUser;              ///< Broker username
+    const char *sPassword;          ///< Broker password
     bool bUseSSL;                   ///< Use SSL connection to broker
     uint32_t iPrefetch;             ///< Prefetch count
     bool bTopic;                    ///< Is this a topic (vs queue)
@@ -142,7 +142,7 @@ SO_PUBLIC extern bool Queue_Put(struct Queue *queue, struct Message *message);
 SO_PUBLIC extern bool Queue_Put_Dest(
     struct Queue *queue,
     struct Message *message,
-    char *dest
+    const char *dest
 );
 
 /**

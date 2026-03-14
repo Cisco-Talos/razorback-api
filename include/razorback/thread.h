@@ -52,7 +52,7 @@ extern "C" {
 SO_PUBLIC extern Thread_t * Thread_Launch(
     void (*function)(Thread_t *),
     void *userData,
-    char *name,
+    const char *name,
     struct RazorbackContext *context
 );
 
@@ -196,7 +196,7 @@ SO_PUBLIC extern void * Thread_GetUserData(Thread_t *thread);
  * @param thread Thread to operate on.
  * @return Thread name string, or NULL if no name is set.
  */
-SO_PUBLIC extern char * Thread_GetName(Thread_t *thread);
+SO_PUBLIC extern const char * Thread_GetName(Thread_t *thread);
 
 #ifdef __cplusplus
 }

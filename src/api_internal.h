@@ -17,7 +17,7 @@
  */
 
 #ifndef RAZORBACK_API_INTERNAL_H
-#define RAZORBACK_API_INTERNAL_h
+#define RAZORBACK_API_INTERNAL_H
 
 #include <razorback/types.h>
 #ifdef __cplusplus

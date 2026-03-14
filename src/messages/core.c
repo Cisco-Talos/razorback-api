@@ -315,6 +315,8 @@ MessageHandler_Cmp(void *a, void *b) {
 static void
 MessageHandler_Delete(void *a)
 {
+    /* Handler storage is static; the list only owns the wrapper nodes. */
+    (void)a;
 }
 
 static bool
@@ -435,4 +437,3 @@ Message_Get_Nuggets(struct Message *message, uuid_t source, uuid_t dest) {
 
     return true;
 }
-

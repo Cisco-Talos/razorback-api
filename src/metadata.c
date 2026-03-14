@@ -37,7 +37,7 @@ Metadata_Add_String (List_t *list, uuid_t name, const char *string){
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup type uuid", __func__);
         return false;
     }
-    return Metadata_Add(list, name, uuidType, strlen(string)+1, (uint8_t *)string);
+    return Metadata_Add(list, name, uuidType, strlen(string) + 1, (const uint8_t *)string);
 }
 
 SO_PUBLIC bool
@@ -111,7 +111,7 @@ Metadata_Add_Port (List_t *list, uuid_t name, const uint16_t port)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to lookup type uuid", __func__);
         return false;
     }
-    return Metadata_Add(list, name, uuidType, 2, (uint8_t*)&port);
+    return Metadata_Add(list, name, uuidType, 2, (const uint8_t *)&port);
 }
 
 SO_PUBLIC bool
@@ -404,4 +404,3 @@ Metadata_Get_Port_Destination (List_t *list, uint16_t *addr)
     }
     return Metadata_Get_Port(list, uuidName, addr);
 }
-
