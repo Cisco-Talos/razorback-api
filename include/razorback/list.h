@@ -66,7 +66,7 @@ extern "C" {
 SO_PUBLIC extern List_t * List_Create(
     int mode,
     int (*cmp)(void *, void *),
-    int (*keyCmp)(void *, void *),
+    int (*keyCmp)(void *, const void *),
     void (*destroy)(void *),
     void *(*clone)(void *),
     void (*nodeLock)(void *),
@@ -104,7 +104,7 @@ SO_PUBLIC extern bool List_Remove(List_t *list, void *item);
  * @return A pointer to the item if found, NULL if not.
  * @note This function will return the node in the locked state, caller is responsible for calling unlock.
  */
-SO_PUBLIC extern void * List_Find(List_t *list, void *id);
+SO_PUBLIC extern void * List_Find(List_t *list, const void *id);
 
 /**
  * Iterate all items in a list executing op for each node.

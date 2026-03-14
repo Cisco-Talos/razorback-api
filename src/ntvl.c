@@ -94,10 +94,10 @@ NTLVList_Add (List_t *list, uuid_t name,
 }
 
 static int
-NTLV_KeyCmp(void *a, void *id)
+NTLV_KeyCmp(void *a, const void *id)
 {
     struct NTLVItem *item = (struct NTLVItem *)a;
-    struct NTLV_Key *key = (struct NTLV_Key *)id;
+    const struct NTLV_Key *key = (const struct NTLV_Key *)id;
     if ( (uuid_compare(key->name, item->uuidName) == 0) ||
             ( uuid_compare(key->type, item->uuidName) == 0 ))
     {
@@ -157,5 +157,4 @@ NTLVList_Create (void)
             NTLV_Delete,
             NTLV_Clone, NULL, NULL);
 }
-
 

@@ -38,10 +38,10 @@
 #define SEARCH_KEY_LOCALITY     (1 << 4)
 #define SEARCH_KEY_USABLE       (1 << 5)
 
-static int ConnectedEntity_KeyCmp(void *a, void *id);
+static int ConnectedEntity_KeyCmp(void *a, const void *id);
 static int ConnectedEntity_Cmp(void *a, void *b);
 static void ConnectedEntity_Delete(void *a);
-static int ConnectedEntityHook_KeyCmp(void *a, void *id);
+static int ConnectedEntityHook_KeyCmp(void *a, const void *id);
 static int ConnectedEntityHook_Cmp(void *a, void *b);
 static void ConnectedEntityHook_Delete(void *a);
 
@@ -578,9 +578,9 @@ ConnectedEntityList_MarkDispatcherUnusable(uuid_t nuggetId) {
 }
 
 static int
-ConnectedEntity_KeyCmp(void *a, void *id) {
+ConnectedEntity_KeyCmp(void *a, const void *id) {
     struct ConnectedEntity *entity = a;
-    struct ConnectedEntityKey *key = id;
+    const struct ConnectedEntityKey *key = id;
     int ret = -1;
     if ((key->searchKeys & SEARCH_KEY_NUGGET_ID) != 0) {
         ASSERT(key->nuggetId != NULL);
@@ -664,7 +664,8 @@ ConnectedEntity_Delete(void *a) {
 }
 
 static int
-ConnectedEntityHook_KeyCmp(void *a, void *id) {
+ConnectedEntityHook_KeyCmp(void *a, const void *id) {
+    (void)id;
     return -1;
 }
 static int

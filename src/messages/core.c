@@ -31,11 +31,11 @@ static List_t * handlerList = NULL;
 static bool Message_Add_Directed_Headers(struct Message *message, const uuid_t source, const uuid_t dest);
 
 
-static int MessageHeader_KeyCmp(void *a, void *id);
+static int MessageHeader_KeyCmp(void *a, const void *id);
 static int MessageHeader_Cmp(void *a, void *b);
 static void MessageHeader_Delete(void *a);
 
-static int MessageHandler_KeyCmp(void *a, void *id);
+static int MessageHandler_KeyCmp(void *a, const void *id);
 static int MessageHandler_Cmp(void *a, void *b);
 static void MessageHandler_Delete(void *a);
 
@@ -185,9 +185,9 @@ Message_Header_List_Create(void) {
 }
 
 static int
-MessageHeader_KeyCmp(void *a, void *id) {
+MessageHeader_KeyCmp(void *a, const void *id) {
     struct MessageHeader *item = (struct MessageHeader *)a;
-    char *key = id;
+    const char *key = id;
     return strcmp(item->sName, key);
 }
 
@@ -297,9 +297,9 @@ bool Message_Register_Handler(struct MessageHandler *handler) {
 
 
 static int
-MessageHandler_KeyCmp(void *a, void *id) {
+MessageHandler_KeyCmp(void *a, const void *id) {
     struct MessageHandler *item = (struct MessageHandler *)a;
-    uint32_t *key = id;
+    const uint32_t *key = id;
     return (item->type - *key);
 }
 
@@ -415,7 +415,7 @@ Message_Get_Nuggets(struct Message *message, uuid_t source, uuid_t dest) {
         return false;
     }
 
-    if ((header = List_Find(message->headers, (void *)MSG_CNC_HEADER_DEST)) == NULL) {
+    if ((header = List_Find(message->headers, MSG_CNC_HEADER_DEST)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: No destination header", __func__);
         return false;
     }
@@ -425,7 +425,7 @@ Message_Get_Nuggets(struct Message *message, uuid_t source, uuid_t dest) {
         return false;
     }
 
-    if ((header = List_Find(message->headers, (void *)MSG_CNC_HEADER_SOURCE)) == NULL) {
+    if ((header = List_Find(message->headers, MSG_CNC_HEADER_SOURCE)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: No source header", __func__);
         return false;
     }

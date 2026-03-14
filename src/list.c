@@ -52,7 +52,7 @@ struct _List {
     size_t limit;                   ///< Maximum number of items in the list
     int mode;                       ///< Operation mode
     int (*cmp)(void *, void *);     ///< Node comparator
-    int (*keyCmp)(void *, void *);  ///< Node key comparator
+    int (*keyCmp)(void *, const void *);  ///< Node key comparator
     void (*destroy)(void *);        ///< Node data destructor
     void *(*clone)(void *);         ///< Node data clone
     void (*nodeLock)(void *);       ///< Node lock function
@@ -73,7 +73,7 @@ static struct ListNode * List_Queue_Pop(List_t *list);
 SO_PUBLIC List_t *
 List_Create(int mode,
         int (*cmp)(void *, void *),
-        int (*keyCmp)(void *, void *),
+        int (*keyCmp)(void *, const void *),
         void (*destroy)(void *),
         void *(*clone)(void *),
         void (*nodeLock)(void *),
@@ -115,7 +115,13 @@ List_Create(int mode,
 struct FindData {
     List_t *list;
     void * ret;
-    void * id;
+    const void * id;
+};
+
+struct RemoveData {
+    List_t *list;
+    void *ret;
+    void *id;
 };
 
 static int List_FindKeyCmp(void * item, void *d) {
@@ -141,7 +147,7 @@ List_SetLimit(List_t *list, size_t limit) {
 }
 
 SO_PUBLIC void *
-List_Find(List_t *list, void *id) {
+List_Find(List_t *list, const void *id) {
     struct FindData data;
     ASSERT(list != NULL);
     ASSERT(id != NULL);
@@ -336,7 +342,7 @@ List_ForEach(List_t *list, int (*op)(void *, void *), void *userData) {
 
 
 static int List_FindRemove(void * curItem, void *d) {
-    struct FindData *data = (struct FindData *)d;
+    struct RemoveData *data = (struct RemoveData *)d;
     if ( (curItem == data->id) ||
          (
              (data->list->cmp != NULL) &&
@@ -352,7 +358,7 @@ static int List_FindRemove(void * curItem, void *d) {
 SO_PUBLIC bool
 List_Remove(List_t *list, void *item)
 {
-    struct FindData data;
+    struct RemoveData data;
     ASSERT(list != NULL);
     ASSERT(item != NULL);
     if (list == NULL)

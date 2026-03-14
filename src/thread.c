@@ -426,10 +426,10 @@ Thread_getCount (void)
 }
 
 SO_PUBLIC int
-Thread_KeyCmp(void *a, void *id)
+Thread_KeyCmp(void *a, const void *id)
 {
     Thread_t * cA = (Thread_t *)a;
-    rzb_thread_t cId = *(rzb_thread_t *)id;
+    rzb_thread_t cId = *(const rzb_thread_t *)id;
 
     if (cId == cA->iThread)
         return 0;
