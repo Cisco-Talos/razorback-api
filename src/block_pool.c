@@ -294,6 +294,11 @@ BlockPool_AddData (struct BlockPoolItem *item, uint8_t * data,
 
 SO_PUBLIC bool
 BlockPool_FinalizeItem (struct BlockPoolItem *p_pItem) {
+    ASSERT (p_pItem != NULL);
+    if (p_pItem == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pItem is NULL", __func__);
+        return false;
+    }
     ASSERT (p_pItem->iStatus == BLOCK_POOL_STATUS_COLLECTING);
 
     if (p_pItem->iStatus != BLOCK_POOL_STATUS_COLLECTING) {
@@ -457,4 +462,3 @@ void BlockPool_Item_Unlock(void *a) {
     }
     Mutex_Unlock(((struct BlockPoolItem *)a)->mutex);
 }
-

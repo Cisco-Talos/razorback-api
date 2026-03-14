@@ -261,6 +261,13 @@ HTTP_Store(void *i, void*ud) {
 SO_PUBLIC enum TransferStatus
 Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
 {
+    ASSERT(item != NULL);
+    ASSERT(dispatcher != NULL);
+    if (item == NULL || dispatcher == NULL) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: item or dispatcher is NULL", __func__);
+        return TRANSFER_FAIL_LOCAL;
+    }
+
     struct StoreContext context = {
         .item = item,
         .dataItem = item->pDataHead,
@@ -271,8 +278,6 @@ Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
         .memory = NULL,
         .size = 0,
     };
-    ASSERT(item != NULL);
-    ASSERT(dispatcher != NULL);
     if (sg_bSkipStore) {
         return TRANSFER_OK;
     }

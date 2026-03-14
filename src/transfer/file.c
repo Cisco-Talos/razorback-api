@@ -148,6 +148,11 @@ Transfer_File_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     size_t len;
 
     ASSERT (item != NULL);
+    if (item == NULL)
+    {
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: item is NULL", __func__);
+        return TRANSFER_FAIL_LOCAL;
+    }
 
     if ((filename = Transfer_generateFilename (item->pEvent->pBlock)) == NULL)
     {
@@ -237,6 +242,11 @@ Transfer_File_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 #endif
 
     ASSERT (block != NULL);
+    if (block == NULL)
+    {
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: block is NULL", __func__);
+        return TRANSFER_FAIL_LOCAL;
+    }
 
     if ((filename = Transfer_generateFilename (block)) == NULL)
     {
@@ -286,6 +296,11 @@ File_Delete(struct Block *block)
 #endif
 
     ASSERT (block != NULL);
+    if (block == NULL)
+    {
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: block is NULL", __func__);
+        return false;
+    }
 
     if ((filename = Transfer_generateFilename (block)) == NULL)
     {

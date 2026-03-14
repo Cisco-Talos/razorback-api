@@ -206,6 +206,11 @@ Transfer_SSH_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatche
     size_t len;
 
     ASSERT (item != NULL);
+    if (item == NULL)
+    {
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: item is NULL", __func__);
+        return TRANSFER_FAIL_LOCAL;
+    }
 
     ctx = Thread_GetContext(Thread_GetCurrent());
     if (ctx == NULL)
@@ -323,6 +328,11 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     char buf[1024];
 
     ASSERT (block != NULL);
+    if (block == NULL)
+    {
+        rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: block is NULL", __func__);
+        return TRANSFER_FAIL_LOCAL;
+    }
 
     ctx = Thread_GetContext(Thread_GetCurrent());
     if (ctx == NULL)
@@ -659,5 +669,4 @@ static char * SSH_GetKnownDispatchers(void)
     return (char *)KNOWN_DISPATCHERS;
 }
 #endif //_MSC_VER
-
 

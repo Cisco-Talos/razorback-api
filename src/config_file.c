@@ -123,6 +123,7 @@ SO_PUBLIC bool
 readMyConfig(const char *configDir,
              const char *configFile,
              RZBConfKey_t *config_fmt) {
+    ASSERT(configFile != NULL);
 #ifdef _MSC_VER
     //Reading from the registry instead of a config file
     //Implements same API
