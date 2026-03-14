@@ -166,7 +166,7 @@ SO_PUBLIC extern rzb_thread_t Thread_GetCurrentId(void);
  * @param id Identifier value.
  * @return Comparison result.
  */
-SO_PUBLIC extern int Thread_KeyCmp(void *a, void *id);
+SO_PUBLIC extern int Thread_KeyCmp(void *a, const void *id);
 
 /**
  * Compare two thread entries.

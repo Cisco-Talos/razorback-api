@@ -264,10 +264,10 @@ UUID_Cmp(void *a, void *b)
 }
 
 static int
-UUID_KeyCmp(void *a, void *id)
+UUID_KeyCmp(void *a, const void *id)
 {
     struct UUIDListNode *current = (struct UUIDListNode *)a;
-    struct UUIDKey *key = (struct UUIDKey *)id;
+    const struct UUIDKey *key = (const struct UUIDKey *)id;
     switch (key->type)
     {
     case UUID_KEY_UUID:

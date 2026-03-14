@@ -48,7 +48,7 @@
 #include "inspection.h"
 
 static void Razorback_Output_Thread (Thread_t *thread);
-static int Context_KeyCmp(void *a, void *b);
+static int Context_KeyCmp(void *a, const void *b);
 static int Context_Cmp(void *a, void *b);
 
 static List_t *sg_ContextList;
@@ -491,10 +491,10 @@ Razorback_Output_Thread (Thread_t *thread)
 }
 
 static int
-Context_KeyCmp(void *a, void *id) {
+Context_KeyCmp(void *a, const void *id) {
     struct RazorbackContext *cA = (struct RazorbackContext*) a;
     // XXX: This is a hack
-    return uuid_compare(cA->uuidNuggetId, (unsigned char *) id);
+    return uuid_compare(cA->uuidNuggetId, (const unsigned char *)id);
 }
 
 static int

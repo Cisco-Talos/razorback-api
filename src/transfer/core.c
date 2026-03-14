@@ -39,7 +39,7 @@
 
 List_t *sg_transportList = NULL;
 static int Transport_Cmp(void *a, void *b);
-static int Transport_KeyCmp(void *a, void *key);
+static int Transport_KeyCmp(void *a, const void *key);
 static bool sg_bTraditionalMode = true;
 
 char *
@@ -304,9 +304,9 @@ Transport_Cmp(void *a, void *b)
     return (dA->id - dB->id);
 }
 static int
-Transport_KeyCmp(void *a, void *key)
+Transport_KeyCmp(void *a, const void *key)
 {
     struct TransportDescriptor *dA = a;
-    uint8_t *id = key;
+    const uint8_t *id = key;
     return (dA->id - *id);
 }

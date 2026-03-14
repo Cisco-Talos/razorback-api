@@ -59,7 +59,7 @@
 
 static List_t *sessionList = NULL;
 
-static int SSH_Session_KeyCmp(void *a, void *id);
+static int SSH_Session_KeyCmp(void *a, const void *id);
 static int SSH_Session_Cmp(void *a, void *b);
 static struct SSH_Session * SSH_Get_Session(uuid_t nuggetId, struct ConnectedEntity *dispatcher);
 static bool SSH_Check_Session(struct SSH_Session *session);
@@ -445,10 +445,10 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 }
 
 
-static int SSH_Session_KeyCmp(void *a, void *id)
+static int SSH_Session_KeyCmp(void *a, const void *id)
 {
     struct SSH_Session *ses = a;
-    struct SSH_Session_Key *key = id;
+    const struct SSH_Session_Key *key = id;
     if ((uuid_compare(ses->key.nuggetId, key->nuggetId) == 0) &&
             (uuid_compare(ses->key.dispatcherId, key->dispatcherId) == 0) &&
             (ses->key.threadId == key->threadId))
@@ -669,4 +669,3 @@ static char * SSH_GetKnownDispatchers(void)
     return (char *)KNOWN_DISPATCHERS;
 }
 #endif //_MSC_VER
-

@@ -49,10 +49,10 @@ StringList_Size (List_t * list)
 }
 
 static int
-String_KeyCmp(void *a, void *id)
+String_KeyCmp(void *a, const void *id)
 {
     char *item = a;
-    char *key = id;
+    const char *key = id;
     if (key == item)
         return 0;
 
@@ -108,4 +108,3 @@ StringList_Add (List_t *p_pList, const char *string)
     List_Push(p_pList, new);
     return true;
 }
-

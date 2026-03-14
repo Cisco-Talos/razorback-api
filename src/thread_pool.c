@@ -28,10 +28,10 @@
 
 
 static int
-TP_KeyCmp(void *a, void *id)
+TP_KeyCmp(void *a, const void *id)
 {
     struct ThreadPoolItem *item = (struct ThreadPoolItem *)a;
-    int *key = (int *)id;
+    const int *key = (const int *)id;
     if (*key == item->id)
         return 0;
 
@@ -181,4 +181,3 @@ ThreadPool_KillWorkers(struct ThreadPool *pool)
 
     return true;
 }
-

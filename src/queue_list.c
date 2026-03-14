@@ -23,7 +23,7 @@
 #include <razorback/uuids.h>
 #include <string.h>
 
-static int QueueList_KeyCmp(void *a, void *id);
+static int QueueList_KeyCmp(void *a, const void *id);
 static int QueueList_Cmp(void *a, void *b);
 
 SO_PUBLIC List_t *
@@ -49,7 +49,7 @@ QueueList_Find (List_t *p_pList, const uuid_t p_pId)
         return NULL;
     if (p_pId == NULL)
         return NULL;
-    if ((entry = List_Find(p_pList, (void *)p_pId)) == NULL)
+    if ((entry = List_Find(p_pList, p_pId)) == NULL)
         return NULL;
 
     return entry->pQueue;
@@ -92,16 +92,16 @@ QueueList_Remove (List_t *p_pList, const uuid_t p_pId)
         return false;
     if (p_pId == NULL)
         return false;
-    if ((entry = List_Find(p_pList, (void *)p_pId)) == NULL)
+    if ((entry = List_Find(p_pList, p_pId)) == NULL)
         return false;
 
     List_Remove(p_pList, entry);
     return true;
 }
 
-static int QueueList_KeyCmp(void *a, void *id)
+static int QueueList_KeyCmp(void *a, const void *id)
 {
-    unsigned char *uuid=(unsigned char *)id;
+    const unsigned char *uuid = (const unsigned char *)id;
     struct QueueListEntry *entry = (struct QueueListEntry *)a;
     return uuid_compare(uuid,entry->uuiKey);
 }
@@ -112,6 +112,5 @@ static int QueueList_Cmp(void *a, void *b)
 
     return -1;
 }
-
 
 
