@@ -59,6 +59,40 @@ Message_Create(uint32_t type, uint32_t version, size_t msgSize) {
     return message;
 }
 
+bool
+Message_SetSerializedJson(struct Message *message, const char *wire,
+                         int logComponent, const char *caller)
+{
+    uint8_t *serialized;
+    size_t length;
+    const char *logCaller = caller != NULL ? caller : __func__;
+
+    ASSERT(message != NULL);
+    ASSERT(wire != NULL);
+    ASSERT(message == NULL || message->serialized == NULL);
+    if (message == NULL || wire == NULL) {
+        rzb_log(LOG_ERR, logComponent, "%s: NULL message or wire", logCaller);
+        return false;
+    }
+    if (message->serialized != NULL) {
+        rzb_log(LOG_ERR, logComponent, "%s: message already has serialized content",
+                logCaller);
+        return false;
+    }
+
+    length = strlen(wire);
+    if ((serialized = calloc(length + 1, sizeof(uint8_t))) == NULL) {
+        rzb_log(LOG_ERR, logComponent, "%s: failed to allocate serialized message",
+                logCaller);
+        return false;
+    }
+
+    memcpy(serialized, wire, length + 1);
+    message->serialized = serialized;
+    message->length = length;
+    return true;
+}
+
 SO_PUBLIC void
 Message_Destroy(struct Message *message)
 {
