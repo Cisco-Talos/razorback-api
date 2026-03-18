@@ -48,24 +48,31 @@ BlockId_IsEqual (const struct BlockId * p_pA, const struct BlockId * p_pB) {
     return (uuid && hash && length);
 }
 
-SO_PUBLIC void
-BlockId_ToText (const struct BlockId *p_pA, uint8_t * p_sText) {
+SO_PUBLIC char *
+BlockId_ToText (const struct BlockId *p_pA) {
     char l_sUUID[UUID_STRING_LENGTH];
     char *l_sHash;
+    char *text;
 
     ASSERT (p_pA != NULL);
-    ASSERT (p_sText != NULL);
-    if (p_pA == NULL || p_sText == NULL) {
-        rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pA or p_sText is NULL", __func__);
-        return;
+    if (p_pA == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pA is NULL", __func__);
+        return NULL;
     }
 
-    // create the text string
     uuid_unparse (p_pA->uuidDataType, l_sUUID);
     l_sHash = Hash_ToText (p_pA->pHash);
-    sprintf ((char *) p_sText, "%s-%8.8jx-%s", l_sUUID, p_pA->iLength,
-             (char *) l_sHash);
+    if (l_sHash == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to convert hash to text", __func__);
+        return NULL;
+    }
+    if (asprintf(&text, "%s-%8.8jx-%s", l_sUUID, p_pA->iLength, l_sHash) == -1) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to allocate block id text", __func__);
+        free(l_sHash);
+        return NULL;
+    }
     free(l_sHash);
+    return text;
 }
 
 struct BlockId *

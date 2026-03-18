@@ -40,10 +40,10 @@ SO_PUBLIC extern bool BlockId_IsEqual(const struct BlockId *p_pA, const struct B
 /**
  * Convert a block identifier to text.
  * @param p_pA the block id to convert.
- * @param p_sText the destination text.
- * @return No return value.
+ * @return a newly allocated, null-terminated string on success, or NULL on error.
+ *         The caller owns the returned string and must free it.
  */
-SO_PUBLIC extern void BlockId_ToText(const struct BlockId *p_pA, uint8_t * p_sText);
+SO_PUBLIC extern char * BlockId_ToText(const struct BlockId *p_pA);
 
 /**
  * Create a block identifier without allocating nested objects.
