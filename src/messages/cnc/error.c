@@ -61,6 +61,13 @@ MessageError_Initialize (
     struct Message *msg;
     struct MessageError *message;
 
+    ASSERT(p_sMessage != NULL);
+    if (p_sMessage == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: failed due to NULL p_sMessage", __func__);
+        return NULL;
+    }
+
     msg = Message_Create_Directed(
         p_iCode,
         MESSAGE_VERSION_1,
@@ -75,15 +82,12 @@ MessageError_Initialize (
     }
     message = msg->message;
 
-    if ((message->sMessage =
-                 malloc(strlen((const char *) p_sMessage) + 1)) == NULL) {
+    if ((message->sMessage = (uint8_t *)strdup(p_sMessage)) == NULL) {
         Error_Destroy(msg);
         rzb_log(LOG_ERR, LOG_C_CORE,
                 "%s: failed due to lack of memory", __func__);
         return NULL;
     }
-    strcpy((char *) message->sMessage,
-           (const char *) p_sMessage);
     msg->destroy = Error_Destroy;
     msg->deserialize = Error_Deserialize;
     msg->serialize = Error_Serialize;

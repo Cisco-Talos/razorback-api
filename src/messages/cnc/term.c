@@ -76,13 +76,12 @@ MessageTerminate_Initialize (
     message = msg->message;
 
     if ((message->sTerminateReason =
-                 malloc(strlen((const char *) p_sTerminateReason) + 1)) == NULL) {
+                 (uint8_t *)strdup((const char *)p_sTerminateReason)) == NULL) {
         Terminate_Destroy(msg);
         rzb_log(LOG_ERR, LOG_C_CORE,
                 "%s: failed due to lack of memory", __func__);
         return NULL;
     }
-    strcpy((char *) message->sTerminateReason,(const char *) p_sTerminateReason);
 
     msg->destroy = Terminate_Destroy;
     msg->deserialize = Terminate_Deserialize;
