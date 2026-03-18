@@ -32,10 +32,11 @@ static List_t *sg_qlResponseQueue;
 static bool sg_bResponseInitialized = false;
 
 static void
-ResponseQueue_GetQueueName (uuid_t p_pCollectorId, char * p_sQueueName)
+ResponseQueue_GetQueueName (uuid_t p_pCollectorId, char * p_sQueueName,
+                            size_t p_iQueueNameSize)
 {
     Queue_GetQueueName ("RESPONSE", p_pCollectorId,
-                        p_sQueueName);
+                        p_sQueueName, p_iQueueNameSize);
 }
 
 SO_PUBLIC struct Queue *
@@ -54,7 +55,7 @@ ResponseQueue_Initialize (uuid_t p_pCollectorId, int p_iFlags)
     }
 
     // transform to correct name
-    ResponseQueue_GetQueueName (p_pCollectorId, l_sQueueName);
+    ResponseQueue_GetQueueName (p_pCollectorId, l_sQueueName, sizeof(l_sQueueName));
 
     // does this queue already exist?
     // if so, done
@@ -100,5 +101,4 @@ ResponseQueue_Terminate (uuid_t p_pCollectorId)
     Queue_Terminate (l_pQueue);
     QueueList_Remove(sg_qlResponseQueue, p_pCollectorId);
 }
-
 

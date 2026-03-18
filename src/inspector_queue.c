@@ -34,10 +34,11 @@ static bool sg_bInspectorIntialized = false;
 
 static void
 InspectorQueue_GetQueueName (uuid_t p_pApplicationType,
-                             char * p_sQueueName)
+                             char * p_sQueueName,
+                             size_t p_iQueueNameSize)
 {
     Queue_GetQueueName ( "INSPECTOR",
-                        p_pApplicationType, p_sQueueName);
+                        p_pApplicationType, p_sQueueName, p_iQueueNameSize);
 }
 
 SO_PUBLIC struct Queue *
@@ -57,7 +58,7 @@ InspectorQueue_Initialize (uuid_t p_pApplicationType, int p_iFlags)
     }
 
     // transform to correct name
-    InspectorQueue_GetQueueName (p_pApplicationType, l_sQueueName);
+    InspectorQueue_GetQueueName (p_pApplicationType, l_sQueueName, sizeof(l_sQueueName));
 
     // does this queue already exist?
     // if so, done
@@ -98,5 +99,4 @@ InspectorQueue_Terminate (uuid_t p_pApplicationType)
     Queue_Terminate (l_pQueue);
     QueueList_Remove(sg_qlInspectorQueue, p_pApplicationType);
 }
-
 

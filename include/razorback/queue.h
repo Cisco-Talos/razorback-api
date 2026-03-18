@@ -149,13 +149,15 @@ SO_PUBLIC extern bool Queue_Put_Dest(
  * Gets a queue name from a uuid_t.
  * @param p_sLeading the leading text.
  * @param p_pId the uuid.
- * @param p_sQueueName the destination text.
+ * @param p_sQueueName the destination text buffer.
+ * @param p_iQueueNameSize the size of the destination buffer.
  * @return No return value.
  */
 SO_PUBLIC extern void Queue_GetQueueName(
     const char * p_sLeading,
     uuid_t p_pId,
-    char * p_sQueueName
+    char * p_sQueueName,
+    size_t p_iQueueNameSize
 );
 #ifdef __cplusplus
 }

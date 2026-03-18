@@ -79,12 +79,13 @@ String_Delete(void *a)
 void *
 String_Clone(void *o)
 {
-    char *item;
-    char *orig = o;
-    if ((item = calloc(strlen(orig)+1, sizeof(char))) == NULL)
+    const char *orig = o;
+
+    ASSERT(orig != NULL);
+    if (orig == NULL)
         return NULL;
-    strcpy (item, orig);
-    return item;
+
+    return strdup(orig);
 }
 
 
@@ -102,9 +103,13 @@ SO_PUBLIC bool
 StringList_Add (List_t *p_pList, const char *string)
 {
     char *new;
-    if (( new = calloc(strlen(string)+1, sizeof(char))) == NULL)
+    ASSERT(p_pList != NULL);
+    ASSERT(string != NULL);
+    if (p_pList == NULL || string == NULL)
         return false;
-    strcpy(new,string);
+
+    if ((new = String_Clone((void *)string)) == NULL)
+        return false;
     List_Push(p_pList, new);
     return true;
 }
