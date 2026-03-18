@@ -252,13 +252,10 @@ Hello_Serialize(struct Message *message)
     }
 
     wire = json_object_to_json_string(msg);
-    message->length = strlen(wire);
-    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
+    if (!Message_SetSerializedJson(message, wire, LOG_C_CORE, __func__)) {
         json_object_put(msg);
-        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate memory for serialized message", __func__);
         return false;
     }
-    strcpy((char *) message->serialized, wire);
     json_object_put(msg);
 
     return true;

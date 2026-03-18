@@ -234,13 +234,10 @@ OutputInspection_Serialize(struct Message *message)
     }
 
     wire = json_object_to_json_string(msg);
-    message->length = strlen(wire);
-    if ((message->serialized = calloc(message->length + 1, sizeof(uint8_t))) == NULL) {
-        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to allocate serialized string", __func__);
+    if (!Message_SetSerializedJson(message, wire, LOG_C_CORE, __func__)) {
         json_object_put(msg);
         return false;
     }
-    strcpy((char *)message->serialized, wire);
     json_object_put(msg);
 
     return true;
