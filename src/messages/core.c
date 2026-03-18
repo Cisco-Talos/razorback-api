@@ -138,19 +138,17 @@ Message_HeaderList_Add(List_t * headers, const char *p_sName, const char *p_sVal
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc new header", __func__);
         return false;
     }
-    if ((l_pHeader->sName = calloc(1, strlen(p_sName) + 1)) == NULL) {
+    if ((l_pHeader->sName = strdup(p_sName)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc new header name", __func__);
         free(l_pHeader);
         return false;
     }
-    if ((l_pHeader->sValue = calloc(1, strlen(p_sValue) + 1)) == NULL) {
+    if ((l_pHeader->sValue = strdup(p_sValue)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to alloc new header value", __func__);
         free(l_pHeader->sName);
         free(l_pHeader);
         return false;
     }
-    strcpy(l_pHeader->sName, p_sName);
-    strcpy(l_pHeader->sValue, p_sValue);
     List_Push(headers, l_pHeader);
 
     return l_pHeader;
