@@ -420,12 +420,11 @@ Queue_Create_With_Host (const char * p_sQueueName,
     l_pQueue->iPrefetch = p_iPrefetch;
     l_pQueue->bTopic = p_bTopic;
 
-    if ((l_pQueue->sName = (char *)calloc(strlen(p_sQueueName) + 1, sizeof(char))) == NULL)
+    if ((l_pQueue->sName = strdup(p_sQueueName)) == NULL)
     {
         rzb_log (LOG_ERR,LOG_C_STOMP, "%s: Failed to alloc new queue name", __func__);
         goto error;
     }
-    strcpy(l_pQueue->sName, p_sQueueName);
     if ((l_pQueue->mReadMutex = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL)
     {
         goto error;
@@ -710,10 +709,24 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
 
 SO_PUBLIC void
 Queue_GetQueueName (const char * p_sLeading, uuid_t p_pId,
-                    char * p_sQueueName)
+                    char * p_sQueueName, size_t p_iQueueNameSize)
 {
     char l_sUUID[UUID_STRING_LENGTH];
+    int written;
+
+    ASSERT(p_sLeading != NULL);
+    ASSERT(p_sQueueName != NULL);
+    ASSERT(p_iQueueNameSize > 0);
+    if (p_sLeading == NULL || p_sQueueName == NULL || p_iQueueNameSize == 0)
+    {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: invalid queue name arguments", __func__);
+        return;
+    }
 
     uuid_unparse (p_pId, l_sUUID);
-    sprintf (p_sQueueName, "%s.%s", p_sLeading, l_sUUID);
+    written = snprintf(p_sQueueName, p_iQueueNameSize, "%s.%s", p_sLeading, l_sUUID);
+    if (written < 0 || (size_t)written >= p_iQueueNameSize)
+    {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue name buffer is too small", __func__);
+    }
 }

@@ -306,7 +306,11 @@ SocketAddress_Initialize (struct Socket *sock,
         return false;
     }
 
-    sprintf (portAsString, "%i", port);
+    if (snprintf(portAsString, sizeof(portAsString), "%u", port) >= (int)sizeof(portAsString))
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Failed to format port", __func__);
+        return false;
+    }
     memset (&aiHints, 0, sizeof (struct addrinfo));
 
     aiHints.ai_family = AF_UNSPEC;
@@ -419,8 +423,13 @@ Socket_Listen_Unix (const char *path)
         return NULL;
 
     server->sun_family = AF_UNIX;
-    strncpy (server->sun_path, path, sizeof (server->sun_path));
-    server->sun_path[sizeof (server->sun_path) - 1] = '\0';
+    if (snprintf(server->sun_path, sizeof(server->sun_path), "%s", path) >=
+            (int)sizeof(server->sun_path))
+    {
+        rzb_log(LOG_ERR, LOG_C_NETWORK, "%s: Unix socket path is too long", __func__);
+        free(server);
+        return NULL;
+    }
 
     if ((sock = (struct Socket *)calloc (1, sizeof (struct Socket))) == NULL)
     {
