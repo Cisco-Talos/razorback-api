@@ -41,12 +41,17 @@
 #define CREATE_MODE 755
 #else //_MSC_VER
 #include <sys/mman.h>
+#include <unistd.h>
 #define CREATE_MODE (S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
 #define KNOWN_DISPATCHERS ETC_DIR "/known_dispatchers"
 #endif //_MSC_VER
 
 #ifndef MAX_PATH
 #define MAX_PATH 1024
+#endif
+
+#ifndef P_tmpdir
+#define P_tmpdir "/tmp"
 #endif
 
 #include <fcntl.h>
@@ -321,6 +326,9 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     char * tmp_string;  // Temporary string to use for path to tmpfile
 #ifdef _MSC_VER
     char lpTempPathBuffer[MAX_PATH];
+#else
+    const char *tmpDir;
+    int tmp_fd;
 #endif
     FILE *out_file;             // Output stream to create a temporary file on tmpfs
     ssize_t read =0;
@@ -384,32 +392,64 @@ Transfer_SSH_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         return TRANSFER_FAIL_DISPATCHER;
     }
 
+#ifdef _MSC_VER
     if ((tmp_string = calloc(1,MAX_PATH)) == NULL)
     {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to allocate path", __func__);
+        sftp_close(fd);
         return TRANSFER_FAIL_LOCAL;
     }
     tmp_string[0] = 0;
-#ifdef _MSC_VER
     GetTempPathA(MAX_PATH, lpTempPathBuffer);
 
     if (GetTempFileNameA(lpTempPathBuffer, "block", 0, tmp_string) == 0)
-#else
-    if (tmpnam (tmp_string) == NULL)
-#endif
     {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Cannot create temporary file name: %s, error: %s", __func__, tmp_string, strerror(errno));
+        sftp_close(fd);
         free(tmp_string);
         return TRANSFER_FAIL_LOCAL;
     }
-    //rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Thread ID: %d FileName: %s:", __func__, Thread_GetCurrent()->iThread, tmp_string);
-    // Create tmpfile
-    if ((out_file = fopen (tmp_string, "w")) == NULL)
+#else
+    tmpDir = getenv("TMPDIR");
+    if (tmpDir == NULL || tmpDir[0] == '\0')
+    {
+        tmpDir = P_tmpdir;
+    }
+
+    if (asprintf(&tmp_string, "%s/%s", tmpDir, "razorback-ssh-XXXXXX") == -1)
+    {
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to allocate temporary file path", __func__);
+        sftp_close(fd);
+        return TRANSFER_FAIL_LOCAL;
+    }
+    if ((tmp_fd = mkstemp(tmp_string)) == -1)
+    {
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Cannot create temporary file name: %s, error: %s", __func__, tmp_string, strerror(errno));
+        sftp_close(fd);
+        free(tmp_string);
+        return TRANSFER_FAIL_LOCAL;
+    }
+    if ((out_file = fdopen(tmp_fd, "wb")) == NULL)
     {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Cannot create temporary file: %s, error: %s", __func__, tmp_string, strerror(errno));
+        close(tmp_fd);
+        sftp_close(fd);
+        remove(tmp_string);
         free(tmp_string);
         return TRANSFER_FAIL_LOCAL;
     }
+#endif
+    //rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Thread ID: %d FileName: %s:", __func__, Thread_GetCurrent()->iThread, tmp_string);
+    // Create tmpfile
+#ifdef _MSC_VER
+    if ((out_file = fopen (tmp_string, "wb")) == NULL)
+    {
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Cannot create temporary file: %s, error: %s", __func__, tmp_string, strerror(errno));
+        sftp_close(fd);
+        free(tmp_string);
+        return TRANSFER_FAIL_LOCAL;
+    }
+#endif
 
     while ((uint64_t)read < block->pId->iLength)
     {
