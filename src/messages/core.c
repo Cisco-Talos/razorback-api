@@ -422,7 +422,7 @@ Message_Serialize_Empty(struct Message *message) {
     message->serialized[0]='{';
     message->serialized[1]='}';
     message->serialized[2]='\0';
-    message->length=1;
+    message->length=2;
 
     return true;
 }

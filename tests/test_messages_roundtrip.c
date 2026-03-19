@@ -54,7 +54,6 @@ void Message_CnC_Hello_Init(void) {}
 void Message_CnC_Pause_Init(void) {}
 void Message_CnC_Paused_Init(void) {}
 void Message_CnC_RegReq_Init(void) {}
-void Message_CnC_RegResp_Init(void) {}
 void Message_CnC_Running_Init(void) {}
 void Message_CnC_Term_Init(void) {}
 void Message_CnC_ReReg_Init(void) {}
@@ -211,6 +210,36 @@ START_TEST(test_message_cache_request_round_trips_and_matches_embedded_schemas)
 }
 END_TEST
 
+START_TEST(test_message_registration_response_serializes_full_empty_json_body)
+{
+    struct Message *message;
+    json_object *body;
+    uuid_t source;
+    uuid_t dest;
+    uuid_t parsed_source;
+    uuid_t parsed_dest;
+
+    ck_assert_int_eq(uuid_parse("00112233-4455-6677-8899-aabbccddeeff", source), 0);
+    ck_assert_int_eq(uuid_parse("12345678-1234-5678-9abc-def012345678", dest), 0);
+
+    message = MessageRegistrationResponse_Initialize(source, dest);
+    ck_assert_ptr_ne(message, NULL);
+    ck_assert(message->serialize(message));
+    ck_assert_uint_eq((unsigned int)message->length, 2U);
+    ck_assert_str_eq((const char *)message->serialized, "{}");
+    ck_assert(Message_Get_Nuggets(message, parsed_source, parsed_dest));
+    ck_assert_int_eq(uuid_compare(parsed_source, source), 0);
+    ck_assert_int_eq(uuid_compare(parsed_dest, dest), 0);
+
+    body = json_tokener_parse((const char *)message->serialized);
+    ck_assert_ptr_ne(body, NULL);
+    ck_assert_uint_eq((unsigned int)json_object_object_length(body), 0U);
+
+    json_object_put(body);
+    message->destroy(message);
+}
+END_TEST
+
 START_TEST(test_message_setup_rejects_unknown_type)
 {
     struct Message *message;
@@ -225,19 +254,6 @@ START_TEST(test_message_setup_rejects_unknown_type)
     message = Message_Create_Directed(0xdeadbeefU, MESSAGE_VERSION_1, 0, source, dest);
     ck_assert_ptr_ne(message, NULL);
     ck_assert(!Message_Setup(message));
-
-    Message_Destroy(message);
-}
-END_TEST
-
-START_TEST(test_message_set_serialized_json_rejects_replacing_existing_body)
-{
-    struct Message *message;
-
-    message = Message_Create(MESSAGE_TYPE_REQ, MESSAGE_VERSION_1, 0);
-    ck_assert_ptr_ne(message, NULL);
-    ck_assert(Message_SetSerializedJson(message, "{\"ok\":true}", LOG_C_CORE, __func__));
-    ck_assert(!Message_SetSerializedJson(message, "{\"again\":true}", LOG_C_CORE, __func__));
 
     Message_Destroy(message);
 }
@@ -294,8 +310,8 @@ messages_suite(void)
 
     tcase_add_test(testcase, test_message_config_ack_round_trips_and_matches_embedded_schemas);
     tcase_add_test(testcase, test_message_cache_request_round_trips_and_matches_embedded_schemas);
+    tcase_add_test(testcase, test_message_registration_response_serializes_full_empty_json_body);
     tcase_add_test(testcase, test_message_setup_rejects_unknown_type);
-    tcase_add_test(testcase, test_message_set_serialized_json_rejects_replacing_existing_body);
     tcase_add_test(testcase, test_message_config_ack_deserialize_rejects_missing_app_type);
     tcase_add_test(testcase, test_message_cache_request_deserialize_rejects_missing_block_id);
 

@@ -96,7 +96,8 @@ test_json_buffer_invalid_LDADD = $(CHECK_LIBS) @LIBS@
 test_messages_roundtrip_SOURCES = test_messages_roundtrip.c test_json_buffer_support.c \
 	../src/hash.c ../src/block_id.c ../src/list.c ../src/string_list.c ../src/json_buffer.c \
 	../src/lock.c ../src/ntvl.c ../src/uuids.c ../src/messages/core.c \
-	../src/messages/cache_req.c ../src/messages/cnc/config_ack.c
+	../src/messages/cache_req.c ../src/messages/cnc/config_ack.c \
+	../src/messages/cnc/reg_resp.c
 test_messages_roundtrip_CFLAGS = $(CHECK_CFLAGS)
 test_messages_roundtrip_CPPFLAGS = $(JSON_BUFFER_TEST_CPPFLAGS)
 test_messages_roundtrip_LDADD = $(CHECK_LIBS) @LIBS@
