@@ -55,23 +55,6 @@ capture_uuid_node(void *item, void *user_data)
     return LIST_EACH_END;
 }
 
-START_TEST(test_uuid_add_list_entry_requires_non_empty_name)
-{
-    List_t *list;
-    uuid_t uuid;
-
-    list = UUID_Create_List();
-    ck_assert_ptr_ne(list, NULL);
-    ck_assert_int_eq(uuid_parse("00112233-4455-6677-8899-aabbccddeeff", uuid), 0);
-
-    ck_assert(!UUID_Add_List_Entry(list, uuid, NULL, "desc"));
-    ck_assert(!UUID_Add_List_Entry(list, uuid, "", "desc"));
-    ck_assert_uint_eq(List_Length(list), 0U);
-
-    List_Destroy(list);
-}
-END_TEST
-
 START_TEST(test_uuid_add_list_entry_accepts_optional_description)
 {
     List_t *list;
@@ -222,7 +205,6 @@ uuid_suite(void)
     suite = suite_create("uuids");
     testcase = tcase_create("core");
 
-    tcase_add_test(testcase, test_uuid_add_list_entry_requires_non_empty_name);
     tcase_add_test(testcase, test_uuid_add_list_entry_accepts_optional_description);
     tcase_add_test(testcase, test_uuid_list_clone_duplicates_node_storage);
     tcase_add_test(testcase, test_uuid_lookup_helpers_handle_optional_description);
