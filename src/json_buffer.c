@@ -44,8 +44,10 @@
 
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
+#include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <string.h>
 
 static const char *
@@ -500,6 +502,10 @@ SO_PUBLIC bool JsonBuffer_Put_JsonString(json_object *parent, const char *name,
                                          const char *p_sJsonString)
 {
     json_object *parsed;
+    struct json_tokener *tok;
+    enum json_tokener_error error;
+    size_t json_length;
+    size_t parse_end;
     json_type type;
 
     ASSERT(parent != NULL);
@@ -518,11 +524,39 @@ SO_PUBLIC bool JsonBuffer_Put_JsonString(json_object *parent, const char *name,
         return false;
     }
 
-    parsed = json_tokener_parse(p_sJsonString);
-    if (parsed == NULL) {
+    json_length = strlen(p_sJsonString);
+    if (json_length > INT_MAX) {
+        JsonBuffer_LogSerializationError(__func__, name, "JSON string is too large to parse");
+        return false;
+    }
+
+    if ((tok = json_tokener_new()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate JSON tokener");
+        return false;
+    }
+
+    parsed = json_tokener_parse_ex(tok, p_sJsonString, (int)json_length);
+    error = json_tokener_get_error(tok);
+    parse_end = json_tokener_get_parse_end(tok);
+    if (parsed == NULL || error != json_tokener_success) {
+        json_tokener_free(tok);
         JsonBuffer_LogSerializationError(__func__, name, "failed to parse JSON string");
         return false;
     }
+
+    while (parse_end < json_length &&
+           isspace((unsigned char)p_sJsonString[parse_end])) {
+        parse_end++;
+    }
+    if (parse_end != json_length) {
+        json_tokener_free(tok);
+        json_object_put(parsed);
+        JsonBuffer_LogSerializationError(__func__, name,
+                                         "JSON string contains trailing non-whitespace data");
+        return false;
+    }
+
+    json_tokener_free(tok);
 
     type = json_object_get_type(parsed);
     if (type != json_type_object && type != json_type_array) {

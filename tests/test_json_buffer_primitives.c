@@ -251,8 +251,26 @@ START_TEST(test_json_buffer_rejects_invalid_opaque_json_strings)
     parent = json_buffer_test_parent_object();
 
     ck_assert(!JsonBuffer_Put_JsonString(parent, "opaque", "{invalid"));
+    ck_assert(!JsonBuffer_Put_JsonString(parent, "opaque", "{\"k\":1}junk"));
     ck_assert(!JsonBuffer_Put_JsonString(parent, "opaque", "\"string\""));
 
+    json_object_put(parent);
+}
+END_TEST
+
+START_TEST(test_json_buffer_accepts_opaque_json_with_trailing_whitespace)
+{
+    json_object *parent;
+    char *json_string;
+
+    parent = json_buffer_test_parent_object();
+
+    ck_assert(JsonBuffer_Put_JsonString(parent, "opaque",
+                                        "{\"message\":\"payload\"} \n\t"));
+    json_string = JsonBuffer_Get_JsonString(parent, "opaque");
+    assert_json_string_matches(json_string, "{\"message\":\"payload\"}");
+
+    free(json_string);
     json_object_put(parent);
 }
 END_TEST
@@ -306,6 +324,7 @@ json_buffer_primitives_suite(void)
     tcase_add_test(testcase, test_json_buffer_round_trips_opaque_json_object_strings);
     tcase_add_test(testcase, test_json_buffer_round_trips_opaque_json_array_strings);
     tcase_add_test(testcase, test_json_buffer_rejects_invalid_opaque_json_strings);
+    tcase_add_test(testcase, test_json_buffer_accepts_opaque_json_with_trailing_whitespace);
     tcase_add_test(testcase, test_json_buffer_rejects_non_container_opaque_json_fields);
     tcase_add_test(testcase, test_json_buffer_rejects_type_mismatches);
 
