@@ -52,9 +52,6 @@ static bool
 Hello_Deserialize(struct Message *message) {
     struct MessageHello *hello;
     json_object *msg;
-    uuid_t dispatcher;
-
-    UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, dispatcher);
 
     ASSERT(message != NULL);
     if (message == NULL) {
@@ -95,7 +92,9 @@ Hello_Deserialize(struct Message *message) {
                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
         return false;
     }
-    if (uuid_compare(hello->uuidNuggetType, dispatcher) == 0) {
+    if (UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER,
+                          UUID_TYPE_NUGGET_TYPE,
+                          hello->uuidNuggetType)) {
         if (!(JsonBuffer_Get_uint8_t(msg, "Priority", &hello->priority) &&
               JsonBuffer_Get_uint8_t(msg, "Protocol", &hello->protocol) &&
               JsonBuffer_Get_uint16_t(msg, "Port", &hello->port) &&
@@ -125,12 +124,6 @@ MessageHello_Initialize (struct RazorbackContext *context)
 {
     struct Message * msg;
     struct MessageHello *message;
-    uuid_t dispatcher;
-    if (!UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, dispatcher)) {
-        rzb_log (LOG_ERR, LOG_C_CORE,
-                 "%s: failed to get dispatcher nugget type uuid", __func__);
-        return NULL;
-    }
 
     msg = Message_Create_Broadcast(
         MESSAGE_TYPE_HELLO,
@@ -149,7 +142,9 @@ MessageHello_Initialize (struct RazorbackContext *context)
     uuid_copy (message->uuidNuggetType, context->uuidNuggetType);
     uuid_copy (message->uuidApplicationType, context->uuidApplicationType);
     message->locality = context->locality;
-    if (uuid_compare(dispatcher, context->uuidNuggetType) == 0) {
+    if (UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER,
+                          UUID_TYPE_NUGGET_TYPE,
+                          context->uuidNuggetType)) {
         message->flags = context->dispatcher.flags;
         message->priority = context->dispatcher.priority;
         message->port = context->dispatcher.port;
@@ -194,8 +189,6 @@ Hello_Serialize(struct Message *message)
     struct MessageHello *hello;
     json_object *msg;
     const char * wire;
-    uuid_t dispatcher;
-    UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, dispatcher);
 
     ASSERT(message != NULL);
     if (message == NULL) {
@@ -231,7 +224,9 @@ Hello_Serialize(struct Message *message)
                 "%s: failed due to failure of JsonBuffer_Get_UUID", __func__);
         return false;
     }
-    if (uuid_compare(hello->uuidNuggetType, dispatcher) == 0) {
+    if (UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER,
+                          UUID_TYPE_NUGGET_TYPE,
+                          hello->uuidNuggetType)) {
         if (!(JsonBuffer_Put_uint8_t(msg, "Priority", hello->priority) &&
               JsonBuffer_Put_uint8_t(msg, "Protocol", hello->protocol) &&
               JsonBuffer_Put_uint16_t(msg, "Port", hello->port) &&
