@@ -1,7 +1,7 @@
 # Razorback
 
 <p align="center">
-  <img width="250" height="250" src="https://raw.githubusercontent.com/Cisco-Talos/razorback/main/logo.png" alt='The Razorback mascot'>
+  <img width="250" height="250" src="https://raw.githubusercontent.com/Cisco-Talos/razorback-api/main/logo.png" alt='The Razorback mascot'>
 </p>
 
 <p align="center">
@@ -28,7 +28,7 @@ make install
 ### Long/Developer Install
 Debugging can be enabled with:
 
-```./configure --enable-debug```
+```./configure --enable-debug --enable-assert```
 
 For all avaliable options see:
 
@@ -49,6 +49,10 @@ Ubuntu focal:
 * libconfig-dev
 * libssh-dev
 * libjson-c-dev
+* check - Unit testing framework (Required for testing, not runtime)
+* jv - JSON validator (Required for testing, not runtime)
+    `go install github.com/santhosh-tekuri/jsonschema/cmd/jv@latest`
+
 
 ## Linking to the Razorback API
 
