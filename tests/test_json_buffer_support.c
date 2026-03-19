@@ -76,8 +76,10 @@ Block_Destroy(struct Block *block)
     if (block == NULL)
         return;
 
-    BlockId_Destroy(block->pId);
-    BlockId_Destroy(block->pParentId);
+    if (block->pId != NULL)
+        BlockId_Destroy(block->pId);
+    if (block->pParentId != NULL)
+        BlockId_Destroy(block->pParentId);
     Block_Destroy(block->pParentBlock);
     if (block->pMetaDataList != NULL)
         List_Destroy(block->pMetaDataList);
@@ -113,7 +115,8 @@ Judgment_Destroy(struct Judgment *judgment)
         return;
 
     EventId_Destroy(judgment->pEventId);
-    BlockId_Destroy(judgment->pBlockId);
+    if (judgment->pBlockId != NULL)
+        BlockId_Destroy(judgment->pBlockId);
     if (judgment->pMetaDataList != NULL)
         List_Destroy(judgment->pMetaDataList);
     free(judgment->sMessage);

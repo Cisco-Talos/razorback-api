@@ -32,6 +32,7 @@
 #include <razorback/ntlv.h>
 #include <razorback/uuids.h>
 
+#include "init.h"
 #include "test_json_buffer_support.h"
 
 #include <json.h>
@@ -77,6 +78,50 @@ count_list_items(void *item, void *user_data)
     (void)item;
     (*count)++;
     return LIST_EACH_OK;
+}
+
+static void
+ensure_test_ntlv_type_registered(const char *type_name, const char *uuid_text)
+{
+    static bool initialized = false;
+    List_t *list;
+    uuid_t uuid;
+
+    ck_assert_ptr_ne(type_name, NULL);
+    ck_assert_ptr_ne(uuid_text, NULL);
+
+    if (!initialized) {
+        initUuids();
+        initialized = true;
+    }
+
+    if (UUID_Get_UUID(type_name, UUID_TYPE_NTLV_TYPE, uuid))
+        return;
+
+    list = UUID_Get_List(UUID_TYPE_NTLV_TYPE);
+    ck_assert_ptr_ne(list, NULL);
+    ck_assert_int_eq(uuid_parse(uuid_text, uuid), 0);
+    ck_assert(UUID_Add_List_Entry(list, uuid, type_name, NULL));
+}
+
+static void
+assert_json_text_matches(const char *actual, const char *expected)
+{
+    json_object *actual_object;
+    json_object *expected_object;
+
+    ck_assert_ptr_ne(actual, NULL);
+    ck_assert_ptr_ne(expected, NULL);
+
+    actual_object = json_tokener_parse(actual);
+    expected_object = json_tokener_parse(expected);
+    ck_assert_ptr_ne(actual_object, NULL);
+    ck_assert_ptr_ne(expected_object, NULL);
+    ck_assert_str_eq(json_object_to_json_string_ext(actual_object, JSON_C_TO_STRING_PLAIN),
+                     json_object_to_json_string_ext(expected_object, JSON_C_TO_STRING_PLAIN));
+
+    json_object_put(expected_object);
+    json_object_put(actual_object);
 }
 
 struct StringListState {
@@ -726,6 +771,45 @@ START_TEST(test_json_buffer_round_trips_empty_ntlv_list_and_matches_schema)
 }
 END_TEST
 
+START_TEST(test_json_buffer_round_trips_json_ntlv_list_and_matches_schema)
+{
+    static const char expected_json[] = "{\"message\":\"payload\",\"count\":2}";
+    json_object *parent;
+    List_t *expected;
+    List_t *actual = NULL;
+    const uint8_t *actual_data = NULL;
+    uint32_t actual_size = 0U;
+    uuid_t name_uuid;
+    uuid_t type_uuid;
+    size_t item_count = 0;
+
+    expected = NTLVList_Create();
+    ck_assert_ptr_ne(expected, NULL);
+    ensure_test_ntlv_type_registered(NTLV_TYPE_JSON,
+                                     "7b2fe6f4-1202-4dc8-9fb6-09f5b4f62c21");
+    ck_assert_int_eq(uuid_parse("00112233-4455-6677-8899-aabbccddeeff", name_uuid), 0);
+    ck_assert(UUID_Get_UUID(NTLV_TYPE_JSON, UUID_TYPE_NTLV_TYPE, type_uuid));
+    ck_assert(NTLVList_Add(expected, name_uuid, type_uuid,
+                           (uint32_t)strlen(expected_json) + 1U,
+                           (const uint8_t *)expected_json));
+    parent = json_buffer_test_parent_object();
+
+    ck_assert(JsonBuffer_Put_NTLVList(parent, "metadata", expected));
+    json_buffer_assert_field_matches_schema(parent, "metadata",
+                                            "ntlv-list.schema.json");
+    ck_assert(JsonBuffer_Get_NTLVList(parent, "metadata", &actual));
+    ck_assert(List_ForEach(actual, count_list_items, &item_count));
+    ck_assert_uint_eq(item_count, 1U);
+    ck_assert(NTLVList_Get(actual, name_uuid, type_uuid, &actual_size, &actual_data));
+    ck_assert_uint_eq(actual_size, (uint32_t)strlen(expected_json) + 1U);
+    assert_json_text_matches((const char *)actual_data, expected_json);
+
+    List_Destroy(actual);
+    List_Destroy(expected);
+    json_object_put(parent);
+}
+END_TEST
+
 static Suite *
 json_buffer_structs_suite(void)
 {
@@ -752,6 +836,7 @@ json_buffer_structs_suite(void)
     tcase_add_test(testcase, test_json_buffer_round_trips_empty_uint8_list_and_matches_schema);
     tcase_add_test(testcase, test_json_buffer_round_trips_ntlv_list_and_matches_schema);
     tcase_add_test(testcase, test_json_buffer_round_trips_empty_ntlv_list_and_matches_schema);
+    tcase_add_test(testcase, test_json_buffer_round_trips_json_ntlv_list_and_matches_schema);
 
     suite_add_tcase(suite, testcase);
     return suite;

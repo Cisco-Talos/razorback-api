@@ -21,6 +21,12 @@
     "Bin_Value": {
       "type": "string",
       "contentEncoding": "base64"
+    },
+    "Json_Value": {
+      "type": [
+        "object",
+        "array"
+      ]
     }
   },
   "oneOf": [
@@ -29,8 +35,17 @@
         "String_Value"
       ],
       "not": {
-        "required": [
-          "Bin_Value"
+        "anyOf": [
+          {
+            "required": [
+              "Bin_Value"
+            ]
+          },
+          {
+            "required": [
+              "Json_Value"
+            ]
+          }
         ]
       }
     },
@@ -39,8 +54,36 @@
         "Bin_Value"
       ],
       "not": {
-        "required": [
-          "String_Value"
+        "anyOf": [
+          {
+            "required": [
+              "String_Value"
+            ]
+          },
+          {
+            "required": [
+              "Json_Value"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "required": [
+        "Json_Value"
+      ],
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "String_Value"
+            ]
+          },
+          {
+            "required": [
+              "Bin_Value"
+            ]
+          }
         ]
       }
     }

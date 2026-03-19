@@ -122,6 +122,19 @@ SO_PUBLIC extern bool JsonBuffer_Put_String(
 );
 
 /**
+ * Add an opaque JSON object or array value to a JSON object from its string form.
+ * @param parent Parent object.
+ * @param name Name string.
+ * @param p_sJsonString String containing a serialized JSON object or array.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool JsonBuffer_Put_JsonString(
+    json_object * parent,
+    const char * name,
+    const char * p_sJsonString
+);
+
+/**
  * Get a boolean value from a JSON object.
  * @param parent Parent object.
  * @param name Name string.
@@ -189,6 +202,14 @@ SO_PUBLIC extern bool JsonBuffer_Get_uint64_t(
  * @return Allocated string on success, or NULL on failure.
  */
 SO_PUBLIC extern char * JsonBuffer_Get_String(json_object * parent, const char * name);
+
+/**
+ * Get an opaque JSON object or array value from a JSON object in its string form.
+ * @param parent Parent object.
+ * @param name Name of the JSON field to read.
+ * @return Allocated compact JSON string on success, or NULL on failure.
+ */
+SO_PUBLIC extern char * JsonBuffer_Get_JsonString(json_object * parent, const char * name);
 
 /**
  * Get a byte array from a JSON object.

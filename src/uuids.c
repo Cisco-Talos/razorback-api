@@ -197,6 +197,24 @@ UUID_Get_UUID (const char *p_sName, int p_iType, uuid_t r_uuid)
     return true;
 }
 
+SO_PUBLIC bool
+UUID_Matches_UUID(const char *p_sName, int p_iType, uuid_t p_uuid)
+{
+    uuid_t uuid;
+
+    if (p_sName == NULL || UUID_Get_List(p_iType) == NULL)
+    {
+        return false;
+    }
+
+    if (!UUID_Get_UUID(p_sName, p_iType, uuid))
+    {
+        return false;
+    }
+
+    return uuid_compare(uuid, p_uuid) == 0;
+}
+
 SO_PUBLIC char *
 UUID_Get_Description (const char *p_sName, int p_iType)
 {

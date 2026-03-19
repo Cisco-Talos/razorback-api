@@ -196,6 +196,21 @@ START_TEST(test_uuid_lookup_helpers_fail_for_unknown_entries)
 }
 END_TEST
 
+START_TEST(test_uuid_matches_uuid_reports_expected_result)
+{
+    uuid_t uuid;
+    uuid_t other_uuid;
+
+    ensure_uuid_tables_initialized();
+
+    ck_assert(UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, uuid));
+    ck_assert(UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, uuid));
+    ck_assert_int_eq(uuid_parse("00112233-4455-6677-8899-aabbccddeeff", other_uuid), 0);
+    ck_assert(!UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, other_uuid));
+    ck_assert(!UUID_Matches_UUID("does-not-exist", UUID_TYPE_NUGGET_TYPE, uuid));
+}
+END_TEST
+
 static Suite *
 uuid_suite(void)
 {
@@ -211,6 +226,7 @@ uuid_suite(void)
     tcase_add_test(testcase, test_uuid_builtin_lookup_returns_known_nugget_type);
     tcase_add_test(testcase, test_uuid_binary_size_counts_uuid_bytes_and_name_lengths);
     tcase_add_test(testcase, test_uuid_lookup_helpers_fail_for_unknown_entries);
+    tcase_add_test(testcase, test_uuid_matches_uuid_reports_expected_result);
 
     suite_add_tcase(suite, testcase);
     return suite;
