@@ -27,20 +27,36 @@
 #include <razorback/transfer.h>
 
 #include <curl/curl.h>
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "transfer/core.h"
+#include "runtime_config.h"
+
+#ifndef P_tmpdir
+#define P_tmpdir "/tmp"
+#endif
 
 static bool sg_bSkipStore = false;
 
-static struct TransportDescriptor descriptor =
- {
-         2,
-         "Http",
-         "Transfer file via shared file system",
-         Transfer_HTTP_Store,
-         Transfer_HTTP_Fetch
- };
+static struct TransportDescriptor descriptorHttp = {
+    TRANSFER_MODE_HTTP,
+    "HTTP",
+    "Transfer file via HTTP",
+    Transfer_HTTP_Store,
+    Transfer_HTTP_Fetch
+};
+
+static struct TransportDescriptor descriptorHttps = {
+    TRANSFER_MODE_HTTPS,
+    "HTTPS",
+    "Transfer file via HTTPS",
+    Transfer_HTTP_Store,
+    Transfer_HTTP_Fetch
+};
 
 bool HTTP_Init(void)
 {
@@ -53,7 +69,7 @@ bool HTTP_Init(void)
             rzb_log(LOG_INFO,LOG_C_TRANSFER, "%s: HTTP Store disabled via RZB_SKIP_HTTP_STORE", __func__);
         }
     }
-    return Transport_Register(&descriptor);
+    return Transport_Register(&descriptorHttp) && Transport_Register(&descriptorHttps);
 }
 
 struct StoreContext
@@ -62,11 +78,131 @@ struct StoreContext
     struct BlockPoolData *dataItem;
     size_t bytesRead;
     char * filename;
+    uint8_t protocol;
     uint16_t port;
     enum TransferStatus status;
     char * memory;
     size_t size;
 };
+
+static const char *
+HTTP_GetTempDirectory(void)
+{
+    const char *path = Config_getLocalityBlockStore();
+
+    if (path != NULL && path[0] != '\0' && !Config_isBlockStoreRemote()) {
+        return path;
+    }
+
+    path = getenv("TMPDIR");
+    if (path != NULL && path[0] != '\0') {
+        return path;
+    }
+
+    return P_tmpdir;
+}
+
+static bool
+HTTP_GetProtocolSettings(uint8_t protocol, const char **scheme, bool *secure,
+                         const char *caller)
+{
+    ASSERT(scheme != NULL);
+    ASSERT(secure != NULL);
+    if (scheme == NULL || secure == NULL) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: invalid protocol settings output", caller);
+        return false;
+    }
+
+    switch (protocol) {
+    case TRANSFER_MODE_HTTP:
+        *scheme = "http";
+        *secure = false;
+        return true;
+    case TRANSFER_MODE_HTTPS:
+        *scheme = "https";
+        *secure = true;
+        return true;
+    default:
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: unsupported HTTP transport protocol: %u",
+                caller, protocol);
+        return false;
+    }
+}
+
+static bool
+HTTP_BuildURL(char **url, uint8_t protocol, const char *address, uint16_t port,
+              const char *filename, const char *caller)
+{
+    size_t filenameLength;
+    const char *scheme;
+    bool secure;
+
+    ASSERT(url != NULL);
+    ASSERT(address != NULL);
+    ASSERT(filename != NULL);
+    if (url == NULL || address == NULL || filename == NULL) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: invalid URL parameters", caller);
+        return false;
+    }
+    if (!HTTP_GetProtocolSettings(protocol, &scheme, &secure, caller)) {
+        return false;
+    }
+    (void)secure;
+
+    filenameLength = strlen(filename);
+    if (filenameLength < 4) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: invalid transfer filename", caller);
+        return false;
+    }
+
+    if (asprintf(url, "%s://%s:%u/%c/%c/%c/%c/%s",
+                 scheme,
+                 address,
+                 port,
+                 filename[0],
+                 filename[1],
+                 filename[2],
+                 filename[3],
+                 filename) == -1) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: Failed to generate URL", caller);
+        return false;
+    }
+
+    return true;
+}
+
+static bool
+HTTP_ConfigureCurl(CURL *curl, uint8_t protocol, const char *url)
+{
+    bool secure;
+    const char *scheme;
+
+    ASSERT(curl != NULL);
+    ASSERT(url != NULL);
+    if (curl == NULL || url == NULL) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: invalid CURL parameters", __func__);
+        return false;
+    }
+    if (!HTTP_GetProtocolSettings(protocol, &scheme, &secure, __func__)) {
+        return false;
+    }
+
+    if (curl_easy_setopt(curl, CURLOPT_URL, url) != CURLE_OK) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: Failed to configure %s connection",
+                __func__, scheme);
+        return false;
+    }
+    if (secure &&
+        ((curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2) != CURLE_OK) ||
+         (curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L) != CURLE_OK) ||
+         (curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L) != CURLE_OK))) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: Failed to configure %s connection",
+                __func__, scheme);
+        return false;
+    }
+
+    return true;
+}
 
 static size_t
 read_callback(char *buffer, size_t size, size_t nitems, void *userdata) {
@@ -147,6 +283,10 @@ HTTP_Try_Store(void *i, void*ud)
     struct StoreContext *status = ud;
     char *address = i;
     char *url = NULL;
+    CURL *curl = NULL;
+    curl_mime *mime = NULL;
+    curl_mimepart *part = NULL;
+    CURLcode res;
     long http_code = 0;
 
     // Reset all the context states incase this is a retry
@@ -156,38 +296,32 @@ HTTP_Try_Store(void *i, void*ud)
         rewind(status->dataItem->data.file);
     }
 
-    if (asprintf(&url, "http://%s:%d/%c/%c/%c/%c/%s",
-                address,
-                status->port,
-                 status->filename[0],
-                 status->filename[1],
-                 status->filename[2],
-                 status->filename[3],
-                 status->filename) == -1)
-    {
-        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to generate URL", __func__);
+    if (!HTTP_BuildURL(&url, status->protocol, address, status->port, status->filename,
+                       __func__)) {
         status->status = TRANSFER_FAIL_LOCAL;
         return LIST_EACH_OK;
     }
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Attempting to store %s at %s", __func__, status->filename, url);
-    CURL *curl = curl_easy_init();
-    if (curl == NULL)
-    {
+    curl = curl_easy_init();
+    if (curl == NULL) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to initialize curl", __func__);
-        free(url);
         status->status = TRANSFER_FAIL_LOCAL;
-        return LIST_EACH_OK;
+        goto cleanup;
     }
-    curl_mime *mime = curl_mime_init(curl);
+    mime = curl_mime_init(curl);
     if (mime == NULL) {
-
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to initialize curl MIME data", __func__);
+        status->status = TRANSFER_FAIL_LOCAL;
+        goto cleanup;
     }
-    curl_mimepart *part = curl_mime_addpart(mime);
+    part = curl_mime_addpart(mime);
     if (part == NULL) {
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to create curl MIME part", __func__);
+        status->status = TRANSFER_FAIL_LOCAL;
+        goto cleanup;
     }
 
-    if (
-            (curl_easy_setopt(curl, CURLOPT_URL, url) != CURLE_OK) ||
+    if (!HTTP_ConfigureCurl(curl, status->protocol, url) ||
             (curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_callback) != CURLE_OK) ||
             (curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback) != CURLE_OK) ||
             (curl_easy_setopt(curl, CURLOPT_WRITEDATA, status) != CURLE_OK) ||
@@ -203,14 +337,13 @@ HTTP_Try_Store(void *i, void*ud)
             (curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime) != CURLE_OK)
         )
     {
-        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to set URL", __func__);
-        curl_easy_cleanup(curl);
-        free(url);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to configure HTTP transport request",
+                __func__);
         status->status = TRANSFER_FAIL_LOCAL;
-        return LIST_EACH_OK;
+        goto cleanup;
     }
 
-    CURLcode res = curl_easy_perform(curl);
+    res = curl_easy_perform(curl);
     if(res != CURLE_OK) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: curl_easy_perform() failed: %s", __func__,
                 curl_easy_strerror(res));
@@ -221,14 +354,25 @@ HTTP_Try_Store(void *i, void*ud)
         status->status = TRANSFER_FAIL_LOCAL;
     }
 
-curl_easy_cleanup(curl);
-    curl_mime_free(mime);
-
+cleanup:
+    if (mime != NULL) {
+        curl_mime_free(mime);
+    }
+    if (curl != NULL) {
+        curl_easy_cleanup(curl);
+    }
     free(url);
     // Rewind the filehandle after the request
     if (status->dataItem != NULL && status->dataItem->iFlags == BLOCK_POOL_DATA_FLAG_FILE)
     {
         rewind(status->dataItem->data.file);
+    }
+    if (status->status != TRANSFER_OK && status->status != TRANSFER_FAIL_DISPATCHER &&
+            status->status != TRANSFER_FAIL_LOCAL) {
+        status->status = TRANSFER_FAIL_LOCAL;
+    }
+    if (status->status == TRANSFER_FAIL_LOCAL) {
+        return LIST_EACH_OK;
     }
     if (http_code != 200) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to store file: %zi", __func__, http_code);
@@ -273,6 +417,7 @@ Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
         .dataItem = item->pDataHead,
         .bytesRead = 0,
         .filename = NULL,
+        .protocol = dispatcher->dispatcher->protocol,
         .port = dispatcher->dispatcher->port,
         .status = TRANSFER_FAIL_LOCAL,
         .memory = NULL,
@@ -281,7 +426,10 @@ Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     if (sg_bSkipStore) {
         return TRANSFER_OK;
     }
-    context.memory = malloc(1);
+    if ((context.memory = calloc(1, sizeof(char))) == NULL) {
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: failed to allocate response buffer", __func__);
+        return TRANSFER_FAIL_LOCAL;
+    }
 
     if ((context.filename = Transfer_generateFilename (item->pEvent->pBlock)) == NULL)
     {
@@ -295,16 +443,58 @@ Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
     return context.status;
 }
 
-static const char * tempFileTemplate = "/tmp/rzb-XXXXXX";
+static const char * tempFileTemplate = "rzb-XXXXXX";
 struct FetchContext {
     char * filename;
     char * tmpFileName;
     FILE * fd;
+    uint8_t protocol;
     uint16_t port;
     enum TransferStatus status;
     size_t size;
     size_t expectedSize;
 };
+
+static bool
+HTTP_OpenFetchFile(struct FetchContext *context)
+{
+    const char *tempDir;
+    int fd;
+
+    ASSERT(context != NULL);
+    if (context == NULL) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: fetch context is NULL", __func__);
+        return false;
+    }
+
+    tempDir = HTTP_GetTempDirectory();
+    if (asprintf(&context->tmpFileName, "%s/%s", tempDir, tempFileTemplate) == -1) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: failed to allocate temp file template",
+                __func__);
+        context->tmpFileName = NULL;
+        return false;
+    }
+
+    if ((fd = mkstemp(context->tmpFileName)) == -1) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: failed to create temp file: %s",
+                __func__, strerror(errno));
+        free(context->tmpFileName);
+        context->tmpFileName = NULL;
+        return false;
+    }
+
+    if ((context->fd = fdopen(fd, "w+b")) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_TRANSFER, "%s: failed to open temp file stream: %s",
+                __func__, strerror(errno));
+        close(fd);
+        remove(context->tmpFileName);
+        free(context->tmpFileName);
+        context->tmpFileName = NULL;
+        return false;
+    }
+
+    return true;
+}
 
 
 static size_t
@@ -328,6 +518,7 @@ HTTP_Try_Fetch(void *i, void*ud)
     struct FetchContext *status = ud;
     char *address = i;
     char *url = NULL;
+    CURL *curl = NULL;
     long http_code = 0;
     CURLcode res;
 
@@ -339,37 +530,27 @@ HTTP_Try_Fetch(void *i, void*ud)
         return LIST_EACH_OK;
     }
     status->size = 0;
-    if (asprintf(&url, "http://%s:%d/%c/%c/%c/%c/%s",
-                 address,
-                 status->port,
-                 status->filename[0],
-                 status->filename[1],
-                 status->filename[2],
-                 status->filename[3],
-                 status->filename) == -1) {
-        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to generate URL", __func__);
+    if (!HTTP_BuildURL(&url, status->protocol, address, status->port, status->filename,
+                       __func__)) {
         status->status = TRANSFER_FAIL_LOCAL;
         return LIST_EACH_OK;
     }
-    rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Attempting to store %s at %s", __func__, status->filename, url);
-    CURL *curl = curl_easy_init();
+    rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Attempting to fetch %s from %s", __func__, status->filename, url);
+    curl = curl_easy_init();
     if (curl == NULL) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to initialize curl", __func__);
-        free(url);
         status->status = TRANSFER_FAIL_LOCAL;
-        return LIST_EACH_OK;
+        goto cleanup;
     }
-    if (
-            (curl_easy_setopt(curl, CURLOPT_URL, url) != CURLE_OK) ||
+    if (!HTTP_ConfigureCurl(curl, status->protocol, url) ||
             (curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback) != CURLE_OK) ||
             (curl_easy_setopt(curl, CURLOPT_WRITEDATA, status) != CURLE_OK)
         )
     {
-        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to set URL", __func__);
-        curl_easy_cleanup(curl);
-        free(url);
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to configure HTTP transport request",
+                __func__);
         status->status = TRANSFER_FAIL_LOCAL;
-        return LIST_EACH_OK;
+        goto cleanup;
     }
 
     res = curl_easy_perform(curl);
@@ -379,9 +560,18 @@ HTTP_Try_Fetch(void *i, void*ud)
                 curl_easy_strerror(res));
         status->status = TRANSFER_FAIL_DISPATCHER;
     }
-    curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code);
-    curl_easy_cleanup(curl);
+    if (curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code) != CURLE_OK) {
+        rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to get response code", __func__);
+        status->status = TRANSFER_FAIL_LOCAL;
+    }
+cleanup:
+    if (curl != NULL) {
+        curl_easy_cleanup(curl);
+    }
     free(url);
+    if (status->status == TRANSFER_FAIL_LOCAL) {
+        return LIST_EACH_OK;
+    }
     if (http_code != 200) {
         status->status = TRANSFER_FAIL_DISPATCHER;
         return LIST_EACH_OK;
@@ -418,6 +608,7 @@ Transfer_HTTP_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         .filename = NULL,
         .tmpFileName = NULL,
         .fd = NULL,
+        .protocol = dispatcher->dispatcher->protocol,
         .port = dispatcher->dispatcher->port,
         .status = TRANSFER_FAIL_LOCAL,
         .size = 0,
@@ -428,16 +619,17 @@ Transfer_HTTP_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         rzb_log (LOG_ERR,LOG_C_TRANSFER, "%s: failed to generate file name", __func__);
         return TRANSFER_FAIL_LOCAL;
     }
-    context.tmpFileName = calloc(strlen(tempFileTemplate)+1, sizeof(char));
-    strcpy(context.tmpFileName, tempFileTemplate);
-    int f = mkstemp(context.tmpFileName );
-    context.fd = fdopen(f, "w");
+    if (!HTTP_OpenFetchFile(&context)) {
+        free(context.filename);
+        return TRANSFER_FAIL_LOCAL;
+    }
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Storing file in: %s", __func__ , context.tmpFileName);
     List_ForEach(dispatcher->dispatcher->addressList, HTTP_Fetch, &context);
     fclose(context.fd);
     free(context.filename);
     if (context.status != TRANSFER_OK) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to fetch file", __func__);
+        remove(context.tmpFileName);
         free(context.tmpFileName);
         return context.status;
     }
