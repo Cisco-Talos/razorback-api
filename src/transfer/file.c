@@ -39,7 +39,7 @@
 
 static struct TransportDescriptor descriptor =
 {
-    0,
+    TRANSFER_MODE_FILE,
     "File",
     "Transfer file via shared file system",
     Transfer_File_Store,

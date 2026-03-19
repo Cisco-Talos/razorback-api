@@ -26,6 +26,12 @@
 #include <razorback/types.h>
 #include <razorback/connected_entity.h>
 
+#define TRANSFER_MODE_FILE 0
+#define TRANSFER_MODE_SSH 1
+#define TRANSFER_MODE_HTTP 2
+#define TRANSFER_MODE_HTTPS 3
+#define TRANSFER_MODE_CUSTOM 255
+
 enum TransferStatus {
     TRANSFER_OK,                ///< Block was transfered successfully
     TRANSFER_FAIL_DISPATCHER,   ///< An error was encountered talking to the dispatcher (dispatcher will be marked as bad)
