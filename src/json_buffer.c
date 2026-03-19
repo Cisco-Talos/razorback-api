@@ -494,10 +494,11 @@ SO_PUBLIC bool JsonBuffer_Get_ByteArray (json_object * parent, const char * name
                                       uint8_t **p_pByteArray)
 {
     json_object *object;
-    char *input;
+    const char *input;
     uint8_t *output;
     BIO *bmem, *b64;
-    size_t length;
+    int inputLength;
+    size_t outputLength;
     int decodedLength;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
@@ -517,9 +518,10 @@ SO_PUBLIC bool JsonBuffer_Get_ByteArray (json_object * parent, const char * name
         JsonBuffer_LogTypeMismatch(__func__, name, "string", object, false);
         return false;
     }
-    input = (char *)json_object_get_string(object);
-    length = strlen(input);
-    if ((output = calloc(length, sizeof(uint8_t))) == NULL) {
+    input = json_object_get_string(object);
+    inputLength = json_object_get_string_len(object);
+    outputLength = (inputLength > 0) ? (size_t)inputLength : 1U;
+    if ((output = calloc(outputLength, sizeof(uint8_t))) == NULL) {
         JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate byte array");
         return false;
     }
@@ -531,7 +533,7 @@ SO_PUBLIC bool JsonBuffer_Get_ByteArray (json_object * parent, const char * name
         return false;
     }
     BIO_set_flags (b64, BIO_FLAGS_BASE64_NO_NL);
-    bmem = BIO_new_mem_buf (input, strlen(input));
+    bmem = BIO_new_mem_buf (input, inputLength);
     if (bmem == NULL) {
         JsonBuffer_LogDeserializationError(__func__, name, "failed to allocate memory BIO");
         BIO_free_all(b64);
@@ -539,7 +541,7 @@ SO_PUBLIC bool JsonBuffer_Get_ByteArray (json_object * parent, const char * name
         return false;
     }
     bmem = BIO_push (b64, bmem);
-    decodedLength = BIO_read (bmem, output, length);
+    decodedLength = BIO_read (bmem, output, inputLength);
     if (decodedLength < 0) {
         JsonBuffer_LogDeserializationError(__func__, name, "failed to decode byte array");
         BIO_free_all (bmem);
@@ -618,9 +620,12 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
     char *str = NULL;
     uint8_t *byteData = NULL;
     uint32_t size = 0;
+    size_t strLength = 0;
+    bool success = false;
     uuid_t name, type, uuid;
     uint16_t port =0;
     uint8_t proto =0;
+    uint8_t ipAddress[16];
 
     JSONBUFFER_RETURN_GET("Name", "failed to deserialize NTLV name",
                           JsonBuffer_Get_UUID(parent, "Name", name));
@@ -640,49 +645,107 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
 
 
     if (str != NULL) {
+        strLength = strlen(str) + 1;
         UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuid);
-        if (uuid_compare(type, uuid) == 0)
-            NTLVList_Add(list, name, type, strlen(str) + 1, (uint8_t * )str);
+        if (uuid_compare(type, uuid) == 0) {
+            if (!NTLVList_Add(list, name, type, (uint32_t)strLength,
+                              (const uint8_t *)str)) {
+                JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                                  "failed to append string NTLV value");
+                goto cleanup;
+            }
+            success = true;
+            goto cleanup;
+        }
 
         UUID_Get_UUID(NTLV_TYPE_JSON, UUID_TYPE_NTLV_TYPE, uuid);
-        if (uuid_compare(type, uuid) == 0)
-            NTLVList_Add(list, name, type, strlen(str) + 1, (uint8_t * )str);
+        if (uuid_compare(type, uuid) == 0) {
+            if (!NTLVList_Add(list, name, type, (uint32_t)strLength,
+                              (const uint8_t *)str)) {
+                JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                                  "failed to append JSON NTLV value");
+                goto cleanup;
+            }
+            success = true;
+            goto cleanup;
+        }
 
         UUID_Get_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, uuid);
         if (uuid_compare(type, uuid) == 0) {
-            sscanf(str, "%hu", &port);
-            NTLVList_Add(list, name, type, 2, (uint8_t * ) & port);
+            if (sscanf(str, "%hu", &port) != 1) {
+                JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                                  "invalid port string");
+                goto cleanup;
+            }
+            if (!NTLVList_Add(list, name, type, sizeof(port),
+                              (const uint8_t *)&port)) {
+                JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                                  "failed to append port NTLV value");
+                goto cleanup;
+            }
+            success = true;
+            goto cleanup;
         }
 
         UUID_Get_UUID(NTLV_TYPE_IPPROTO, UUID_TYPE_NTLV_TYPE, uuid);
         if (uuid_compare(type, uuid) == 0) {
-            sscanf(str, "%hhu", &proto);
-            NTLVList_Add(list, name, type, 1, (uint8_t * ) & proto);
+            if (sscanf(str, "%hhu", &proto) != 1) {
+                JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                                  "invalid protocol string");
+                goto cleanup;
+            }
+            if (!NTLVList_Add(list, name, type, sizeof(proto),
+                              (const uint8_t *)&proto)) {
+                JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                                  "failed to append protocol NTLV value");
+                goto cleanup;
+            }
+            success = true;
+            goto cleanup;
         }
 
         UUID_Get_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
         if (uuid_compare(type, uuid) == 0) {
-            if ((byteData = calloc(4, sizeof(uint8_t))) == NULL) {
+            if (inet_pton(AF_INET, str, ipAddress) != 1) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
-                                                  "failed to allocate IPv4 buffer");
-                return false;
+                                                  "invalid IPv4 address string");
+                goto cleanup;
             }
-            inet_pton(AF_INET, str, byteData);
-            NTLVList_Add(list, name, type, 4, byteData);
+            if (!NTLVList_Add(list, name, type, 4, ipAddress)) {
+                JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                                  "failed to append IPv4 NTLV value");
+                goto cleanup;
+            }
+            success = true;
+            goto cleanup;
         }
 
         UUID_Get_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
         if (uuid_compare(type, uuid) == 0) {
-            if ((str = calloc(16, sizeof(char))) == NULL) {
+            if (inet_pton(AF_INET6, str, ipAddress) != 1) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
-                                                  "failed to allocate IPv6 buffer");
-                return false;
+                                                  "invalid IPv6 address string");
+                goto cleanup;
             }
-            inet_pton(AF_INET6, str, byteData);
-            NTLVList_Add(list, name, type, 16, byteData);
+            if (!NTLVList_Add(list, name, type, 16, ipAddress)) {
+                JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                                  "failed to append IPv6 NTLV value");
+                goto cleanup;
+            }
+            success = true;
+            goto cleanup;
         }
+
+        JsonBuffer_LogDeserializationError(__func__, "Type",
+                                          "unsupported NTLV type for string value");
+        goto cleanup;
     } else if (byteData != NULL) {
-        NTLVList_Add(list, name, type, size, byteData);
+        if (!NTLVList_Add(list, name, type, size, byteData)) {
+            JsonBuffer_LogDeserializationError(__func__, "Bin_Value",
+                                              "failed to append binary NTLV value");
+            goto cleanup;
+        }
+        success = true;
     } else {
         JsonBuffer_LogDeserializationError(__func__, "String_Value",
                                           "no supported NTLV value representation was found");
@@ -690,12 +753,13 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
     }
 
 
+cleanup:
     if (str != NULL)
         free(str);
     if (byteData != NULL)
         free(byteData);
 
-    return true;
+    return success;
 }
 
 static int
