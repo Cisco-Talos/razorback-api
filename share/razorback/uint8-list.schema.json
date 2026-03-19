@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback uint8 List",
+  "description": "Canonical JSON value emitted by JsonBuffer_Put_uint8List().",
+  "type": "array",
+  "items": {
+    "type": "integer",
+    "minimum": 0,
+    "maximum": 255
+  }
+}

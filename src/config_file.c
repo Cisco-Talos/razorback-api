@@ -858,7 +858,7 @@ parseList(config_setting_t *config, RZBConfKey_t *block)
     struct ConfList *listConf;
     RZBConfKey_t *cur;
     void *data;
-    char **itemData;
+    char *itemData;
     config_setting_t *item;
     conf_int_t *intItem;
     const char *tmp;
@@ -920,7 +920,7 @@ parseList(config_setting_t *config, RZBConfKey_t *block)
             } else if (cur->type == RZB_CONF_KEY_TYPE_STRING) {
                 config_setting_lookup_string(item, cur->key, &tmp);
                 // Filthy
-                memcpy(itemData, (char *) &tmp, sizeof(char *));
+                memcpy(itemData, &tmp, sizeof(tmp));
                 itemData += sizeof(char *);
             } else if (cur->type == RZB_CONF_KEY_TYPE_PARSED_STRING) {
                 config_setting_lookup_string(item, cur->key, &tmp);

@@ -70,6 +70,13 @@ UUID_Add_List_Entry (List_t *list, uuid_t p_uuid,
 {
     struct UUIDListNode *l_pListNode;
     size_t l_iLen;
+    ASSERT(list != NULL);
+    ASSERT(p_sName != NULL);
+    ASSERT(p_sName == NULL || p_sName[0] != '\0');
+    if (list == NULL || p_sName == NULL || p_sName[0] == '\0')
+    {
+        return false;
+    }
     if ((l_pListNode = calloc (1, sizeof (struct UUIDListNode))) == NULL)
     {
         return false;
@@ -83,15 +90,19 @@ UUID_Add_List_Entry (List_t *list, uuid_t p_uuid,
         return false;
     }
     memcpy (l_pListNode->sName, p_sName, l_iLen + 1);
-    l_iLen = strlen (p_sDescr);
-    if ((l_pListNode->sDescription =
-         calloc (l_iLen + 1, sizeof (char))) == NULL)
+
+    if (p_sDescr != NULL)
     {
-        free (l_pListNode->sName);
-        free (l_pListNode);
-        return false;
+        l_iLen = strlen (p_sDescr);
+        if ((l_pListNode->sDescription =
+             calloc (l_iLen + 1, sizeof (char))) == NULL)
+        {
+            free (l_pListNode->sName);
+            free (l_pListNode);
+            return false;
+        }
+        memcpy (l_pListNode->sDescription, p_sDescr, l_iLen + 1);
     }
-    memcpy (l_pListNode->sDescription, p_sDescr, l_iLen + 1);
 
     return List_Push(list, l_pListNode);
 }
@@ -196,6 +207,10 @@ UUID_Get_Description (const char *p_sName, int p_iType)
     {
         return NULL;
     }
+    if (l_pListNode->sDescription == NULL)
+    {
+        return NULL;
+    }
     if (asprintf(&ret, "%s", l_pListNode->sDescription) == -1 )
     {
         return NULL;
@@ -210,6 +225,10 @@ UUID_Get_DescriptionByUUID (uuid_t p_uuid, int p_iType)
     char * ret;
 
     if ((l_pListNode = UUID_getNodeByUUID (p_uuid, p_iType)) == NULL)
+    {
+        return NULL;
+    }
+    if (l_pListNode->sDescription == NULL)
     {
         return NULL;
     }

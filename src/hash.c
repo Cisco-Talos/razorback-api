@@ -20,6 +20,7 @@
 #include <razorback/debug.h>
 #include <razorback/hash.h>
 #include <razorback/log.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -128,6 +129,25 @@ Hash_Get_OpenSSL_Name(uint32_t type)
     }
 }
 
+static uint32_t
+Hash_Get_ExpectedDigestLength(uint32_t type)
+{
+    switch (type) {
+        case HASH_TYPE_MD5:
+            return 16U;
+        case HASH_TYPE_SHA1:
+            return 20U;
+        case HASH_TYPE_SHA224:
+            return 28U;
+        case HASH_TYPE_SHA256:
+            return 32U;
+        case HASH_TYPE_SHA512:
+            return 64U;
+        default:
+            return 0U;
+    }
+}
+
 static bool
 Hash_Init_OpenSSL(struct Hash *hash) {
     const char *algorithmName;
@@ -187,6 +207,8 @@ Hash_Create_Type (uint32_t p_iType) {
 
 SO_PUBLIC struct Hash *
 Hash_Create_From_String(uint32_t p_iType, const char *p_sHash) {
+    uint32_t expectedDigestLength;
+    size_t hashStringLength;
     const char *pos;
     size_t i;
     ASSERT(p_sHash != NULL);
@@ -197,14 +219,32 @@ Hash_Create_From_String(uint32_t p_iType, const char *p_sHash) {
 
     struct Hash *hash = NULL;
 
+    expectedDigestLength = Hash_Get_ExpectedDigestLength(p_iType);
+    if (expectedDigestLength == 0U) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: invalid hash type", __func__);
+        return NULL;
+    }
+
+    hashStringLength = strlen(p_sHash);
+    if (hashStringLength != (size_t)expectedDigestLength * 2U) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: invalid hash string length", __func__);
+        return NULL;
+    }
+
+    for (i = 0; i < hashStringLength; i++) {
+        if (!isxdigit((unsigned char)p_sHash[i])) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: invalid hash string", __func__);
+            return NULL;
+        }
+    }
+
     if ((hash = calloc(1, sizeof (struct Hash))) == NULL) {
         return false;
     }
 
-// TODO: Validate string based on type
     hash->iType = p_iType;
 
-    hash->iSize = strlen(p_sHash)/2;
+    hash->iSize = expectedDigestLength;
     if ((hash->pData = calloc(hash->iSize, sizeof(uint8_t))) == NULL) {
         Hash_Destroy(hash);
         return NULL;
@@ -417,5 +457,4 @@ Hash_Clone (const struct Hash *p_pSource) {
 
     return l_pDestination;
 }
-
 

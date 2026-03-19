@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Block",
+  "description": "Canonical JSON value emitted by JsonBuffer_Put_Block().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Id"
+  ],
+  "properties": {
+    "Id": {
+      "$ref": "block-id.schema.json"
+    },
+    "Parent_Id": {
+      "$ref": "block-id.schema.json"
+    },
+    "Parent": {
+      "$ref": "#"
+    },
+    "Metadata": {
+      "$ref": "ntlv-list.schema.json"
+    }
+  }
+}

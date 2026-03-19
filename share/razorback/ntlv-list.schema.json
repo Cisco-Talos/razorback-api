@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback NTLV List",
+  "description": "Canonical JSON value emitted by JsonBuffer_Put_NTLVList().",
+  "type": "array",
+  "items": {
+    "$ref": "ntlv-item.schema.json"
+  }
+}

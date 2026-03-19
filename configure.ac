@@ -75,8 +75,21 @@ libdir=$LIBDIR
 
 AC_DEFINE_UNQUOTED(LIB_DIR, "$LIBDIR", ["Lib dir"])
 
+PKG_CHECK_MODULES([CHECK], [check >= 0.15.2], [have_check=yes], [have_check=no])
+AM_CONDITIONAL([HAVE_CHECK], [test "x$have_check" = "xyes"])
+AS_IF([test "x$have_check" != "xyes"], [
+    AC_MSG_WARN([libcheck not found; unit tests will not be built])
+])
+
+AC_PATH_PROG([JV], [jv], [])
+AM_CONDITIONAL([HAVE_JV], [test -n "$JV"])
+AS_IF([test -z "$JV"], [
+    AC_MSG_WARN([jv command not found in PATH])
+])
+
 AC_SUBST(XCCFLAGS)
 AC_SUBST(APIVERSION)
+AC_SUBST(JV)
 AC_SUBST(LIBS)
 AC_SUBST(extra_incl)
 
@@ -87,6 +100,8 @@ m4/Makefile \
 etc/Makefile \
 include/Makefile \
 src/Makefile \
+share/Makefile \
+share/razorback/Makefile \
 tests/Makefile \
 ])
 AC_OUTPUT

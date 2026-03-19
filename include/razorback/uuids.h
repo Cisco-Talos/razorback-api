@@ -182,8 +182,8 @@ SO_PUBLIC extern List_t * UUID_Create_List(void);
  * Add an entry to a UUID list.
  * @param list List to operate on.
  * @param uuid UUID value.
- * @param name Name string.
- * @param desc Desc string.
+ * @param name Non-empty name string.
+ * @param desc Optional description string.
  * @return true on success, false on failure.
  */
 SO_PUBLIC extern bool UUID_Add_List_Entry(

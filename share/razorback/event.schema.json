@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Event",
+  "description": "Canonical JSON value emitted by JsonBuffer_Put_Event().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Id"
+  ],
+  "properties": {
+    "Id": {
+      "$ref": "event-id.schema.json"
+    },
+    "Parent_Id": {
+      "$ref": "event-id.schema.json"
+    },
+    "Parent": {
+      "$ref": "#"
+    },
+    "Metadata": {
+      "$ref": "ntlv-list.schema.json"
+    },
+    "Block": {
+      "$ref": "block.schema.json"
+    }
+  }
+}

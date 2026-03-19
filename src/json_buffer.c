@@ -45,6 +45,7 @@
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <string.h>
 
 static const char *
@@ -106,6 +107,38 @@ JsonBuffer_LogTypeMismatch(const char *func, const char *field,
             JsonBuffer_FieldName(field),
             expected,
             (object == NULL) ? "missing" : JsonBuffer_TypeName(json_object_get_type(object)));
+}
+
+static bool
+JsonBuffer_ParseUnsignedText(const char *func, const char *name,
+                             const char *text, uint64_t maxValue,
+                             uint64_t *value)
+{
+    char *end = NULL;
+    uintmax_t parsed;
+
+    if (text == NULL || text[0] == '\0') {
+        JsonBuffer_LogDeserializationError(func, name, "invalid integer string");
+        return false;
+    }
+    if (text[0] == '-') {
+        JsonBuffer_LogDeserializationError(func, name, "integer value is negative");
+        return false;
+    }
+
+    errno = 0;
+    parsed = strtoumax(text, &end, 10);
+    if (errno == ERANGE || end == text || (end != NULL && *end != '\0')) {
+        JsonBuffer_LogDeserializationError(func, name, "invalid integer string");
+        return false;
+    }
+    if (parsed > maxValue) {
+        JsonBuffer_LogDeserializationError(func, name, "integer value is out of range");
+        return false;
+    }
+
+    *value = (uint64_t)parsed;
+    return true;
 }
 
 #define JSONBUFFER_RETURN_PUT(field, detail, expr) \
@@ -369,6 +402,10 @@ SO_PUBLIC bool JsonBuffer_Put_ByteArray (json_object * parent, const char *name,
         JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
         return false;
     }
+    if (p_pByteArray == NULL && p_iSize != 0U) {
+        JsonBuffer_LogSerializationError(__func__, name, "byte array is NULL");
+        return false;
+    }
 
     b64 = BIO_new(BIO_f_base64());
     if (b64 == NULL) {
@@ -384,8 +421,16 @@ SO_PUBLIC bool JsonBuffer_Put_ByteArray (json_object * parent, const char *name,
         return false;
     }
     BIO_push(b64, bmem);
-    BIO_write(b64, p_pByteArray, p_iSize);
-    //BIO_flush(b64);
+    if (p_iSize > 0U && BIO_write(b64, p_pByteArray, (int)p_iSize) != (int)p_iSize) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to encode byte array");
+        BIO_free_all(b64);
+        return false;
+    }
+    if (BIO_flush(b64) != 1) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to flush encoded byte array");
+        BIO_free_all(b64);
+        return false;
+    }
     BIO_get_mem_ptr(b64, &bptr);
 
     buff = (char *)malloc(bptr->length+1);
@@ -479,7 +524,7 @@ SO_PUBLIC bool JsonBuffer_Get_bool (json_object * parent, const char * name, boo
 
 SO_PUBLIC bool JsonBuffer_Get_uint8_t (json_object * parent, const char * name, uint8_t * p_pValue)
 {
-    int tmp;
+    uint64_t tmp;
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
@@ -500,7 +545,10 @@ SO_PUBLIC bool JsonBuffer_Get_uint8_t (json_object * parent, const char * name, 
         return false;
     }
 
-    tmp = json_object_get_int(object);
+    if (!JsonBuffer_ParseUnsignedText(__func__, name, json_object_get_string(object),
+                                      UINT8_MAX, &tmp)) {
+        return false;
+    }
     *p_pValue = (uint8_t) tmp;
     return true;
 }
@@ -508,7 +556,7 @@ SO_PUBLIC bool JsonBuffer_Get_uint8_t (json_object * parent, const char * name, 
 SO_PUBLIC bool JsonBuffer_Get_uint16_t (json_object * parent, const char * name,
                                      uint16_t * p_pValue)
 {
-    int tmp;
+    uint64_t tmp;
     json_object *object;
     ASSERT( parent != NULL);
     ASSERT(name != NULL);
@@ -529,7 +577,10 @@ SO_PUBLIC bool JsonBuffer_Get_uint16_t (json_object * parent, const char * name,
         return false;
     }
 
-    tmp = json_object_get_int(object);
+    if (!JsonBuffer_ParseUnsignedText(__func__, name, json_object_get_string(object),
+                                      UINT16_MAX, &tmp)) {
+        return false;
+    }
     *p_pValue = (uint16_t) tmp;
 
     return true;
@@ -544,7 +595,10 @@ SO_PUBLIC bool JsonBuffer_Get_uint32_t (json_object * parent, const char *name,
     JSONBUFFER_RETURN_GET(name, "failed to deserialize integer value",
                           JsonBuffer_Get_uint64_t(parent, name, &val));
 
-    // TODO Bounds checking
+    if (val > UINT32_MAX) {
+        JsonBuffer_LogDeserializationError(__func__, name, "integer value is out of range");
+        return false;
+    }
     *p_pValue = (uint32_t)val;
     return true;
 }
@@ -573,17 +627,12 @@ SO_PUBLIC bool JsonBuffer_Get_uint64_t (json_object * parent, const char *name,
     json_type type = json_object_get_type(object);
     if (type == json_type_string) {
         tmp = json_object_get_string(object);
-        if (sscanf(tmp,NUM_FMT, &val) != 1) {
-            JsonBuffer_LogDeserializationError(__func__, name, "invalid integer string");
+        if (!JsonBuffer_ParseUnsignedText(__func__, name, tmp, UINT64_MAX, &val))
             return false;
-        }
     } else if (type == json_type_int) {
-        errno = 0;
-        val = json_object_get_uint64(object);
-        if (errno != 0) {
-            JsonBuffer_LogDeserializationError(__func__, name, "failed to convert integer value");
+        if (!JsonBuffer_ParseUnsignedText(__func__, name, json_object_get_string(object),
+                                          UINT64_MAX, &val))
             return false;
-        }
     } else {
         JsonBuffer_LogTypeMismatch(__func__, name, "integer or string", object, false);
         return false;
@@ -716,7 +765,11 @@ SO_PUBLIC bool JsonBuffer_Get_UUID (json_object * parent, const char *name, uuid
     JSONBUFFER_RETURN_GET("id", "failed to deserialize UUID string",
                           (tmp = (char *)JsonBuffer_Get_String(object, "id")) != NULL);
 
-    uuid_parse(tmp, p_uuid);
+    if (uuid_parse(tmp, p_uuid) != 0) {
+        JsonBuffer_LogDeserializationError(__func__, name, "invalid UUID string");
+        free(tmp);
+        return false;
+    }
     free(tmp);
     return true;
 }
@@ -1889,9 +1942,13 @@ JsonBuffer_Put_UUIDList_Add(void *vnode, void *varray)
     uuid_unparse(node->uuid, uuid);
     JSONBUFFER_RETURN_LIST_PUT("id", "failed to serialize UUID list entry id",
                                JsonBuffer_Put_String(object, "id", uuid));
-    if (node->sName != NULL)
-        JSONBUFFER_RETURN_LIST_PUT("name", "failed to serialize UUID list entry name",
-                                   JsonBuffer_Put_String(object, "name", node->sName));
+    if (node->sName == NULL || node->sName[0] == '\0') {
+        JsonBuffer_LogSerializationError(__func__, "name",
+                                         "UUID list entry name is missing or empty");
+        return LIST_EACH_ERROR;
+    }
+    JSONBUFFER_RETURN_LIST_PUT("name", "failed to serialize UUID list entry name",
+                               JsonBuffer_Put_String(object, "name", node->sName));
     if (node->sDescription != NULL)
         JSONBUFFER_RETURN_LIST_PUT("description", "failed to serialize UUID list entry description",
                                    JsonBuffer_Put_String(object, "description", node->sDescription));
@@ -1980,20 +2037,37 @@ SO_PUBLIC bool JsonBuffer_Get_UUIDList (json_object * parent, const char * name,
             List_Destroy(list);
             return false;
         }
-        if (!JsonBuffer_Get_OptionalString(__func__, object, "name", &nameS,
-                                           "failed to deserialize UUID list entry name")) {
+        if ((nameS = JsonBuffer_Get_String(object, "name")) == NULL) {
+            JsonBuffer_LogDeserializationError(__func__, "name",
+                                              "failed to deserialize UUID list entry name");
+            free(uuidS);
+            List_Destroy(list);
+            return false;
+        }
+        if (nameS[0] == '\0') {
+            JsonBuffer_LogDeserializationError(__func__, "name",
+                                              "UUID list entry name is empty");
+            free(nameS);
             free(uuidS);
             List_Destroy(list);
             return false;
         }
         if (!JsonBuffer_Get_OptionalString(__func__, object, "description", &desc,
                                            "failed to deserialize UUID list entry description")) {
+            free(uuidS);
+            free(nameS);
+            List_Destroy(list);
+            return false;
+        }
+        if (uuid_parse(uuidS, uuid) != 0) {
+            JsonBuffer_LogDeserializationError(__func__, "id",
+                                              "invalid UUID list entry id");
+            free(desc);
             free(nameS);
             free(uuidS);
             List_Destroy(list);
             return false;
         }
-        uuid_parse(uuidS, uuid);
         if (!UUID_Add_List_Entry(list, uuid, nameS, desc)) {
             JsonBuffer_LogDeserializationError(__func__, name,
                                               "failed to append UUID list entry");
