@@ -68,7 +68,7 @@ static char * SSH_GetKnownDispatchers(void);
 
 static struct TransportDescriptor descriptor =
 {
-    1,
+    TRANSFER_MODE_SSH,
     "SSH",
     "Transfer file via SSH (sftp)",
     Transfer_SSH_Store,
