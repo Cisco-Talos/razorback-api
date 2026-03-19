@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback NTLV Item",
+  "description": "Canonical JSON array entry emitted by JsonBuffer_Put_NTLVList().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Name",
+    "Type"
+  ],
+  "properties": {
+    "Name": {
+      "$ref": "uuid.schema.json"
+    },
+    "Type": {
+      "$ref": "uuid.schema.json"
+    },
+    "String_Value": {
+      "type": "string"
+    },
+    "Bin_Value": {
+      "type": "string",
+      "contentEncoding": "base64"
+    }
+  },
+  "oneOf": [
+    {
+      "required": [
+        "String_Value"
+      ],
+      "not": {
+        "required": [
+          "Bin_Value"
+        ]
+      }
+    },
+    {
+      "required": [
+        "Bin_Value"
+      ],
+      "not": {
+        "required": [
+          "String_Value"
+        ]
+      }
+    }
+  ]
+}

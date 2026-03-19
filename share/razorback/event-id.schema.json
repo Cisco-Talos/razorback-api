@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback EventId",
+  "description": "Canonical JSON value emitted by JsonBuffer_Put_EventId().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Nugget",
+    "Seconds",
+    "Nano_Seconds"
+  ],
+  "properties": {
+    "Nugget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "Id"
+      ],
+      "properties": {
+        "Id": {
+          "$ref": "uuid.schema.json"
+        }
+      }
+    },
+    "Seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "Nano_Seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 999999999
+    }
+  }
+}

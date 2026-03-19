@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback BlockId",
+  "description": "Canonical JSON value emitted by JsonBuffer_Put_BlockId().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Hash",
+    "Size",
+    "Data_Type"
+  ],
+  "properties": {
+    "Hash": {
+      "$ref": "hash.schema.json"
+    },
+    "Size": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "Data_Type": {
+      "$ref": "uuid.schema.json"
+    }
+  }
+}

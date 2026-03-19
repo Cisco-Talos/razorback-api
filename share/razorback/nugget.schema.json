@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Nugget",
+  "description": "Canonical JSON value emitted by JsonBuffer_Put_Nugget().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Nugget_ID",
+    "App_Type",
+    "Nugget_Type"
+  ],
+  "properties": {
+    "Nugget_ID": {
+      "$ref": "uuid.schema.json"
+    },
+    "App_Type": {
+      "$ref": "uuid.schema.json"
+    },
+    "Nugget_Type": {
+      "$ref": "uuid.schema.json"
+    },
+    "Name": {
+      "type": "string"
+    },
+    "Location": {
+      "type": "string"
+    },
+    "Contact": {
+      "type": "string"
+    }
+  }
+}

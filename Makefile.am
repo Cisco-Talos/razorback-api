@@ -14,10 +14,9 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 
-SUBDIRS = m4 etc include src tests
+SUBDIRS = m4 etc include src share tests
 
 EXTRA_DIST = LICENSE README.md SECURITY.md
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = razorback.pc
-

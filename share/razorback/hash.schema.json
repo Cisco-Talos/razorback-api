@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Hash",
+  "description": "Canonical JSON value emitted by JsonBuffer_Put_Hash().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Type",
+    "Value"
+  ],
+  "properties": {
+    "Type": {
+      "type": "string",
+      "enum": [
+        "MD5",
+        "SHA1",
+        "SHA224",
+        "SHA256",
+        "SHA512"
+      ]
+    },
+    "Value": {
+      "type": "string"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "Type": {
+          "const": "MD5"
+        },
+        "Value": {
+          "pattern": "^[0-9A-Fa-f]{32}$"
+        }
+      }
+    },
+    {
+      "properties": {
+        "Type": {
+          "const": "SHA1"
+        },
+        "Value": {
+          "pattern": "^[0-9A-Fa-f]{40}$"
+        }
+      }
+    },
+    {
+      "properties": {
+        "Type": {
+          "const": "SHA224"
+        },
+        "Value": {
+          "pattern": "^[0-9A-Fa-f]{56}$"
+        }
+      }
+    },
+    {
+      "properties": {
+        "Type": {
+          "const": "SHA256"
+        },
+        "Value": {
+          "pattern": "^[0-9A-Fa-f]{64}$"
+        }
+      }
+    },
+    {
+      "properties": {
+        "Type": {
+          "const": "SHA512"
+        },
+        "Value": {
+          "pattern": "^[0-9A-Fa-f]{128}$"
+        }
+      }
+    }
+  ]
+}

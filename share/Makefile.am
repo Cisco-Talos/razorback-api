@@ -14,44 +14,6 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 
-*.o
-*.in
-m4/*
-Makefile
-configure
-configure~
-**/.dirstamp
-**/.deps
-**/.libs
-stamp-h1
-config.*
-compile
-depcomp
-missing
-src/dispatcher
-aclocal.m4
-libtool
-ltmain.sh
-install-sh
-autom4te.cache
-*.swp
-**/*.lo
-src/*.la
-tests/configTest
-tests/daemonTest
-tests/logTest
-tests/test_hash
-tests/test_block_id
-tests/test_list
-tests/test_string_list
-tests/test_uuids
-tests/test_config_file
-tests/test_json_buffer_primitives
-tests/test_json_buffer_structs
-tests/test_json_buffer_invalid
-tests/test_messages_roundtrip
-tests/*.log
-tests/*.trs
-test-driver
-razorback.pc
-/\.idea
+AUTOMAKE_OPTIONS = no-dependencies
+
+SUBDIRS = razorback
