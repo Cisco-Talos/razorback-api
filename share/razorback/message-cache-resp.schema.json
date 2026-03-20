@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Cache Response Message Body",
+  "description": "Canonical JSON body emitted by CacheResp_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Block_ID",
+    "SF_Flags",
+    "Ent_Flags"
+  ],
+  "properties": {
+    "Block_ID": {
+      "$ref": "block-id.schema.json"
+    },
+    "SF_Flags": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Ent_Flags": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    }
+  }
+}

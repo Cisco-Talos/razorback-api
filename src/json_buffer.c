@@ -44,8 +44,10 @@
 
 #include <openssl/bio.h>
 #include <openssl/buffer.h>
+#include <ctype.h>
 #include <errno.h>
 #include <inttypes.h>
+#include <limits.h>
 #include <string.h>
 
 static const char *
@@ -139,6 +141,31 @@ JsonBuffer_ParseUnsignedText(const char *func, const char *name,
 
     *value = (uint64_t)parsed;
     return true;
+}
+
+static bool
+JsonBuffer_NamedNTLVTypeMatches(const char *name, uuid_t type)
+{
+    bool matches = false;
+
+    (void)UUID_Is_Named_UUID(name, UUID_TYPE_NTLV_TYPE, type, &matches);
+    return matches;
+}
+
+static bool
+JsonBuffer_NTLVTypeUsesStringValue(uuid_t type)
+{
+    return JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_STRING, type) ||
+           JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_PORT, type) ||
+           JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPPROTO, type) ||
+           JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv4_ADDR, type) ||
+           JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv6_ADDR, type);
+}
+
+static bool
+JsonBuffer_NTLVTypeUsesJsonValue(uuid_t type)
+{
+    return JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_JSON, type);
 }
 
 #define JSONBUFFER_RETURN_PUT(field, detail, expr) \
@@ -480,6 +507,77 @@ SO_PUBLIC bool JsonBuffer_Put_String (json_object * parent, const char * name,
     return true;
 }
 
+SO_PUBLIC bool JsonBuffer_Put_JsonString(json_object *parent, const char *name,
+                                         const char *p_sJsonString)
+{
+    json_object *parsed;
+    struct json_tokener *tok;
+    enum json_tokener_error error;
+    size_t json_length;
+    size_t parse_end;
+    json_type type;
+
+    ASSERT(parent != NULL);
+    ASSERT(name != NULL);
+    ASSERT(p_sJsonString != NULL);
+    if (parent == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "parent object is NULL");
+        return false;
+    }
+    if (name == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "field name is NULL");
+        return false;
+    }
+    if (p_sJsonString == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "JSON string is NULL");
+        return false;
+    }
+
+    json_length = strlen(p_sJsonString);
+    if (json_length > INT_MAX) {
+        JsonBuffer_LogSerializationError(__func__, name, "JSON string is too large to parse");
+        return false;
+    }
+
+    if ((tok = json_tokener_new()) == NULL) {
+        JsonBuffer_LogSerializationError(__func__, name, "failed to allocate JSON tokener");
+        return false;
+    }
+
+    parsed = json_tokener_parse_ex(tok, p_sJsonString, (int)json_length);
+    error = json_tokener_get_error(tok);
+    parse_end = json_tokener_get_parse_end(tok);
+    if (parsed == NULL || error != json_tokener_success) {
+        json_tokener_free(tok);
+        JsonBuffer_LogSerializationError(__func__, name, "failed to parse JSON string");
+        return false;
+    }
+
+    while (parse_end < json_length &&
+           isspace((unsigned char)p_sJsonString[parse_end])) {
+        parse_end++;
+    }
+    if (parse_end != json_length) {
+        json_tokener_free(tok);
+        json_object_put(parsed);
+        JsonBuffer_LogSerializationError(__func__, name,
+                                         "JSON string contains trailing non-whitespace data");
+        return false;
+    }
+
+    json_tokener_free(tok);
+
+    type = json_object_get_type(parsed);
+    if (type != json_type_object && type != json_type_array) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "object or array", parsed, true);
+        json_object_put(parsed);
+        return false;
+    }
+
+    json_object_object_add(parent, name, parsed);
+    return true;
+}
+
 SO_PUBLIC bool JsonBuffer_Get_bool (json_object * parent, const char * name, bool * p_pValue)
 {
     bool tmp;
@@ -674,6 +772,43 @@ SO_PUBLIC char * JsonBuffer_Get_String (json_object * parent, const char * name)
     return ret;
 }
 
+SO_PUBLIC char * JsonBuffer_Get_JsonString(json_object *parent, const char *name)
+{
+    const char *tmp;
+    char *ret;
+    json_object *object;
+    json_type type;
+
+    ASSERT(parent != NULL);
+    ASSERT(name != NULL);
+    if (parent == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "parent object is NULL");
+        return NULL;
+    }
+    if (name == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field name is NULL");
+        return NULL;
+    }
+    if ((object = json_object_object_get(parent, name)) == NULL) {
+        JsonBuffer_LogDeserializationError(__func__, name, "field not found");
+        return NULL;
+    }
+
+    type = json_object_get_type(object);
+    if (type != json_type_object && type != json_type_array) {
+        JsonBuffer_LogTypeMismatch(__func__, name, "object or array", object, false);
+        return NULL;
+    }
+
+    tmp = json_object_to_json_string_ext(object, JSON_C_TO_STRING_PLAIN);
+    if (asprintf(&ret, "%s", tmp) == -1) {
+        JsonBuffer_LogDeserializationError(__func__, name,
+                                           "failed to allocate JSON string copy");
+        return NULL;
+    }
+    return ret;
+}
+
 SO_PUBLIC bool JsonBuffer_Get_ByteArray (json_object * parent, const char * name,
                                       uint32_t *p_iSize,
                                       uint8_t **p_pByteArray)
@@ -811,7 +946,11 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
     uint32_t size = 0;
     size_t strLength = 0;
     bool success = false;
-    uuid_t name, type, uuid;
+    bool hasStringValue;
+    bool hasBinValue;
+    bool hasJsonValue;
+    unsigned valueFieldCount;
+    uuid_t name, type;
     uint16_t port =0;
     uint8_t proto =0;
     uint8_t ipAddress[16];
@@ -822,21 +961,37 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
     JSONBUFFER_RETURN_GET("Type", "failed to deserialize NTLV type",
                           JsonBuffer_Get_UUID(parent, "Type", type));
 
-    if (json_object_object_get(parent, "String_Value") != NULL) {
+    hasStringValue = json_object_object_get_ex(parent, "String_Value", NULL);
+    hasBinValue = json_object_object_get_ex(parent, "Bin_Value", NULL);
+    hasJsonValue = json_object_object_get_ex(parent, "Json_Value", NULL);
+    valueFieldCount = (hasStringValue ? 1U : 0U) +
+                      (hasBinValue ? 1U : 0U) +
+                      (hasJsonValue ? 1U : 0U);
+
+    if (valueFieldCount != 1U) {
+        JsonBuffer_LogDeserializationError(__func__, "NTLVItem",
+                                          "expected exactly one of String_Value, Bin_Value, or Json_Value");
+        return false;
+    }
+
+    if (hasStringValue) {
         JSONBUFFER_RETURN_GET("String_Value", "failed to deserialize string NTLV value",
                               (str = JsonBuffer_Get_String(parent, "String_Value")) != NULL);
     }
 
-    if (json_object_object_get(parent, "Bin_Value") != NULL) {
+    if (hasBinValue) {
         JSONBUFFER_RETURN_GET("Bin_Value", "failed to deserialize binary NTLV value",
                               JsonBuffer_Get_ByteArray(parent, "Bin_Value", &size, &byteData));
     }
 
+    if (hasJsonValue) {
+        JSONBUFFER_RETURN_GET("Json_Value", "failed to deserialize JSON NTLV value",
+                              (str = JsonBuffer_Get_JsonString(parent, "Json_Value")) != NULL);
+    }
 
-    if (str != NULL) {
+    if (hasStringValue) {
         strLength = strlen(str) + 1;
-        UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuid);
-        if (uuid_compare(type, uuid) == 0) {
+        if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_STRING, type)) {
             if (!NTLVList_Add(list, name, type, (uint32_t)strLength,
                               (const uint8_t *)str)) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
@@ -847,20 +1002,13 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
             goto cleanup;
         }
 
-        UUID_Get_UUID(NTLV_TYPE_JSON, UUID_TYPE_NTLV_TYPE, uuid);
-        if (uuid_compare(type, uuid) == 0) {
-            if (!NTLVList_Add(list, name, type, (uint32_t)strLength,
-                              (const uint8_t *)str)) {
-                JsonBuffer_LogDeserializationError(__func__, "String_Value",
-                                                  "failed to append JSON NTLV value");
-                goto cleanup;
-            }
-            success = true;
+        if (JsonBuffer_NTLVTypeUsesJsonValue(type)) {
+            JsonBuffer_LogDeserializationError(__func__, "String_Value",
+                                              "JSON NTLV values must use Json_Value");
             goto cleanup;
         }
 
-        UUID_Get_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, uuid);
-        if (uuid_compare(type, uuid) == 0) {
+        if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_PORT, type)) {
             if (sscanf(str, "%hu", &port) != 1) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
                                                   "invalid port string");
@@ -876,8 +1024,7 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
             goto cleanup;
         }
 
-        UUID_Get_UUID(NTLV_TYPE_IPPROTO, UUID_TYPE_NTLV_TYPE, uuid);
-        if (uuid_compare(type, uuid) == 0) {
+        if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPPROTO, type)) {
             if (sscanf(str, "%hhu", &proto) != 1) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
                                                   "invalid protocol string");
@@ -893,8 +1040,7 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
             goto cleanup;
         }
 
-        UUID_Get_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
-        if (uuid_compare(type, uuid) == 0) {
+        if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv4_ADDR, type)) {
             if (inet_pton(AF_INET, str, ipAddress) != 1) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
                                                   "invalid IPv4 address string");
@@ -909,8 +1055,7 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
             goto cleanup;
         }
 
-        UUID_Get_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
-        if (uuid_compare(type, uuid) == 0) {
+        if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv6_ADDR, type)) {
             if (inet_pton(AF_INET6, str, ipAddress) != 1) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
                                                   "invalid IPv6 address string");
@@ -928,7 +1073,27 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
         JsonBuffer_LogDeserializationError(__func__, "Type",
                                           "unsupported NTLV type for string value");
         goto cleanup;
+    } else if (hasJsonValue) {
+        if (!JsonBuffer_NTLVTypeUsesJsonValue(type)) {
+            JsonBuffer_LogDeserializationError(__func__, "Json_Value",
+                                              "Json_Value is only supported for JSON NTLV types");
+            goto cleanup;
+        }
+        strLength = strlen(str) + 1;
+        if (!NTLVList_Add(list, name, type, (uint32_t)strLength,
+                          (const uint8_t *)str)) {
+            JsonBuffer_LogDeserializationError(__func__, "Json_Value",
+                                              "failed to append JSON NTLV value");
+            goto cleanup;
+        }
+        success = true;
     } else if (byteData != NULL) {
+        if (JsonBuffer_NTLVTypeUsesStringValue(type) ||
+            JsonBuffer_NTLVTypeUsesJsonValue(type)) {
+            JsonBuffer_LogDeserializationError(__func__, "Bin_Value",
+                                              "Bin_Value is not supported for this NTLV type");
+            goto cleanup;
+        }
         if (!NTLVList_Add(list, name, type, size, byteData)) {
             JsonBuffer_LogDeserializationError(__func__, "Bin_Value",
                                               "failed to append binary NTLV value");
@@ -936,7 +1101,7 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
         }
         success = true;
     } else {
-        JsonBuffer_LogDeserializationError(__func__, "String_Value",
+        JsonBuffer_LogDeserializationError(__func__, "NTLVItem",
                                           "no supported NTLV value representation was found");
         return false;
     }
@@ -957,7 +1122,7 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
     json_object *object;
     char *str = NULL;
     bool doFree = false;
-    uuid_t uuid;
+    bool useJsonValue = false;
     uint16_t port =0;
     uint8_t proto =0;
 
@@ -975,13 +1140,34 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
     JSONBUFFER_RETURN_LIST_PUT("Type", "failed to serialize NTLV type",
                                JsonBuffer_Put_UUID(object, "Type", p_pItem->uuidType));
 
-    UUID_Get_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, uuid);
-    if (uuid_compare(uuid, p_pItem->uuidType) == 0)
+    if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_STRING, p_pItem->uuidType)) {
+        if (p_pItem->iLength == 0 || p_pItem->pData == NULL ||
+            p_pItem->pData[p_pItem->iLength - 1] != '\0') {
+            JsonBuffer_LogSerializationError(__func__, "String_Value",
+                                             "string NTLV value must be a null-terminated string");
+            return LIST_EACH_ERROR;
+        }
         str = (char *)p_pItem->pData;
+    }
 
-    UUID_Get_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, uuid);
-    if (uuid_compare(uuid, p_pItem->uuidType) == 0)
+    if (JsonBuffer_NTLVTypeUsesJsonValue(p_pItem->uuidType)) {
+        if (p_pItem->iLength == 0 || p_pItem->pData == NULL ||
+            p_pItem->pData[p_pItem->iLength - 1] != '\0') {
+            JsonBuffer_LogSerializationError(__func__, "Json_Value",
+                                             "JSON NTLV value must be a null-terminated JSON string");
+            return LIST_EACH_ERROR;
+        }
+        str = (char *)p_pItem->pData;
+        useJsonValue = true;
+    }
+
+    if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_PORT, p_pItem->uuidType))
     {
+        if (p_pItem->iLength != sizeof(port)) {
+            JsonBuffer_LogSerializationError(__func__, "String_Value",
+                                             "port NTLV value has an invalid size");
+            return LIST_EACH_ERROR;
+        }
         memcpy(&port, p_pItem->pData, 2);
 
         if (asprintf(&str, "%hu", port) == -1) {
@@ -993,12 +1179,16 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
         doFree = true;
         goto type_processed;
     }
-    UUID_Get_UUID(NTLV_TYPE_IPPROTO, UUID_TYPE_NTLV_TYPE, uuid);
-    if (uuid_compare(uuid, p_pItem->uuidType) == 0)
+    if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPPROTO, p_pItem->uuidType))
     {
+        if (p_pItem->iLength != sizeof(proto)) {
+            JsonBuffer_LogSerializationError(__func__, "String_Value",
+                                             "protocol NTLV value has an invalid size");
+            return LIST_EACH_ERROR;
+        }
         memcpy(&proto, p_pItem->pData, 1);
 
-        if (asprintf(&str, "%hhu", port) == -1) {
+        if (asprintf(&str, "%hhu", proto) == -1) {
             JsonBuffer_LogSerializationError(__func__, "String_Value",
                                              "failed to format protocol value");
             return LIST_EACH_ERROR;
@@ -1007,9 +1197,13 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
         doFree = true;
         goto type_processed;
     }
-    UUID_Get_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
-    if (uuid_compare(uuid, p_pItem->uuidType) == 0)
+    if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv4_ADDR, p_pItem->uuidType))
     {
+        if (p_pItem->iLength != 4U) {
+            JsonBuffer_LogSerializationError(__func__, "String_Value",
+                                             "IPv4 NTLV value has an invalid size");
+            return LIST_EACH_ERROR;
+        }
         if ((str = calloc(1, INET_ADDRSTRLEN)) == NULL) {
             JsonBuffer_LogSerializationError(__func__, "String_Value",
                                              "failed to allocate IPv4 string buffer");
@@ -1020,10 +1214,14 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
         goto type_processed;
     }
 
-    UUID_Get_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, uuid);
-    if (uuid_compare(uuid, p_pItem->uuidType) == 0)
+    if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv6_ADDR, p_pItem->uuidType))
     {
-        if ((str = calloc(1, INET_ADDRSTRLEN)) == NULL) {
+        if (p_pItem->iLength != 16U) {
+            JsonBuffer_LogSerializationError(__func__, "String_Value",
+                                             "IPv6 NTLV value has an invalid size");
+            return LIST_EACH_ERROR;
+        }
+        if ((str = calloc(1, INET6_ADDRSTRLEN)) == NULL) {
             JsonBuffer_LogSerializationError(__func__, "String_Value",
                                              "failed to allocate IPv6 string buffer");
             return LIST_EACH_ERROR;
@@ -1040,9 +1238,18 @@ type_processed:
                                    JsonBuffer_Put_ByteArray(object, "Bin_Value",
                                                             p_pItem->iLength, p_pItem->pData));
     }
-    else
+    else if (useJsonValue) {
+        if (!JsonBuffer_Put_JsonString(object, "Json_Value", str)) {
+            if (doFree)
+                free(str);
+            JsonBuffer_LogSerializationError(__func__, "Json_Value",
+                                             "failed to serialize JSON NTLV value");
+            return LIST_EACH_ERROR;
+        }
+    } else
         if (!JsonBuffer_Put_String(object, "String_Value", str)) {
-            free(str);
+            if (doFree)
+                free(str);
             JsonBuffer_LogSerializationError(__func__, "String_Value",
                                              "failed to serialize string NTLV value");
             return LIST_EACH_ERROR;

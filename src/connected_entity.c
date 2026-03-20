@@ -44,6 +44,7 @@ static void ConnectedEntity_Delete(void *a);
 static int ConnectedEntityHook_KeyCmp(void *a, const void *id);
 static int ConnectedEntityHook_Cmp(void *a, void *b);
 static void ConnectedEntityHook_Delete(void *a);
+static bool ConnectedEntity_IsDispatcherType(uuid_t nuggetType);
 
 struct ConnectedEntityKey {
     int searchKeys;
@@ -64,6 +65,16 @@ static List_t *sg_pEntityList = NULL;
 static List_t *sg_pHookList = NULL;
 
 static void ConnectedEntityList_Prune (void *userData);
+
+static bool
+ConnectedEntity_IsDispatcherType(uuid_t nuggetType)
+{
+    bool isDispatcher = false;
+
+    (void)UUID_Is_Named_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE,
+                             nuggetType, &isDispatcher);
+    return isDispatcher;
+}
 
 bool
 ConnectedEntityList_Start (void) {
@@ -116,7 +127,7 @@ ConnectedEntityList_GetEntity (struct Message *message)
     struct MessageHello *hello;
     struct ConnectedEntity *ret = NULL;
     struct ConnectedEntityKey key;
-    uuid_t source,dest,dispatcher;
+    uuid_t source,dest;
 
     ASSERT (sg_pEntityList != NULL);
     if (sg_pEntityList == NULL) {
@@ -154,8 +165,7 @@ ConnectedEntityList_GetEntity (struct Message *message)
         uuid_copy(ret->uuidNuggetType, hello->uuidNuggetType);
         uuid_copy(ret->uuidApplicationType, hello->uuidApplicationType);
         ret->locality = hello->locality;
-        UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, dispatcher);
-        if (uuid_compare(dispatcher, ret->uuidNuggetType) == 0) {
+        if (ConnectedEntity_IsDispatcherType(ret->uuidNuggetType)) {
             if ((ret->dispatcher = calloc(1, sizeof(struct DispatcherEntity))) == NULL) {
                 free(ret);
                 return NULL;
@@ -179,7 +189,6 @@ ConnectedEntityList_GetEntity (struct Message *message)
 
 SO_PUBLIC bool
 ConnectedEntityList_Update (struct Message *message) {
-    uuid_t dispatcher;
     struct ConnectedEntity *entity = NULL;
     struct MessageHello *hello;
 
@@ -210,8 +219,7 @@ ConnectedEntityList_Update (struct Message *message) {
     }
 
     entity->tTimeOfLastHello = time(NULL);
-    UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, dispatcher);
-    if (uuid_compare(dispatcher, entity->uuidNuggetType) == 0) {
+    if (ConnectedEntity_IsDispatcherType(entity->uuidNuggetType)) {
         entity->dispatcher->flags = hello->flags;
         entity->dispatcher->priority = hello->priority;
     }
@@ -381,8 +389,6 @@ static int
 ConnectedEntityList_CollectDispatchers(void *item, void *userData) {
     struct ConnectedEntity *entity = item;
     List_t *list = userData;
-    uuid_t uuid;
-
     ASSERT(entity != NULL);
     if (entity == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: NULL entity", __func__);
@@ -395,8 +401,7 @@ ConnectedEntityList_CollectDispatchers(void *item, void *userData) {
         return LIST_EACH_OK;
     }
 
-    UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, uuid);
-    if ((uuid_compare(uuid, entity->uuidNuggetType) == 0)) {
+    if (ConnectedEntity_IsDispatcherType(entity->uuidNuggetType)) {
         // Todo - need to clone the dispatcher here
         List_Push(list, entity);
     }
@@ -479,8 +484,6 @@ static int
 ConnectedEntityList_CollectHighDispatcher(void *item, void *userData) {
     struct ConnectedEntity *entity = item;
     struct ConnectedEntity **cur = userData;
-    uuid_t uuid;
-
     ASSERT(entity != NULL);
     if (entity == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: NULL entity", __func__);
@@ -492,8 +495,7 @@ ConnectedEntityList_CollectHighDispatcher(void *item, void *userData) {
         return LIST_EACH_OK;
     }
 
-    UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, uuid);
-    if ((uuid_compare(uuid, entity->uuidNuggetType) == 0))
+    if (ConnectedEntity_IsDispatcherType(entity->uuidNuggetType))
     {
         if (*cur == NULL)
             *cur = entity;
@@ -531,15 +533,12 @@ static int
 ConnectedEntityList_CollectSlaveInLocality(void *item, void *userData) {
     struct ConnectedEntity *entity = item;
     struct CE_SlaveSearch *search = userData;
-    uuid_t uuid;
-
     // TODO - Replace with LIST_EACH_LAST if found
     if (search->found) {
         return LIST_EACH_OK;
     }
 
-    UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, uuid);
-    if ((uuid_compare(uuid, entity->uuidNuggetType) == 0))
+    if (ConnectedEntity_IsDispatcherType(entity->uuidNuggetType))
     {
         if(entity->locality != search->locality)
             return LIST_EACH_OK;

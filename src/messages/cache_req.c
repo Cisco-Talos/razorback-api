@@ -96,7 +96,9 @@ CacheReq_Destroy (struct Message *message) {
 
     // destroy any malloc'd components
     if (msg != NULL) {
-        BlockId_Destroy(msg->pId);
+        if (msg->pId != NULL) {
+            BlockId_Destroy(msg->pId);
+        }
     }
 
     Message_Destroy(message);

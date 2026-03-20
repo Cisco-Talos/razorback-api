@@ -17,121 +17,178 @@
  */
 
 #include "config.h"
+
 #include <razorback/debug.h>
+#include <razorback/lock.h>
 #include <razorback/log.h>
+#include <razorback/thread.h>
 #include <razorback/timer.h>
 
+#include <errno.h>
+#include <time.h>
+
 #ifdef _MSC_VER
-static bool Timer_Init_Win32(struct Timer *);
-static void CALLBACK Timer_Wrapper(void * lpParam, bool TimerOrWaitFired);
-static void Timer_Destroy_Win32(struct Timer *);
 #else //_MSC_VER
-static bool Timer_Init_Posix(struct Timer *);
-static void Timer_Destroy_Posix(struct Timer *);
-static void Timer_Wrapper(union sigval val);
-#endif
+#include <unistd.h>
+#endif //_MSC_VER
+
+#define TIMER_POLL_INTERVAL_MS 100U
+
+struct Timer
+{
+    Thread_t *thread;          /* Worker thread that drives the timer callback. */
+    Mutex_t *mutex;            /* Timer state lock. */
+    uint32_t interval;         /* Timer interval in seconds. */
+    void *userData;            /* User data provided to the event function. */
+    void (*function)(void *);  /* Function to call when the timer expires. */
+    bool bStopRequested;       /* Has timer shutdown been requested? */
+};
+
+static void Timer_Main(Thread_t *thread);
+static bool Timer_ShouldStop(struct Timer *timer);
+static void Timer_RequestStop(struct Timer *timer);
+static void Timer_SleepMilliseconds(uint32_t milliseconds);
 
 SO_PUBLIC struct Timer *
 Timer_Create(uint32_t interval, void (*handler)(void *), void *userData)
 {
     struct Timer *ret;
-    if ((ret = (struct Timer *)calloc(1,sizeof(struct Timer))) == NULL)
+
+    ASSERT(handler != NULL);
+    if (handler == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: handler is NULL", __func__);
         return NULL;
+    }
+    if (interval == 0U) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: interval must be greater than zero", __func__);
+        return NULL;
+    }
+
+    if ((ret = (struct Timer *)calloc(1, sizeof(struct Timer))) == NULL)
+        return NULL;
+
     ret->function = handler;
     ret->userData = userData;
     ret->interval = interval;
-#ifdef _MSC_VER
-    if (!Timer_Init_Win32(ret))
-#else //_MSC_VER
-    if (!Timer_Init_Posix(ret))
-#endif
-    {
-        Timer_Destroy(ret);
+    ret->bStopRequested = false;
+
+    ret->mutex = Mutex_Create(MUTEX_MODE_NORMAL);
+    if (ret->mutex == NULL) {
+        free(ret);
         return NULL;
     }
+
+    ret->thread = Thread_Launch(Timer_Main, ret, "Timer", NULL);
+    if (ret->thread == NULL) {
+        Mutex_Destroy(ret->mutex);
+        free(ret);
+        return NULL;
+    }
+
     return ret;
 }
+
 SO_PUBLIC void
 Timer_Destroy(struct Timer *timer)
 {
-#ifdef _MSC_VER
-    Timer_Destroy_Win32(timer);
-#else //_MSC_VER
-    Timer_Destroy_Posix(timer);
-#endif
+    ASSERT(timer != NULL);
+    if (timer == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: timer is NULL", __func__);
+        return;
+    }
+
+    Timer_RequestStop(timer);
+    if (timer->thread != NULL) {
+        Thread_Join(timer->thread);
+        Thread_Destroy(timer->thread);
+        timer->thread = NULL;
+    }
+
+    if (timer->mutex != NULL)
+        Mutex_Destroy(timer->mutex);
     free(timer);
 }
 
+static void
+Timer_Main(Thread_t *thread)
+{
+    struct Timer *timer;
+    uint64_t remaining;
+    uint32_t step;
 
+    ASSERT(thread != NULL);
+    if (thread == NULL)
+        return;
+
+    timer = Thread_GetUserData(thread);
+    ASSERT(timer != NULL);
+    if (timer == NULL)
+        return;
+
+    while (!Timer_ShouldStop(timer)) {
+        remaining = (uint64_t)timer->interval * 1000ULL;
+
+        while (remaining > 0ULL) {
+            if (Timer_ShouldStop(timer))
+                return;
+
+            step = (remaining > (uint64_t)TIMER_POLL_INTERVAL_MS) ?
+                TIMER_POLL_INTERVAL_MS : (uint32_t)remaining;
+            Timer_SleepMilliseconds(step);
+            remaining -= step;
+        }
+
+        if (Timer_ShouldStop(timer))
+            return;
+
+        timer->function(timer->userData);
+    }
+}
+
+static bool
+Timer_ShouldStop(struct Timer *timer)
+{
+    bool ret;
+
+    ASSERT(timer != NULL);
+    if (timer == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: timer is NULL", __func__);
+        return true;
+    }
+
+    Mutex_Lock(timer->mutex);
+    ret = timer->bStopRequested;
+    Mutex_Unlock(timer->mutex);
+    return ret;
+}
+
+static void
+Timer_RequestStop(struct Timer *timer)
+{
+    ASSERT(timer != NULL);
+    if (timer == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: timer is NULL", __func__);
+        return;
+    }
+
+    Mutex_Lock(timer->mutex);
+    timer->bStopRequested = true;
+    Mutex_Unlock(timer->mutex);
+}
+
+static void
+Timer_SleepMilliseconds(uint32_t milliseconds)
+{
 #ifdef _MSC_VER
-
-static bool
-Timer_Init_Win32(struct Timer *timer)
-{
-    if ((timer->timerQueue = CreateTimerQueue()) == NULL)
-        return false;
-    if (!CreateTimerQueueTimer( &timer->timer, timer->timerQueue,
-            (WAITORTIMERCALLBACK)Timer_Wrapper, timer , (timer->interval * 1000), (timer->interval * 1000), 0))
-        return false;
-
-    return true;
-}
-
-static void
-Timer_Destroy_Win32(struct Timer *timer)
-{
-    DeleteTimerQueue(timer->timerQueue);
-}
-
-static void CALLBACK
-Timer_Wrapper(void * lpParam, bool TimerOrWaitFired)
-{
-    struct Timer *timer = (struct Timer *)lpParam;
-    timer->function(timer->userData);
-}
-
+    Sleep(milliseconds);
 #else //_MSC_VER
-static bool
-Timer_Init_Posix(struct Timer *timer)
-{
-    if ((timer->props = calloc(1,sizeof(struct sigevent))) == NULL)
-        return false;
+    struct timespec req;
+    struct timespec rem;
 
-    timer->props->sigev_notify = SIGEV_THREAD;
-    timer->props->sigev_value.sival_ptr = timer;
-    timer->props->sigev_notify_function = Timer_Wrapper;
-    timer->spec.it_value.tv_sec = timer->interval;
-    timer->spec.it_value.tv_nsec = 1;
-    timer->spec.it_interval.tv_sec = timer->interval;
-    timer->spec.it_interval.tv_nsec = 1;
+    req.tv_sec = milliseconds / 1000U;
+    req.tv_nsec = (long)(milliseconds % 1000U) * 1000000L;
 
-    if (timer_create (CLOCK_REALTIME, timer->props, &timer->timer) == -1)
-    {
-        rzb_perror
-            (LOG_C_CORE,"Timer_Init_Posix: Failed call to timer_create: %s");
-        return false;
-    }
-    if (timer_settime (timer->timer, 0, &timer->spec, NULL) == -1)
-    {
-        rzb_log (LOG_ERR,LOG_C_CORE, "%s: C&C Arm Hello Timer: Failed to arm timer.", __func__);
-        return false;
-    }
-
-    return true;
+    while (nanosleep(&req, &rem) == -1 && errno == EINTR)
+        req = rem;
+#endif //_MSC_VER
 }
-
-static void
-Timer_Destroy_Posix(struct Timer *timer)
-{
-    timer_delete(timer->timer);
-    free(timer->props);
-}
-
-static void
-Timer_Wrapper(union sigval val)
-{
-    struct Timer *timer = val.sival_ptr;
-    timer->function(timer->userData);
-}
-#endif
-

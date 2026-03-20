@@ -76,6 +76,7 @@ ResponseQueue_Initialize (uuid_t p_pCollectorId, int p_iFlags)
     {
         rzb_log (LOG_ERR, LOG_C_QUEUE,
                  "%s: failed due to failure of QueueList_Add", __func__);
+        Queue_Terminate(l_pQueue);
         return NULL;
     }
 
@@ -101,4 +102,3 @@ ResponseQueue_Terminate (uuid_t p_pCollectorId)
     Queue_Terminate (l_pQueue);
     QueueList_Remove(sg_qlResponseQueue, p_pCollectorId);
 }
-

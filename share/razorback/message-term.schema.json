@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Terminate Message Body",
+  "description": "Canonical JSON body emitted by Terminate_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Reason"
+  ],
+  "properties": {
+    "Reason": {
+      "type": "string"
+    }
+  }
+}

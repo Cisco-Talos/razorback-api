@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Registration Request Message Body",
+  "description": "Canonical JSON body emitted by RegistrationRequest_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Nugget_Type",
+    "App_Type",
+    "Data_Types"
+  ],
+  "properties": {
+    "Nugget_Type": {
+      "$ref": "uuid.schema.json"
+    },
+    "App_Type": {
+      "$ref": "uuid.schema.json"
+    },
+    "Data_Types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "format": "uuid"
+      }
+    }
+  }
+}

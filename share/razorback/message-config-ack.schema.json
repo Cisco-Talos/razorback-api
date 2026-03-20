@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Configuration Ack Message Body",
+  "description": "Canonical JSON body emitted by ConfigAck_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Nugget_Type",
+    "App_Type"
+  ],
+  "properties": {
+    "Nugget_Type": {
+      "$ref": "uuid.schema.json"
+    },
+    "App_Type": {
+      "$ref": "uuid.schema.json"
+    }
+  }
+}

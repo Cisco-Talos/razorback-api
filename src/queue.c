@@ -57,9 +57,12 @@ struct _AMQP_Socket {
 };
 
 static bool Queue_Reconnect(struct Queue *queue, int p_iSide);
+static bool Queue_Connect_ReadSocket(struct Queue *queue);
+static bool Queue_Connect_WriteSocket(struct Queue *queue);
 static char sg_messageTypeHeaderName[] = "rzb-msg-type";
 static char sg_messageVersionHeaderName[] = "rzb-msg-ver";
 
+/** Log an AMQP RPC reply and return true when it represents an error. */
 static bool
 AMQP_error(amqp_rpc_reply_t x, char const *context) {
     switch (x.reply_type) {
@@ -102,6 +105,133 @@ AMQP_error(amqp_rpc_reply_t x, char const *context) {
     return true;
 }
 
+/** Process a pending broker method frame and report whether the connection remains usable. */
+static bool
+AMQP_Handle_Frame(AMQP_Socket_t *socket, amqp_frame_t *frame, const char *context)
+{
+    ASSERT(socket != NULL);
+    ASSERT(frame != NULL);
+    ASSERT(context != NULL);
+    if (socket == NULL || frame == NULL || context == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: invalid frame handler arguments", __func__);
+        return false;
+    }
+
+    if (frame->frame_type != AMQP_FRAME_METHOD)
+        return true;
+
+    switch (frame->payload.method.id) {
+        case AMQP_BASIC_ACK_METHOD:
+            return true;
+
+        case AMQP_BASIC_RETURN_METHOD: {
+            amqp_basic_return_t *ret = (amqp_basic_return_t *)frame->payload.method.decoded;
+            amqp_message_t message;
+            amqp_rpc_reply_t reply;
+
+            rzb_log(LOG_ERR, LOG_C_QUEUE,
+                    "%s: broker returned unroutable message %uh via exchange %.*s routing key %.*s",
+                    context, ret->reply_code, (int)ret->exchange.len,
+                    (char *)ret->exchange.bytes, (int)ret->routing_key.len,
+                    (char *)ret->routing_key.bytes);
+
+            reply = amqp_read_message(socket->pConn, frame->channel, &message, 0);
+            if (reply.reply_type == AMQP_RESPONSE_NORMAL) {
+                amqp_destroy_message(&message);
+            } else {
+                AMQP_error(reply, context);
+            }
+            return true;
+        }
+
+        case AMQP_BASIC_CANCEL_METHOD:
+        case AMQP_CHANNEL_CLOSE_METHOD:
+        case AMQP_CONNECTION_CLOSE_METHOD: {
+            AMQP_error((amqp_rpc_reply_t){
+                           .reply_type = AMQP_RESPONSE_SERVER_EXCEPTION,
+                           .reply = {
+                               .id = frame->payload.method.id,
+                               .decoded = frame->payload.method.decoded
+                           }
+                       },
+                       context);
+            return false;
+        }
+
+        default:
+            rzb_log(LOG_DEBUG, LOG_C_QUEUE,
+                    "%s: ignoring unexpected AMQP method frame 0x%08X",
+                    context, frame->payload.method.id);
+            return true;
+    }
+}
+
+/** Drain any queued broker frames so heartbeat, return, and close events are surfaced promptly. */
+static bool
+AMQP_Service_Connection(AMQP_Socket_t *socket, const char *context)
+{
+    amqp_frame_t frame;
+    int status;
+    struct timeval tval;
+
+    ASSERT(socket != NULL);
+    ASSERT(context != NULL);
+    if (socket == NULL || context == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: invalid connection service arguments", __func__);
+        return false;
+    }
+
+    tval.tv_sec = 0;
+    tval.tv_usec = 0;
+
+    do {
+        status = amqp_simple_wait_frame_noblock(socket->pConn, &frame, &tval);
+        if (status == AMQP_STATUS_TIMEOUT)
+            return true;
+        if (status != AMQP_STATUS_OK) {
+            rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: %s", context,
+                    amqp_error_string2(status));
+            return false;
+        }
+        if (!AMQP_Handle_Frame(socket, &frame, context))
+            return false;
+    } while (amqp_frames_enqueued(socket->pConn));
+
+    return true;
+}
+
+/** Reject the current delivery when local processing fails before the caller can handle it. */
+static bool
+Queue_Reject_Delivery(struct Queue *queue, uint64_t delivery_tag, bool requeue,
+                      const char *context)
+{
+    int amqpErr;
+
+    ASSERT(queue != NULL);
+    ASSERT(context != NULL);
+    if (queue == NULL || context == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: invalid reject arguments", __func__);
+        return false;
+    }
+    if (queue->pReadSocket == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: read socket missing while rejecting delivery", context);
+        return false;
+    }
+
+    amqpErr = amqp_basic_reject(queue->pReadSocket->pConn, AMQP_CHAN_ID,
+                                delivery_tag,
+                                requeue ? 1 : 0);
+    if (amqpErr < 0) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: failed to reject delivery: %s",
+                context, amqp_error_string2(amqpErr));
+        Queue_Reconnect(queue, QUEUE_FLAG_RECV);
+        return false;
+    }
+
+    return true;
+}
+
+/** Close an AMQP channel/connection pair and free the wrapper socket state. */
 static void
 AMQP_Socket_Close (AMQP_Socket_t *socket)
 {
@@ -113,16 +243,19 @@ AMQP_Socket_Close (AMQP_Socket_t *socket)
         amqp_bytes_free(socket->pQueueName);
     }
 
-    if (socket->bChannelOpen) {
+    if (socket->bChannelOpen && socket->pConn != NULL) {
         amqp_channel_close(socket->pConn, AMQP_CHAN_ID, AMQP_REPLY_SUCCESS);
         socket->bChannelOpen = false;
     }
 
-    amqp_connection_close(socket->pConn, AMQP_REPLY_SUCCESS);
-    amqp_destroy_connection(socket->pConn);
+    if (socket->pConn != NULL) {
+        amqp_connection_close(socket->pConn, AMQP_REPLY_SUCCESS);
+        amqp_destroy_connection(socket->pConn);
+    }
     free(socket);
 }
 
+/** Open and authenticate a single broker socket for either the read or write side. */
 static AMQP_Socket_t *
 Queue_Connect_Socket(
     const char * address,
@@ -155,18 +288,27 @@ Queue_Connect_Socket(
     socket->pConn = amqp_new_connection();
     if (useSSL) {
         socket->pSocket = amqp_ssl_socket_new(socket->pConn);
-        amqp_ssl_socket_set_cacert(socket->pSocket, "/etc/ssl/certs/ca-certificates.crt");
+        if (socket->pSocket != NULL &&
+            amqp_ssl_socket_set_cacert(socket->pSocket,
+                                       "/etc/ssl/certs/ca-certificates.crt") != AMQP_STATUS_OK) {
+            rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error configuring CA certificate bundle", __func__);
+            amqp_destroy_connection(socket->pConn);
+            free(socket);
+            return NULL;
+        }
     } else {
         socket->pSocket = amqp_tcp_socket_new(socket->pConn);
 
     }
     if (!socket->pSocket) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error creating socket", __func__ );
+        amqp_destroy_connection(socket->pConn);
         free(socket);
         return NULL;
     }
     if ((amqpErr = amqp_socket_open_noblock(socket->pSocket, address, port, &tval)) < 0) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error opening TCP socket %s:%u - %s", __func__, address, port, amqp_error_string2(amqpErr));
+        amqp_destroy_connection(socket->pConn);
         free(socket);
         return NULL;
     }
@@ -182,12 +324,14 @@ Queue_Connect_Socket(
         AMQP_Socket_Close(socket);
         return NULL;
     }
+    socket->bChannelOpen = true;
 
 
     // done
     return socket;
 }
 
+/** Declare and bind the consumer queue, then start AMQP consumption on the read channel. */
 static bool
 Queue_BeginReading (struct Queue *p_pQ)
 {
@@ -244,6 +388,21 @@ Queue_BeginReading (struct Queue *p_pQ)
         }
     }
 
+    if (p_pQ->iPrefetch > 0) {
+        amqp_basic_qos(
+            p_pQ->pReadSocket->pConn,
+            AMQP_CHAN_ID,
+            0,
+            p_pQ->iPrefetch,
+            0
+        );
+        if (AMQP_error(amqp_get_rpc_reply(p_pQ->pReadSocket->pConn), __func__)) {
+            rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to set prefetch to %u",
+                    __func__, p_pQ->iPrefetch);
+            return false;
+        }
+    }
+
     amqp_basic_consume(
         p_pQ->pReadSocket->pConn,
         AMQP_CHAN_ID,
@@ -263,6 +422,7 @@ Queue_BeginReading (struct Queue *p_pQ)
     return true;
 }
 
+/** Stop the read side of a queue connection. */
 static bool
 Queue_EndReading (struct Queue *p_pQ)
 {
@@ -276,17 +436,18 @@ Queue_EndReading (struct Queue *p_pQ)
     return true;
 }
 
+/** Timer callback that services broker heartbeats and reconnects dead write sockets. */
 static void
 AMQP_Heartbeat(void *p_arg)
 {
     struct Queue *queue = (struct Queue *)p_arg;
-    amqp_frame_t frame;
-    int status;
-    struct timeval tval;
-    tval.tv_sec = 0;
-    tval.tv_usec = 0;
 
     Mutex_Lock(queue->mWriteMutex);
+    if (queue->bShuttingDown) {
+        Mutex_Unlock(queue->mWriteMutex);
+        return;
+    }
+
     if (queue->pWriteSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Write socket missing during heartbeat, reconnecting", __func__);
         Queue_Reconnect(queue, QUEUE_FLAG_SEND);
@@ -294,58 +455,99 @@ AMQP_Heartbeat(void *p_arg)
         return;
     }
 
-    status = amqp_simple_wait_frame_noblock(queue->pWriteSocket->pConn, &frame, &tval);
-    if (status != AMQP_STATUS_OK && status != AMQP_STATUS_TIMEOUT) {
-        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Heartbeat failed (%s), reconnecting", __func__, amqp_error_string2(status));
+    if (!AMQP_Service_Connection(queue->pWriteSocket, __func__)) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Heartbeat detected dead broker connection, reconnecting", __func__);
         Queue_Reconnect(queue, QUEUE_FLAG_SEND);
     }
     Mutex_Unlock(queue->mWriteMutex);
 
 }
 
+/** Establish the queue's read-side AMQP connection if it is configured and missing. */
 static bool
-Queue_Connect(struct Queue *queue)
+Queue_Connect_ReadSocket(struct Queue *queue)
 {
+    if (queue->bShuttingDown)
+        return false;
 
-    if (((queue->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV) && (queue->pReadSocket == NULL))
-    {
-        if ((queue->pReadSocket =
-             Queue_Connect_Socket(queue->sHostname, queue->iPort,
-                  queue->sUser, queue->sPassword, queue->sVhost, queue->bUseSSL)) == NULL)
+    if ((queue->iFlags & QUEUE_FLAG_RECV) != QUEUE_FLAG_RECV ||
+        queue->pReadSocket != NULL)
+        return true;
 
-        {
-            rzb_log (LOG_ERR,LOG_C_STOMP,
-                     "%s: failed due to failure of Queue_Connect_Socket (Read)", __func__);
-            return false;
-        }
-        if (!Queue_BeginReading (queue))
-        {
-            rzb_log (LOG_ERR,LOG_C_STOMP,
-                     "%s: failed due to failure of Queue_BeginReading", __func__);
-            return false;
-        }
+    queue->pReadSocket = Queue_Connect_Socket(queue->sHostname, queue->iPort,
+                                              queue->sUser, queue->sPassword,
+                                              queue->sVhost, queue->bUseSSL);
+    if (queue->pReadSocket == NULL) {
+        rzb_log(LOG_ERR, LOG_C_STOMP,
+                "%s: failed due to failure of Queue_Connect_Socket (Read)",
+                __func__);
+        return false;
+    }
+    if (!Queue_BeginReading(queue)) {
+        rzb_log(LOG_ERR, LOG_C_STOMP,
+                "%s: failed due to failure of Queue_BeginReading", __func__);
+        AMQP_Socket_Close(queue->pReadSocket);
+        queue->pReadSocket = NULL;
+        return false;
     }
 
-    if (((queue->iFlags & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND) && (queue->pWriteSocket == NULL))
-    {
-        if ((queue->pWriteSocket =
-                    Queue_Connect_Socket(queue->sHostname, queue->iPort,
-                    queue->sUser, queue->sPassword, queue->sVhost, queue->bUseSSL)) == NULL)
-        {
-            rzb_log (LOG_ERR,LOG_C_STOMP,
-                     "%s: failed due to failure of Queue_Connect_Socket (Write)", __func__);
-            return false;
-        }
-        if (queue->pWriteHeartbeat == NULL)
-            queue->pWriteHeartbeat = Timer_Create(2, AMQP_Heartbeat, queue);
-    }
     return true;
 }
 
+/** Establish the queue's write-side AMQP connection and heartbeat timer if needed. */
+static bool
+Queue_Connect_WriteSocket(struct Queue *queue)
+{
+    if (queue->bShuttingDown)
+        return false;
+
+    if ((queue->iFlags & QUEUE_FLAG_SEND) != QUEUE_FLAG_SEND ||
+        queue->pWriteSocket != NULL)
+        return true;
+
+    queue->pWriteSocket = Queue_Connect_Socket(queue->sHostname, queue->iPort,
+                                               queue->sUser, queue->sPassword,
+                                               queue->sVhost, queue->bUseSSL);
+    if (queue->pWriteSocket == NULL) {
+        rzb_log(LOG_ERR, LOG_C_STOMP,
+                "%s: failed due to failure of Queue_Connect_Socket (Write)",
+                __func__);
+        return false;
+    }
+    if (queue->pWriteHeartbeat == NULL) {
+        queue->pWriteHeartbeat = Timer_Create(2, AMQP_Heartbeat, queue);
+        if (queue->pWriteHeartbeat == NULL) {
+            rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to create write heartbeat timer", __func__);
+            AMQP_Socket_Close(queue->pWriteSocket);
+            queue->pWriteSocket = NULL;
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/** Connect whichever AMQP sides are enabled for the queue. */
+static bool
+Queue_Connect(struct Queue *queue)
+{
+    if (!Queue_Connect_ReadSocket(queue))
+        return false;
+    if (!Queue_Connect_WriteSocket(queue))
+        return false;
+
+    return true;
+}
+
+/** Reconnect only the requested AMQP side or sides of a queue. */
 static bool
 Queue_Reconnect(struct Queue *queue, int p_iSide)
 {
-    if (p_iSide == QUEUE_FLAG_RECV && queue->pReadSocket != NULL)
+    if (queue->bShuttingDown)
+        return false;
+
+    if ((p_iSide & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
+        queue->pReadSocket != NULL)
     {
         if (queue->pReadSocket != NULL)
         {
@@ -354,7 +556,7 @@ Queue_Reconnect(struct Queue *queue, int p_iSide)
         }
     }
 
-    if (p_iSide == QUEUE_FLAG_SEND &&
+    if ((p_iSide & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND &&
             queue->pWriteSocket != NULL)
     {
         if (queue->pWriteSocket != NULL)
@@ -365,7 +567,14 @@ Queue_Reconnect(struct Queue *queue, int p_iSide)
     }
 
 
-    return Queue_Connect(queue);
+    if ((p_iSide & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
+        !Queue_Connect_ReadSocket(queue))
+        return false;
+    if ((p_iSide & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND &&
+        !Queue_Connect_WriteSocket(queue))
+        return false;
+
+    return true;
 }
 
 SO_PUBLIC struct Queue *
@@ -459,6 +668,8 @@ error:
 SO_PUBLIC void
 Queue_Terminate (struct Queue *p_pQ)
 {
+    struct Timer *heartbeat = NULL;
+
     ASSERT (p_pQ != NULL);
     if (p_pQ == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue is NULL", __func__);
@@ -467,18 +678,28 @@ Queue_Terminate (struct Queue *p_pQ)
 
     Mutex_Lock (p_pQ->mReadMutex);
     Mutex_Lock (p_pQ->mWriteMutex);
+    p_pQ->bShuttingDown = true;
+    heartbeat = p_pQ->pWriteHeartbeat;
+    p_pQ->pWriteHeartbeat = NULL;
+    Mutex_Unlock (p_pQ->mWriteMutex);
+
+    if (heartbeat != NULL)
+        Timer_Destroy(heartbeat);
+
+    Mutex_Lock (p_pQ->mWriteMutex);
 
     if ((p_pQ->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
             p_pQ->pReadSocket != NULL)
     {
         Queue_EndReading (p_pQ);
         AMQP_Socket_Close (p_pQ->pReadSocket);
+        p_pQ->pReadSocket = NULL;
     }
     if ((p_pQ->iFlags & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND &&
             p_pQ->pWriteSocket != NULL)
     {
-        Timer_Destroy (p_pQ->pWriteHeartbeat);
         AMQP_Socket_Close (p_pQ->pWriteSocket);
+        p_pQ->pWriteSocket = NULL;
     }
 
 
@@ -498,6 +719,10 @@ Queue_Get (struct Queue *queue)
     amqp_rpc_reply_t res;
     amqp_envelope_t envelope;
     int headerIndex = 0;
+    int ackErr;
+    bool envelopeReady = false;
+    bool rejectDelivery = false;
+    bool requeueDelivery = false;
 
     ASSERT (queue);
     if (queue == NULL) {
@@ -505,36 +730,52 @@ Queue_Get (struct Queue *queue)
         return NULL;
     }
     Mutex_Lock (queue->mReadMutex);
+    if (queue->bShuttingDown) {
+        rzb_log(LOG_DEBUG, LOG_C_QUEUE,
+                "%s: Skipping receive on queue '%s' because the connection is shutting down",
+                __func__, queue->sName);
+        Mutex_Unlock(queue->mReadMutex);
+        return NULL;
+    }
+
+    if (queue->pReadSocket == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Read socket unavailable, attempting reconnect", __func__);
+        if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV) || queue->pReadSocket == NULL) {
+            Mutex_Unlock(queue->mReadMutex);
+            return NULL;
+        }
+    }
 
     amqp_maybe_release_buffers(queue->pReadSocket->pConn);
     res = amqp_consume_message(queue->pReadSocket->pConn, &envelope, NULL, 0);
+    envelopeReady = (res.reply_type == AMQP_RESPONSE_NORMAL);
 
     if (AMQP_RESPONSE_NORMAL != res.reply_type) {
-        // TODO - Handle errors
-        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error consuming message (reconnecting): %d", __func__, res.reply_type);
+        AMQP_error(res, __func__);
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error consuming message, reconnecting read side", __func__);
         Queue_Reconnect(queue, QUEUE_FLAG_RECV);
-        Mutex_Unlock(queue->mReadMutex);
-        return NULL;
+        goto cleanup;
     }
     if ((ret = (struct Message *)calloc(1,sizeof(struct Message))) == NULL)
     {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating message struct", __func__);
-        Mutex_Unlock(queue->mReadMutex);
-        return NULL;
+        rejectDelivery = true;
+        requeueDelivery = true;
+        goto cleanup;
     }
     if ((ret->headers = Message_Header_List_Create()) == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating message header list", __func__);
-        free(ret);
-        Mutex_Unlock(queue->mReadMutex);
-        return NULL;
+        rejectDelivery = true;
+        requeueDelivery = true;
+        goto cleanup;
     }
 
     ret->serialized = (uint8_t *)calloc(1, envelope.message.body.len + 1);
     if (ret->serialized == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating message body", __func__);
-        Message_Destroy(ret);
-        Mutex_Unlock(queue->mReadMutex);
-        return NULL;
+        rejectDelivery = true;
+        requeueDelivery = true;
+        goto cleanup;
     }
     memcpy(ret->serialized, envelope.message.body.bytes, envelope.message.body.len);
     ret->length = envelope.message.body.len;
@@ -543,49 +784,96 @@ Queue_Get (struct Queue *queue)
         for (headerIndex = 0; headerIndex < envelope.message.properties.headers.num_entries; headerIndex++) {
             amqp_table_entry_t entry = envelope.message.properties.headers.entries[headerIndex];
             char * name = strndup((char *)entry.key.bytes, entry.key.len);
+            if (name == NULL) {
+                rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to duplicate message header name", __func__);
+                rejectDelivery = true;
+                requeueDelivery = true;
+                goto cleanup;
+            }
             //rzb_log(LOG_DEBUG, LOG_C_QUEUE, "%s: Processing header %s - Kind: %u", __func__, name, entry.value.kind);
             if (entry.value.kind == AMQP_FIELD_KIND_UTF8) {
                 //rzb_log(LOG_DEBUG, LOG_C_QUEUE, "%s: Header %s: %s", __func__, name, entry.value.value.bytes.bytes);
-                Message_HeaderList_Add(ret->headers, name, entry.value.value.bytes.bytes);
+                if (Message_HeaderList_Add(ret->headers, name,
+                                           entry.value.value.bytes.bytes) == NULL) {
+                    free(name);
+                    rejectDelivery = true;
+                    requeueDelivery = true;
+                    goto cleanup;
+                }
             } else if (entry.value.kind == AMQP_FIELD_KIND_BYTES) {
                 // Copy header values into new strings to make sure they are null terminated
                 char * value = strndup((char *)entry.value.value.bytes.bytes, entry.value.value.bytes.len);
+                if (value == NULL) {
+                    free(name);
+                    rejectDelivery = true;
+                    requeueDelivery = true;
+                    goto cleanup;
+                }
                 //rzb_log(LOG_DEBUG, LOG_C_QUEUE, "%s: Header %s: %s", __func__, name, value);
-                Message_HeaderList_Add(ret->headers, name, value);
+                if (Message_HeaderList_Add(ret->headers, name, value) == NULL) {
+                    free(value);
+                    free(name);
+                    rejectDelivery = true;
+                    requeueDelivery = true;
+                    goto cleanup;
+                }
                 free(value);
             }
             free(name);
         }
     }
-    amqp_basic_ack(queue->pReadSocket->pConn, 1, envelope.delivery_tag, 0);
-    amqp_destroy_envelope(&envelope);
-    Mutex_Unlock (queue->mReadMutex);
 
     if ((queue->iFlags & QUEUE_FLAG_EXTERNAL_MODE) != QUEUE_FLAG_EXTERNAL_MODE) {
         if ((header = (struct MessageHeader *) List_Find(ret->headers, sg_messageTypeHeaderName)) == NULL) {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-type", __func__);
-            Message_Destroy(ret);
-            return NULL;
+            rejectDelivery = true;
+            goto cleanup;
         }
         ret->type = strtoul(header->sValue, NULL, 10);
 
         if ((header = (struct MessageHeader *) List_Find(ret->headers, sg_messageVersionHeaderName)) == NULL) {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-ver", __func__);
-            Message_Destroy(ret);
-            return NULL;
+            rejectDelivery = true;
+            goto cleanup;
         }
         ret->version = strtoul(header->sValue, NULL, 10);
 
         if (!Message_Setup(ret)) {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message_Setup failed", __func__);
-            Message_Destroy(ret);
-            return NULL;
+            rejectDelivery = true;
+            goto cleanup;
         }
         if(!ret->deserialize(ret)) {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message deserialize failed: type %u body %s", __func__, ret->type, ret->serialized);
-            ret->destroy(ret);
-            return NULL;
+            rejectDelivery = true;
+            goto cleanup;
         }
+    }
+
+    ackErr = amqp_basic_ack(queue->pReadSocket->pConn, AMQP_CHAN_ID,
+                            envelope.delivery_tag, 0);
+    if (ackErr < 0) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to ack delivery: %s",
+                __func__, amqp_error_string2(ackErr));
+        Queue_Reconnect(queue, QUEUE_FLAG_RECV);
+    }
+
+cleanup:
+    if (envelopeReady) {
+        if (rejectDelivery)
+            Queue_Reject_Delivery(queue, envelope.delivery_tag, requeueDelivery, __func__);
+        amqp_destroy_envelope(&envelope);
+    }
+    Mutex_Unlock (queue->mReadMutex);
+
+    if (rejectDelivery) {
+        if (ret != NULL) {
+            if (ret->destroy != NULL)
+                ret->destroy(ret);
+            else
+                Message_Destroy(ret);
+        }
+        return NULL;
     }
 
     return ret;
@@ -601,6 +889,7 @@ struct HeaderIteratorContext {
     amqp_table_entry_t *nextEntry;
 };
 
+/** Convert one Razorback message header into the AMQP table entry format. */
 static int
 Message_Header_To_AMQP_TableEntry(void *h, void *c)
 {
@@ -621,8 +910,10 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     char *messageVer = NULL;
     amqp_bytes_t exchange;
     int amqpErr;
+    size_t headerCount;
+    unsigned int attempt;
     struct HeaderIteratorContext ctx;
-    bool ret = true;
+    bool ret = false;
     ASSERT (queue != NULL);
     ASSERT (message != NULL);
     ASSERT (dest != NULL);
@@ -635,6 +926,13 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
         return false;
 
     Mutex_Lock (queue->mWriteMutex);
+    if (queue->bShuttingDown) {
+        rzb_log(LOG_DEBUG, LOG_C_QUEUE,
+                "%s: Refusing to send message type %u to '%s' because the connection is shutting down",
+                __func__, message->type, dest);
+        Mutex_Unlock(queue->mWriteMutex);
+        return false;
+    }
     if (queue->pWriteSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Write socket unavailable, attempting reconnect", __func__);
         if (!Queue_Reconnect(queue, QUEUE_FLAG_SEND) || queue->pWriteSocket == NULL) {
@@ -678,8 +976,15 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_HEADERS_FLAG;
     props.content_type = amqp_cstring_bytes("application/json");
     props.delivery_mode = 2; /* persistent delivery mode */
-    props.headers.num_entries = 2 + List_Length(message->headers);
+    headerCount = (message->headers != NULL) ? List_Length(message->headers) : 0;
+    props.headers.num_entries = 2 + headerCount;
     props.headers.entries = (amqp_table_entry_t *)calloc(props.headers.num_entries, sizeof(amqp_table_entry_t));
+    if (props.headers.entries == NULL) {
+        free(messageType);
+        free(messageVer);
+        Mutex_Unlock(queue->mWriteMutex);
+        return false;
+    }
     props.headers.entries[0].key = amqp_cstring_bytes("rzb-msg-type");
     props.headers.entries[0].value.kind = AMQP_FIELD_KIND_UTF8;
     props.headers.entries[0].value.value.bytes = amqp_cstring_bytes(messageType);
@@ -687,17 +992,47 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     props.headers.entries[1].value.kind = AMQP_FIELD_KIND_UTF8;
     props.headers.entries[1].value.value.bytes = amqp_cstring_bytes(messageVer);
     ctx.nextEntry = &(props.headers.entries[2]);
-    List_ForEach(message->headers, Message_Header_To_AMQP_TableEntry, &ctx);
+    if (message->headers != NULL &&
+        !List_ForEach(message->headers, Message_Header_To_AMQP_TableEntry, &ctx)) {
+        free(props.headers.entries);
+        free(messageType);
+        free(messageVer);
+        Mutex_Unlock(queue->mWriteMutex);
+        return false;
+    }
 
-    if (( amqpErr = amqp_basic_publish(
+    for (attempt = 0; attempt < 2; attempt++) {
+        if (!AMQP_Service_Connection(queue->pWriteSocket, __func__)) {
+            rzb_log(LOG_ERR, LOG_C_QUEUE,
+                    "%s: Broker reported an outbound connection error, reconnecting",
+                    __func__);
+            if (attempt == 0 &&
+                Queue_Reconnect(queue, QUEUE_FLAG_SEND) &&
+                queue->pWriteSocket != NULL) {
+                continue;
+            }
+            break;
+        }
+
+        amqpErr = amqp_basic_publish(
             queue->pWriteSocket->pConn,
             AMQP_CHAN_ID,
             exchange,
             amqp_cstring_bytes(dest),
-            0, 0, &props, message_bytes)) < 0) {
-        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to publish message: %s", __func__, amqp_error_string2(amqpErr));
-        ret = false;
-        Queue_Reconnect(queue, QUEUE_FLAG_SEND);
+            0, 0, &props, message_bytes);
+        if (amqpErr == AMQP_STATUS_OK) {
+            ret = true;
+            break;
+        }
+
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to publish message: %s",
+                __func__, amqp_error_string2(amqpErr));
+        if (attempt == 0 &&
+            Queue_Reconnect(queue, QUEUE_FLAG_SEND) &&
+            queue->pWriteSocket != NULL) {
+            continue;
+        }
+        break;
     }
     free(props.headers.entries);
     free(messageType);

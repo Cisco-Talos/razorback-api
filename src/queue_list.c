@@ -25,6 +25,7 @@
 
 static int QueueList_KeyCmp(void *a, const void *id);
 static int QueueList_Cmp(void *a, void *b);
+static void QueueList_Destroy(void *item);
 
 SO_PUBLIC List_t *
 QueueList_Create (void)
@@ -32,7 +33,7 @@ QueueList_Create (void)
     return List_Create(LIST_MODE_GENERIC,
             QueueList_Cmp, // Cmp
             QueueList_KeyCmp, // KeyCmp
-            NULL, // Delete
+            QueueList_Destroy, // Delete
             NULL, // Clone
             NULL, // Lock
             NULL); // Unlock
@@ -62,8 +63,11 @@ QueueList_Add (List_t * p_pList, struct Queue * p_pQ,
     struct QueueListEntry *l_pEntry;
 
     ASSERT (p_pList != NULL);
+    ASSERT (p_pQ != NULL);
     ASSERT (p_pId != NULL);
     if (p_pList == NULL)
+        return false;
+    if (p_pQ == NULL)
         return false;
     if (p_pId == NULL)
         return false;
@@ -78,7 +82,12 @@ QueueList_Add (List_t * p_pList, struct Queue * p_pQ,
     uuid_copy (l_pEntry->uuiKey, p_pId);
     l_pEntry->pQueue = p_pQ;
 
-    return List_Push(p_pList, l_pEntry);
+    if (!List_Push(p_pList, l_pEntry)) {
+        free(l_pEntry);
+        return false;
+    }
+
+    return true;
 }
 
 SO_PUBLIC bool
@@ -113,4 +122,9 @@ static int QueueList_Cmp(void *a, void *b)
     return -1;
 }
 
+static void
+QueueList_Destroy(void *item)
+{
+    free(item);
+}
 

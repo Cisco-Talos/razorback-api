@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Primary Alert Message Body",
+  "description": "Canonical JSON body emitted by AlertPrimary_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Nugget",
+    "Block",
+    "Event",
+    "Priority",
+    "Seconds",
+    "Nano_Seconds",
+    "GID",
+    "SID",
+    "SF_Flags",
+    "Ent_Flags",
+    "Old_SF_Flags",
+    "Old_Ent_Flags",
+    "Metadata"
+  ],
+  "properties": {
+    "Nugget": {
+      "$ref": "nugget.schema.json"
+    },
+    "Block": {
+      "$ref": "block.schema.json"
+    },
+    "Event": {
+      "$ref": "event.schema.json"
+    },
+    "Message": {
+      "type": "string"
+    },
+    "Priority": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "Seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "Nano_Seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 999999999
+    },
+    "GID": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "SID": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "SF_Flags": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Ent_Flags": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Old_SF_Flags": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Old_Ent_Flags": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Metadata": {
+      "$ref": "ntlv-list.schema.json"
+    }
+  }
+}

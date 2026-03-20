@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Error Message Body",
+  "description": "Canonical JSON body emitted by Error_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Message"
+  ],
+  "properties": {
+    "Message": {
+      "type": "string"
+    }
+  }
+}

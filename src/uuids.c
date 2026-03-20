@@ -197,6 +197,29 @@ UUID_Get_UUID (const char *p_sName, int p_iType, uuid_t r_uuid)
     return true;
 }
 
+SO_PUBLIC bool
+UUID_Is_Named_UUID(const char *p_sName, int p_iType, uuid_t p_uuid, bool *p_pMatches)
+{
+    uuid_t uuid;
+
+    ASSERT(p_pMatches != NULL);
+    if (p_pMatches == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: p_pMatches is NULL", __func__);
+        return false;
+    }
+
+    if (p_sName == NULL || UUID_Get_List(p_iType) == NULL) {
+        return false;
+    }
+
+    if (!UUID_Get_UUID(p_sName, p_iType, uuid)) {
+        return false;
+    }
+
+    *p_pMatches = (uuid_compare(uuid, p_uuid) == 0);
+    return true;
+}
+
 SO_PUBLIC char *
 UUID_Get_Description (const char *p_sName, int p_iType)
 {

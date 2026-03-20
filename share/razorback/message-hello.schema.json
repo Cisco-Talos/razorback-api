@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Hello Message Body",
+  "description": "Canonical JSON body emitted by Hello_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Nugget_Type",
+    "App_Type",
+    "Locality"
+  ],
+  "properties": {
+    "Nugget_Type": {
+      "$ref": "uuid.schema.json"
+    },
+    "App_Type": {
+      "$ref": "uuid.schema.json"
+    },
+    "Locality": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "Priority": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "Protocol": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "Port": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535
+    },
+    "Flags": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Address_List": {
+      "$ref": "string-list.schema.json"
+    }
+  },
+  "anyOf": [
+    {
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "Priority"
+            ]
+          },
+          {
+            "required": [
+              "Protocol"
+            ]
+          },
+          {
+            "required": [
+              "Port"
+            ]
+          },
+          {
+            "required": [
+              "Flags"
+            ]
+          },
+          {
+            "required": [
+              "Address_List"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "required": [
+        "Priority",
+        "Protocol",
+        "Port",
+        "Flags",
+        "Address_List"
+      ]
+    }
+  ]
+}

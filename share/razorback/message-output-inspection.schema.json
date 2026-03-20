@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Output Inspection Message Body",
+  "description": "Canonical JSON body emitted by OutputInspection_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Nugget",
+    "BlockId",
+    "Status",
+    "Seconds",
+    "NanoSecs",
+    "Final"
+  ],
+  "properties": {
+    "Nugget": {
+      "$ref": "nugget.schema.json"
+    },
+    "BlockId": {
+      "$ref": "block-id.schema.json"
+    },
+    "Status": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "Seconds": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "NanoSecs": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 999999999
+    },
+    "Final": {
+      "type": "integer",
+      "enum": [
+        0,
+        1
+      ]
+    }
+  }
+}

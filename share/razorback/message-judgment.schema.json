@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Judgment Submission Message Body",
+  "description": "Canonical JSON body emitted by JudgmentSubmission_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Reason",
+    "Judgment"
+  ],
+  "properties": {
+    "Reason": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "Judgment": {
+      "$ref": "judgment.schema.json"
+    }
+  }
+}

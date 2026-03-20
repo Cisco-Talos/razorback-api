@@ -27,6 +27,7 @@
 #include <razorback/string_list.h>
 #include <razorback/uuids.h>
 
+#include "init.h"
 #include "test_json_buffer_support.h"
 
 #include <json.h>
@@ -65,6 +66,60 @@ add_uuid_field(json_object *parent, const char *field_name, const char *id_text)
     ck_assert_ptr_ne(parent, NULL);
     ck_assert_ptr_ne(field_name, NULL);
     json_object_object_add(parent, field_name, new_uuid_object(id_text));
+}
+
+static void
+ensure_test_ntlv_type_registered(const char *type_name)
+{
+    static bool initialized = false;
+    static const struct {
+        const char *name;
+        const char *uuid_text;
+    } ntlv_types[] = {
+        { NTLV_TYPE_STRING, "0d2e9e86-fb73-4d16-81ea-20175ab6c781" },
+        { NTLV_TYPE_JSON, "7b2fe6f4-1202-4dc8-9fb6-09f5b4f62c21" }
+    };
+    size_t i;
+    List_t *list;
+    uuid_t uuid;
+
+    ck_assert_ptr_ne(type_name, NULL);
+
+    if (!initialized) {
+        initUuids();
+        initialized = true;
+    }
+
+    if (UUID_Get_UUID(type_name, UUID_TYPE_NTLV_TYPE, uuid))
+        return;
+
+    list = UUID_Get_List(UUID_TYPE_NTLV_TYPE);
+    ck_assert_ptr_ne(list, NULL);
+
+    for (i = 0; i < (sizeof(ntlv_types) / sizeof(ntlv_types[0])); i++) {
+        if (strcmp(type_name, ntlv_types[i].name) == 0) {
+            ck_assert_int_eq(uuid_parse(ntlv_types[i].uuid_text, uuid), 0);
+            ck_assert(UUID_Add_List_Entry(list, uuid, type_name, NULL));
+            return;
+        }
+    }
+
+    ck_abort_msg("missing test UUID mapping for NTLV type %s", type_name);
+}
+
+static void
+add_ntlv_type_field(json_object *parent, const char *field_name, const char *type_name)
+{
+    char uuid_text[UUID_STRING_LENGTH];
+    uuid_t uuid;
+
+    ck_assert_ptr_ne(parent, NULL);
+    ck_assert_ptr_ne(field_name, NULL);
+    ck_assert_ptr_ne(type_name, NULL);
+    ensure_test_ntlv_type_registered(type_name);
+    ck_assert(UUID_Get_UUID(type_name, UUID_TYPE_NTLV_TYPE, uuid));
+    uuid_unparse(uuid, uuid_text);
+    add_uuid_field(parent, field_name, uuid_text);
 }
 
 START_TEST(test_json_buffer_get_uuid_rejects_malformed_uuid_text)
@@ -201,6 +256,59 @@ START_TEST(test_json_buffer_get_ntlv_list_rejects_invalid_type_uuid)
     add_uuid_field(entry, "Name", "00112233-4455-6677-8899-aabbccddeeff");
     json_object_object_add(entry, "Type", new_uuid_object("invalid-uuid"));
     json_object_object_add(entry, "String_Value", json_object_new_string("value"));
+
+    ck_assert(!JsonBuffer_Get_NTLVList(parent, "metadata", &list));
+    ck_assert_ptr_eq(list, NULL);
+
+    json_object_put(parent);
+}
+END_TEST
+
+START_TEST(test_json_buffer_get_ntlv_list_rejects_multiple_value_fields)
+{
+    json_object *parent;
+    json_object *metadata;
+    json_object *entry;
+    List_t *list = NULL;
+
+    parent = json_buffer_test_parent_object();
+    metadata = json_object_new_array();
+    entry = json_object_new_object();
+    ck_assert_ptr_ne(metadata, NULL);
+    ck_assert_ptr_ne(entry, NULL);
+    json_object_array_add(metadata, entry);
+    json_object_object_add(parent, "metadata", metadata);
+
+    add_uuid_field(entry, "Name", "00112233-4455-6677-8899-aabbccddeeff");
+    add_ntlv_type_field(entry, "Type", NTLV_TYPE_STRING);
+    json_object_object_add(entry, "String_Value", json_object_new_string("value"));
+    json_object_object_add(entry, "Bin_Value", json_object_new_string("dmFsdWU="));
+
+    ck_assert(!JsonBuffer_Get_NTLVList(parent, "metadata", &list));
+    ck_assert_ptr_eq(list, NULL);
+
+    json_object_put(parent);
+}
+END_TEST
+
+START_TEST(test_json_buffer_get_ntlv_list_rejects_non_container_json_value)
+{
+    json_object *parent;
+    json_object *metadata;
+    json_object *entry;
+    List_t *list = NULL;
+
+    parent = json_buffer_test_parent_object();
+    metadata = json_object_new_array();
+    entry = json_object_new_object();
+    ck_assert_ptr_ne(metadata, NULL);
+    ck_assert_ptr_ne(entry, NULL);
+    json_object_array_add(metadata, entry);
+    json_object_object_add(parent, "metadata", metadata);
+
+    add_uuid_field(entry, "Name", "00112233-4455-6677-8899-aabbccddeeff");
+    add_ntlv_type_field(entry, "Type", NTLV_TYPE_JSON);
+    json_object_object_add(entry, "Json_Value", json_object_new_string("value"));
 
     ck_assert(!JsonBuffer_Get_NTLVList(parent, "metadata", &list));
     ck_assert_ptr_eq(list, NULL);
@@ -394,6 +502,8 @@ json_buffer_invalid_suite(void)
     tcase_add_test(testcase, test_json_buffer_get_event_id_rejects_invalid_nugget_uuid);
     tcase_add_test(testcase, test_json_buffer_get_ntlv_list_rejects_non_object_entries);
     tcase_add_test(testcase, test_json_buffer_get_ntlv_list_rejects_invalid_type_uuid);
+    tcase_add_test(testcase, test_json_buffer_get_ntlv_list_rejects_multiple_value_fields);
+    tcase_add_test(testcase, test_json_buffer_get_ntlv_list_rejects_non_container_json_value);
     tcase_add_test(testcase, test_json_buffer_get_uuid_list_rejects_malformed_uuid_entries);
     tcase_add_test(testcase, test_json_buffer_get_uuid_list_rejects_missing_name);
     tcase_add_test(testcase, test_json_buffer_get_uuid_list_rejects_empty_name);
