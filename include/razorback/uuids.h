@@ -137,13 +137,15 @@ struct UUIDListNode
 SO_PUBLIC extern bool UUID_Get_UUID(const char *p_sName, int p_iType, uuid_t r_uuid);
 
 /**
- * Determine whether a UUID matches the listed name and type.
+ * Resolve whether a UUID matches the listed name and type.
  * @param p_sName The UUID name.
  * @param p_iType The UUID type.
  * @param p_uuid The UUID to compare.
- * @return true on match, false on mismatch or lookup error.
+ * @param p_pMatches Output flag set to true on match and false on mismatch.
+ * @return true if the named UUID entry was resolved, false on lookup failure.
  */
-SO_PUBLIC extern bool UUID_Matches_UUID(const char *p_sName, int p_iType, uuid_t p_uuid);
+SO_PUBLIC extern bool UUID_Is_Named_UUID(const char *p_sName, int p_iType,
+                                         uuid_t p_uuid, bool *p_pMatches);
 
 /**
  * Get the description for the listed name and type.

@@ -200,14 +200,20 @@ START_TEST(test_uuid_matches_uuid_reports_expected_result)
 {
     uuid_t uuid;
     uuid_t other_uuid;
+    bool matches;
 
     ensure_uuid_tables_initialized();
 
     ck_assert(UUID_Get_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, uuid));
-    ck_assert(UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, uuid));
     ck_assert_int_eq(uuid_parse("00112233-4455-6677-8899-aabbccddeeff", other_uuid), 0);
-    ck_assert(!UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE, other_uuid));
-    ck_assert(!UUID_Matches_UUID("does-not-exist", UUID_TYPE_NUGGET_TYPE, uuid));
+    ck_assert(UUID_Is_Named_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE,
+                                 uuid, &matches));
+    ck_assert(matches);
+    ck_assert(UUID_Is_Named_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE,
+                                 other_uuid, &matches));
+    ck_assert(!matches);
+    ck_assert(!UUID_Is_Named_UUID("does-not-exist", UUID_TYPE_NUGGET_TYPE,
+                                  uuid, &matches));
 }
 END_TEST
 

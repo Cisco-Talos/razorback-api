@@ -105,6 +105,8 @@ CommandAndControl_Unpause(void) {
 
 bool
 CommandAndControl_Start (struct RazorbackContext *p_pContext) {
+    bool isDispatcher;
+
     ASSERT (p_pContext != NULL);
     if (p_pContext == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Context is NULL", __func__);
@@ -153,9 +155,14 @@ CommandAndControl_Start (struct RazorbackContext *p_pContext) {
 
     }
     // Kick Start Registration
-    if (!UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER,
-                           UUID_TYPE_NUGGET_TYPE,
-                           p_pContext->uuidNuggetType)) {
+    if (!UUID_Is_Named_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE,
+                            p_pContext->uuidNuggetType, &isDispatcher)) {
+        rzb_log(LOG_ERR, LOG_C_CNC,
+                "%s: failed to resolve dispatcher nugget type UUID", __func__);
+        return false;
+    }
+
+    if (!isDispatcher) {
         return CommandAndControl_Register(p_pContext);
     }
 
@@ -597,6 +604,7 @@ static bool
 Default_processHelloMessage (struct Message *message) {
     struct MessageHello *hello;
     uuid_t source,dest;
+    bool isDispatcher;
     ASSERT(message != NULL);
     if (message == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Message is NULL", __func__);
@@ -612,9 +620,14 @@ Default_processHelloMessage (struct Message *message) {
     Message_Get_Nuggets(message,source,dest);
 
     // Only care about dispatchers
-    if (!UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER,
-                           UUID_TYPE_NUGGET_TYPE,
-                           hello->uuidNuggetType)) {
+    if (!UUID_Is_Named_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE,
+                            hello->uuidNuggetType, &isDispatcher)) {
+        rzb_log(LOG_ERR, LOG_C_CNC,
+                "%s: failed to resolve dispatcher nugget type UUID", __func__);
+        return false;
+    }
+
+    if (!isDispatcher) {
         return true;
     }
 
@@ -625,19 +638,24 @@ Default_processHelloMessage (struct Message *message) {
 
 static bool
 CommandAndControl_processCacheClearMessage (struct RazorbackContext *context) {
+    bool isDispatcher;
+
     ASSERT (context != NULL);
     if (context == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Context is NULL", __func__);
         return false;
     }
 
+    if (!UUID_Is_Named_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE,
+                            context->uuidNuggetType, &isDispatcher)) {
+        rzb_log(LOG_ERR, LOG_C_CNC,
+                "%s: failed to resolve dispatcher nugget type UUID", __func__);
+        return false;
+    }
+
     // If we are not a dispatcher but we are stand alone then process this request.
-    if (
-            (!UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER,
-                                UUID_TYPE_NUGGET_TYPE,
-                                context->uuidNuggetType)) &&
-            ((context->iFlags & CONTEXT_FLAG_STAND_ALONE) == CONTEXT_FLAG_STAND_ALONE)
-            ) {
+    if ((!isDispatcher) &&
+        ((context->iFlags & CONTEXT_FLAG_STAND_ALONE) == CONTEXT_FLAG_STAND_ALONE)) {
         rzb_log(LOG_INFO, LOG_C_CNC, "%s: Clearing Local Cache", __func__);
         clearLocalEntry(ALL, FULL);
     }

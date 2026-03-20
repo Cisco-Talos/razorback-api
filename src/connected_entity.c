@@ -44,6 +44,7 @@ static void ConnectedEntity_Delete(void *a);
 static int ConnectedEntityHook_KeyCmp(void *a, const void *id);
 static int ConnectedEntityHook_Cmp(void *a, void *b);
 static void ConnectedEntityHook_Delete(void *a);
+static bool ConnectedEntity_IsDispatcherType(uuid_t nuggetType);
 
 struct ConnectedEntityKey {
     int searchKeys;
@@ -64,6 +65,16 @@ static List_t *sg_pEntityList = NULL;
 static List_t *sg_pHookList = NULL;
 
 static void ConnectedEntityList_Prune (void *userData);
+
+static bool
+ConnectedEntity_IsDispatcherType(uuid_t nuggetType)
+{
+    bool isDispatcher = false;
+
+    (void)UUID_Is_Named_UUID(NUGGET_TYPE_DISPATCHER, UUID_TYPE_NUGGET_TYPE,
+                             nuggetType, &isDispatcher);
+    return isDispatcher;
+}
 
 bool
 ConnectedEntityList_Start (void) {
@@ -154,9 +165,7 @@ ConnectedEntityList_GetEntity (struct Message *message)
         uuid_copy(ret->uuidNuggetType, hello->uuidNuggetType);
         uuid_copy(ret->uuidApplicationType, hello->uuidApplicationType);
         ret->locality = hello->locality;
-        if (UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER,
-                              UUID_TYPE_NUGGET_TYPE,
-                              ret->uuidNuggetType)) {
+        if (ConnectedEntity_IsDispatcherType(ret->uuidNuggetType)) {
             if ((ret->dispatcher = calloc(1, sizeof(struct DispatcherEntity))) == NULL) {
                 free(ret);
                 return NULL;
@@ -210,9 +219,7 @@ ConnectedEntityList_Update (struct Message *message) {
     }
 
     entity->tTimeOfLastHello = time(NULL);
-    if (UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER,
-                          UUID_TYPE_NUGGET_TYPE,
-                          entity->uuidNuggetType)) {
+    if (ConnectedEntity_IsDispatcherType(entity->uuidNuggetType)) {
         entity->dispatcher->flags = hello->flags;
         entity->dispatcher->priority = hello->priority;
     }
@@ -394,9 +401,7 @@ ConnectedEntityList_CollectDispatchers(void *item, void *userData) {
         return LIST_EACH_OK;
     }
 
-    if (UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER,
-                          UUID_TYPE_NUGGET_TYPE,
-                          entity->uuidNuggetType)) {
+    if (ConnectedEntity_IsDispatcherType(entity->uuidNuggetType)) {
         // Todo - need to clone the dispatcher here
         List_Push(list, entity);
     }
@@ -490,9 +495,7 @@ ConnectedEntityList_CollectHighDispatcher(void *item, void *userData) {
         return LIST_EACH_OK;
     }
 
-    if (UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER,
-                          UUID_TYPE_NUGGET_TYPE,
-                          entity->uuidNuggetType))
+    if (ConnectedEntity_IsDispatcherType(entity->uuidNuggetType))
     {
         if (*cur == NULL)
             *cur = entity;
@@ -535,9 +538,7 @@ ConnectedEntityList_CollectSlaveInLocality(void *item, void *userData) {
         return LIST_EACH_OK;
     }
 
-    if (UUID_Matches_UUID(NUGGET_TYPE_DISPATCHER,
-                          UUID_TYPE_NUGGET_TYPE,
-                          entity->uuidNuggetType))
+    if (ConnectedEntity_IsDispatcherType(entity->uuidNuggetType))
     {
         if(entity->locality != search->locality)
             return LIST_EACH_OK;

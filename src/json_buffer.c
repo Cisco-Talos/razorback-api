@@ -144,19 +144,28 @@ JsonBuffer_ParseUnsignedText(const char *func, const char *name,
 }
 
 static bool
+JsonBuffer_NamedNTLVTypeMatches(const char *name, uuid_t type)
+{
+    bool matches = false;
+
+    (void)UUID_Is_Named_UUID(name, UUID_TYPE_NTLV_TYPE, type, &matches);
+    return matches;
+}
+
+static bool
 JsonBuffer_NTLVTypeUsesStringValue(uuid_t type)
 {
-    return UUID_Matches_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, type) ||
-           UUID_Matches_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, type) ||
-           UUID_Matches_UUID(NTLV_TYPE_IPPROTO, UUID_TYPE_NTLV_TYPE, type) ||
-           UUID_Matches_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, type) ||
-           UUID_Matches_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, type);
+    return JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_STRING, type) ||
+           JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_PORT, type) ||
+           JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPPROTO, type) ||
+           JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv4_ADDR, type) ||
+           JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv6_ADDR, type);
 }
 
 static bool
 JsonBuffer_NTLVTypeUsesJsonValue(uuid_t type)
 {
-    return UUID_Matches_UUID(NTLV_TYPE_JSON, UUID_TYPE_NTLV_TYPE, type);
+    return JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_JSON, type);
 }
 
 #define JSONBUFFER_RETURN_PUT(field, detail, expr) \
@@ -982,7 +991,7 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
 
     if (hasStringValue) {
         strLength = strlen(str) + 1;
-        if (UUID_Matches_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, type)) {
+        if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_STRING, type)) {
             if (!NTLVList_Add(list, name, type, (uint32_t)strLength,
                               (const uint8_t *)str)) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
@@ -999,7 +1008,7 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
             goto cleanup;
         }
 
-        if (UUID_Matches_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, type)) {
+        if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_PORT, type)) {
             if (sscanf(str, "%hu", &port) != 1) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
                                                   "invalid port string");
@@ -1015,7 +1024,7 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
             goto cleanup;
         }
 
-        if (UUID_Matches_UUID(NTLV_TYPE_IPPROTO, UUID_TYPE_NTLV_TYPE, type)) {
+        if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPPROTO, type)) {
             if (sscanf(str, "%hhu", &proto) != 1) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
                                                   "invalid protocol string");
@@ -1031,7 +1040,7 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
             goto cleanup;
         }
 
-        if (UUID_Matches_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, type)) {
+        if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv4_ADDR, type)) {
             if (inet_pton(AF_INET, str, ipAddress) != 1) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
                                                   "invalid IPv4 address string");
@@ -1046,7 +1055,7 @@ JsonBuffer_Get_NTLVItem (List_t *list, json_object *parent )
             goto cleanup;
         }
 
-        if (UUID_Matches_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, type)) {
+        if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv6_ADDR, type)) {
             if (inet_pton(AF_INET6, str, ipAddress) != 1) {
                 JsonBuffer_LogDeserializationError(__func__, "String_Value",
                                                   "invalid IPv6 address string");
@@ -1131,7 +1140,7 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
     JSONBUFFER_RETURN_LIST_PUT("Type", "failed to serialize NTLV type",
                                JsonBuffer_Put_UUID(object, "Type", p_pItem->uuidType));
 
-    if (UUID_Matches_UUID(NTLV_TYPE_STRING, UUID_TYPE_NTLV_TYPE, p_pItem->uuidType)) {
+    if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_STRING, p_pItem->uuidType)) {
         if (p_pItem->iLength == 0 || p_pItem->pData == NULL ||
             p_pItem->pData[p_pItem->iLength - 1] != '\0') {
             JsonBuffer_LogSerializationError(__func__, "String_Value",
@@ -1152,7 +1161,7 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
         useJsonValue = true;
     }
 
-    if (UUID_Matches_UUID(NTLV_TYPE_PORT, UUID_TYPE_NTLV_TYPE, p_pItem->uuidType))
+    if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_PORT, p_pItem->uuidType))
     {
         if (p_pItem->iLength != sizeof(port)) {
             JsonBuffer_LogSerializationError(__func__, "String_Value",
@@ -1170,7 +1179,7 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
         doFree = true;
         goto type_processed;
     }
-    if (UUID_Matches_UUID(NTLV_TYPE_IPPROTO, UUID_TYPE_NTLV_TYPE, p_pItem->uuidType))
+    if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPPROTO, p_pItem->uuidType))
     {
         if (p_pItem->iLength != sizeof(proto)) {
             JsonBuffer_LogSerializationError(__func__, "String_Value",
@@ -1188,7 +1197,7 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
         doFree = true;
         goto type_processed;
     }
-    if (UUID_Matches_UUID(NTLV_TYPE_IPv4_ADDR, UUID_TYPE_NTLV_TYPE, p_pItem->uuidType))
+    if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv4_ADDR, p_pItem->uuidType))
     {
         if (p_pItem->iLength != 4U) {
             JsonBuffer_LogSerializationError(__func__, "String_Value",
@@ -1205,7 +1214,7 @@ JsonBuffer_Put_NTLVItem (struct NTLVItem *p_pItem, json_object *parent )
         goto type_processed;
     }
 
-    if (UUID_Matches_UUID(NTLV_TYPE_IPv6_ADDR, UUID_TYPE_NTLV_TYPE, p_pItem->uuidType))
+    if (JsonBuffer_NamedNTLVTypeMatches(NTLV_TYPE_IPv6_ADDR, p_pItem->uuidType))
     {
         if (p_pItem->iLength != 16U) {
             JsonBuffer_LogSerializationError(__func__, "String_Value",
