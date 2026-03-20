@@ -62,6 +62,7 @@ struct Queue
     uint32_t iPrefetch;             ///< Prefetch count
     bool bTopic;                    ///< Is this a topic (vs queue)
     struct Timer *pWriteHeartbeat;  ///< Write heartbeat timer
+    bool bShuttingDown;             ///< Is queue teardown in progress
 };
 
 #define QUEUE_FLAG_SEND 0x01

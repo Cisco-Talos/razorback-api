@@ -443,6 +443,11 @@ AMQP_Heartbeat(void *p_arg)
     struct Queue *queue = (struct Queue *)p_arg;
 
     Mutex_Lock(queue->mWriteMutex);
+    if (queue->bShuttingDown) {
+        Mutex_Unlock(queue->mWriteMutex);
+        return;
+    }
+
     if (queue->pWriteSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Write socket missing during heartbeat, reconnecting", __func__);
         Queue_Reconnect(queue, QUEUE_FLAG_SEND);
@@ -462,6 +467,9 @@ AMQP_Heartbeat(void *p_arg)
 static bool
 Queue_Connect_ReadSocket(struct Queue *queue)
 {
+    if (queue->bShuttingDown)
+        return false;
+
     if ((queue->iFlags & QUEUE_FLAG_RECV) != QUEUE_FLAG_RECV ||
         queue->pReadSocket != NULL)
         return true;
@@ -490,6 +498,9 @@ Queue_Connect_ReadSocket(struct Queue *queue)
 static bool
 Queue_Connect_WriteSocket(struct Queue *queue)
 {
+    if (queue->bShuttingDown)
+        return false;
+
     if ((queue->iFlags & QUEUE_FLAG_SEND) != QUEUE_FLAG_SEND ||
         queue->pWriteSocket != NULL)
         return true;
@@ -532,6 +543,9 @@ Queue_Connect(struct Queue *queue)
 static bool
 Queue_Reconnect(struct Queue *queue, int p_iSide)
 {
+    if (queue->bShuttingDown)
+        return false;
+
     if ((p_iSide & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
         queue->pReadSocket != NULL)
     {
@@ -654,6 +668,8 @@ error:
 SO_PUBLIC void
 Queue_Terminate (struct Queue *p_pQ)
 {
+    struct Timer *heartbeat = NULL;
+
     ASSERT (p_pQ != NULL);
     if (p_pQ == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue is NULL", __func__);
@@ -661,6 +677,15 @@ Queue_Terminate (struct Queue *p_pQ)
     }
 
     Mutex_Lock (p_pQ->mReadMutex);
+    Mutex_Lock (p_pQ->mWriteMutex);
+    p_pQ->bShuttingDown = true;
+    heartbeat = p_pQ->pWriteHeartbeat;
+    p_pQ->pWriteHeartbeat = NULL;
+    Mutex_Unlock (p_pQ->mWriteMutex);
+
+    if (heartbeat != NULL)
+        Timer_Destroy(heartbeat);
+
     Mutex_Lock (p_pQ->mWriteMutex);
 
     if ((p_pQ->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
@@ -673,10 +698,6 @@ Queue_Terminate (struct Queue *p_pQ)
     if ((p_pQ->iFlags & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND &&
             p_pQ->pWriteSocket != NULL)
     {
-        if (p_pQ->pWriteHeartbeat != NULL) {
-            Timer_Destroy (p_pQ->pWriteHeartbeat);
-            p_pQ->pWriteHeartbeat = NULL;
-        }
         AMQP_Socket_Close (p_pQ->pWriteSocket);
         p_pQ->pWriteSocket = NULL;
     }
@@ -709,6 +730,13 @@ Queue_Get (struct Queue *queue)
         return NULL;
     }
     Mutex_Lock (queue->mReadMutex);
+    if (queue->bShuttingDown) {
+        rzb_log(LOG_DEBUG, LOG_C_QUEUE,
+                "%s: Skipping receive on queue '%s' because the connection is shutting down",
+                __func__, queue->sName);
+        Mutex_Unlock(queue->mReadMutex);
+        return NULL;
+    }
 
     if (queue->pReadSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Read socket unavailable, attempting reconnect", __func__);
@@ -898,6 +926,13 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
         return false;
 
     Mutex_Lock (queue->mWriteMutex);
+    if (queue->bShuttingDown) {
+        rzb_log(LOG_DEBUG, LOG_C_QUEUE,
+                "%s: Refusing to send message type %u to '%s' because the connection is shutting down",
+                __func__, message->type, dest);
+        Mutex_Unlock(queue->mWriteMutex);
+        return false;
+    }
     if (queue->pWriteSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Write socket unavailable, attempting reconnect", __func__);
         if (!Queue_Reconnect(queue, QUEUE_FLAG_SEND) || queue->pWriteSocket == NULL) {

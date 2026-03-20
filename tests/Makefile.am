@@ -31,7 +31,7 @@ daemonTest_LDADD = -L../src -lrazorback_api @LIBS@
 
 if HAVE_CHECK
 check_PROGRAMS = test_hash test_block_id test_list test_string_list \
-	test_uuids test_config_file
+	test_uuids test_config_file test_timer
 TESTS = $(check_PROGRAMS)
 
 TESTS_DIR_CPPFLAGS = $(AM_CPPFLAGS) \
@@ -61,6 +61,10 @@ test_config_file_SOURCES = test_config_file.c test_runtime_support.c ../src/conf
 test_config_file_CFLAGS = $(CHECK_CFLAGS)
 test_config_file_CPPFLAGS = $(TESTS_DIR_CPPFLAGS)
 test_config_file_LDADD = $(CHECK_LIBS) @LIBS@
+
+test_timer_SOURCES = test_timer.c test_runtime_support.c ../src/list.c ../src/lock.c ../src/thread.c ../src/timer.c
+test_timer_CFLAGS = $(CHECK_CFLAGS)
+test_timer_LDADD = $(CHECK_LIBS) @LIBS@
 
 if HAVE_JV
 check_PROGRAMS += test_json_buffer_primitives test_json_buffer_structs \

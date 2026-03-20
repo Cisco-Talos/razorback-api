@@ -29,6 +29,12 @@ Config_getHashType(void)
     return HASH_TYPE_SHA256;
 }
 
+uint32_t
+Config_getThreadLimit(void)
+{
+    return 64U;
+}
+
 void
 rzb_log(unsigned level, uint64_t component, const char *fmt, ...)
 {
