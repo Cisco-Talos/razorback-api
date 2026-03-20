@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Log Submission Message Body",
+  "description": "Canonical JSON body emitted by Log_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Nugget_ID",
+    "Priority",
+    "Message"
+  ],
+  "properties": {
+    "Nugget_ID": {
+      "$ref": "uuid.schema.json"
+    },
+    "Priority": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    },
+    "Event_ID": {
+      "$ref": "event-id.schema.json"
+    },
+    "Message": {
+      "type": "string"
+    }
+  }
+}

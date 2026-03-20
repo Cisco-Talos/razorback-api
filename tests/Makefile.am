@@ -96,8 +96,19 @@ test_json_buffer_invalid_LDADD = $(CHECK_LIBS) @LIBS@
 test_messages_roundtrip_SOURCES = test_messages_roundtrip.c test_json_buffer_support.c \
 	../src/hash.c ../src/block_id.c ../src/list.c ../src/string_list.c ../src/json_buffer.c \
 	../src/lock.c ../src/ntvl.c ../src/uuids.c ../src/messages/core.c \
-	../src/messages/cache_req.c ../src/messages/cnc/config_ack.c \
-	../src/messages/cnc/reg_resp.c
+	../src/messages/alert_child.c ../src/messages/alert_primary.c \
+	../src/messages/block_submit.c ../src/messages/cache_req.c \
+	../src/messages/cache_resp.c ../src/messages/inspection.c \
+	../src/messages/judgment.c ../src/messages/log.c \
+	../src/messages/output_event.c ../src/messages/output_inspection.c \
+	../src/messages/output_log.c ../src/messages/cnc/bye.c \
+	../src/messages/cnc/cache_clear.c ../src/messages/cnc/config_ack.c \
+	../src/messages/cnc/config_update.c ../src/messages/cnc/error.c \
+	../src/messages/cnc/go.c ../src/messages/cnc/hello.c \
+	../src/messages/cnc/pause.c ../src/messages/cnc/paused.c \
+	../src/messages/cnc/reg_req.c ../src/messages/cnc/reg_resp.c \
+	../src/messages/cnc/rereg.c ../src/messages/cnc/running.c \
+	../src/messages/cnc/term.c
 test_messages_roundtrip_CFLAGS = $(CHECK_CFLAGS)
 test_messages_roundtrip_CPPFLAGS = $(JSON_BUFFER_TEST_CPPFLAGS)
 test_messages_roundtrip_LDADD = $(CHECK_LIBS) @LIBS@

@@ -87,10 +87,57 @@ Block_Destroy(struct Block *block)
     free(block);
 }
 
+struct Block *
+Block_Clone(const struct Block *block)
+{
+    struct Block *clone;
+
+    if (block == NULL)
+        return NULL;
+
+    clone = calloc(1, sizeof(*clone));
+    ck_assert_ptr_ne(clone, NULL);
+
+    if (block->pId != NULL) {
+        clone->pId = BlockId_Clone(block->pId);
+        ck_assert_ptr_ne(clone->pId, NULL);
+    }
+    if (block->pParentId != NULL) {
+        clone->pParentId = BlockId_Clone(block->pParentId);
+        ck_assert_ptr_ne(clone->pParentId, NULL);
+    }
+    if (block->pParentBlock != NULL) {
+        clone->pParentBlock = Block_Clone(block->pParentBlock);
+        ck_assert_ptr_ne(clone->pParentBlock, NULL);
+    }
+    if (block->pMetaDataList != NULL) {
+        clone->pMetaDataList = List_Clone(block->pMetaDataList);
+        ck_assert_ptr_ne(clone->pMetaDataList, NULL);
+    }
+
+    return clone;
+}
+
 void
 EventId_Destroy(struct EventId *eventId)
 {
     free(eventId);
+}
+
+struct EventId *
+EventId_Clone(struct EventId *eventId)
+{
+    struct EventId *clone;
+
+    if (eventId == NULL)
+        return NULL;
+
+    clone = calloc(1, sizeof(*clone));
+    ck_assert_ptr_ne(clone, NULL);
+    uuid_copy(clone->uuidNuggetId, eventId->uuidNuggetId);
+    clone->iSeconds = eventId->iSeconds;
+    clone->iNanoSecs = eventId->iNanoSecs;
+    return clone;
 }
 
 void

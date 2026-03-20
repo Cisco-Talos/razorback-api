@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Output Event Message Body",
+  "description": "Canonical JSON body emitted by OutputEvent_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Nugget",
+    "Event"
+  ],
+  "properties": {
+    "Nugget": {
+      "$ref": "nugget.schema.json"
+    },
+    "Event": {
+      "$ref": "event.schema.json"
+    }
+  }
+}

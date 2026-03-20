@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Inspection Submission Message Body",
+  "description": "Canonical JSON body emitted by InspectionSubmission_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Reason",
+    "Event_ID",
+    "Event_Metadata",
+    "Block",
+    "Avaliable_Localities"
+  ],
+  "properties": {
+    "Reason": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Event_ID": {
+      "$ref": "event-id.schema.json"
+    },
+    "Event_Metadata": {
+      "$ref": "ntlv-list.schema.json"
+    },
+    "Block": {
+      "$ref": "block.schema.json"
+    },
+    "Avaliable_Localities": {
+      "$ref": "uint8-list.schema.json"
+    }
+  }
+}

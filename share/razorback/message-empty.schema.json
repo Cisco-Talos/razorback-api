@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Empty Message Body",
+  "description": "Canonical empty JSON object emitted by Message_Serialize_Empty().",
+  "type": "object",
+  "additionalProperties": false
+}

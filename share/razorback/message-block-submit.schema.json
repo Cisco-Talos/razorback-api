@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Block Submission Message Body",
+  "description": "Canonical JSON body emitted by BlockSubmission_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Reason",
+    "Event",
+    "Stored_Locality"
+  ],
+  "properties": {
+    "Reason": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Event": {
+      "$ref": "event.schema.json"
+    },
+    "Stored_Locality": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255
+    }
+  }
+}

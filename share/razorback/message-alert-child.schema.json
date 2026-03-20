@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Child Alert Message Body",
+  "description": "Canonical JSON body emitted by AlertChild_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Nugget",
+    "Block",
+    "Child_Block",
+    "SF_Flags",
+    "Ent_Flags",
+    "Old_SF_Flags",
+    "Old_Ent_Flags",
+    "Event_Count",
+    "Parent_Count"
+  ],
+  "properties": {
+    "Nugget": {
+      "$ref": "nugget.schema.json"
+    },
+    "Block": {
+      "$ref": "block.schema.json"
+    },
+    "Child_Block": {
+      "$ref": "block.schema.json"
+    },
+    "SF_Flags": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Ent_Flags": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Old_SF_Flags": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Old_Ent_Flags": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 4294967295
+    },
+    "Event_Count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "Parent_Count": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

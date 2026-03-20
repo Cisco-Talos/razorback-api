@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Configuration Update Message Body",
+  "description": "Canonical JSON body emitted by ConfigUpdate_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "NTLV_Types",
+    "NTLV_Names",
+    "Data_Types"
+  ],
+  "properties": {
+    "NTLV_Types": {
+      "$ref": "uuid-list.schema.json"
+    },
+    "NTLV_Names": {
+      "$ref": "uuid-list.schema.json"
+    },
+    "Data_Types": {
+      "$ref": "uuid-list.schema.json"
+    }
+  }
+}

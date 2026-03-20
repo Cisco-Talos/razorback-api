@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Razorback Cache Request Message Body",
+  "description": "Canonical JSON body emitted by CacheReq_Serialize().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "Requestor",
+    "Block_ID"
+  ],
+  "properties": {
+    "Requestor": {
+      "$ref": "uuid.schema.json"
+    },
+    "Block_ID": {
+      "$ref": "block-id.schema.json"
+    }
+  }
+}
