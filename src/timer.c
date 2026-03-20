@@ -113,7 +113,7 @@ static void
 Timer_Main(Thread_t *thread)
 {
     struct Timer *timer;
-    uint32_t remaining;
+    uint64_t remaining;
     uint32_t step;
 
     ASSERT(thread != NULL);
@@ -126,16 +126,14 @@ Timer_Main(Thread_t *thread)
         return;
 
     while (!Timer_ShouldStop(timer)) {
-        remaining = timer->interval * 1000U;
-        if (remaining == 0U)
-            remaining = TIMER_POLL_INTERVAL_MS;
+        remaining = (uint64_t)timer->interval * 1000ULL;
 
-        while (remaining > 0U) {
+        while (remaining > 0ULL) {
             if (Timer_ShouldStop(timer))
                 return;
 
-            step = (remaining > TIMER_POLL_INTERVAL_MS) ?
-                TIMER_POLL_INTERVAL_MS : remaining;
+            step = (remaining > (uint64_t)TIMER_POLL_INTERVAL_MS) ?
+                TIMER_POLL_INTERVAL_MS : (uint32_t)remaining;
             Timer_SleepMilliseconds(step);
             remaining -= step;
         }

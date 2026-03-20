@@ -30,6 +30,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#define TIMER_OVERFLOW_THRESHOLD_INTERVAL 4294968U
 #define TIMER_TEST_POLL_MS 10U
 
 struct TimerCallbackState {
@@ -175,6 +176,23 @@ START_TEST(test_timer_destroy_before_first_fire_prevents_callback)
 }
 END_TEST
 
+START_TEST(test_timer_large_interval_does_not_fire_early)
+{
+    struct TimerCallbackState state = { 0 };
+    struct Timer *timer;
+
+    state.allowCallbackExit = true;
+    timer = Timer_Create(TIMER_OVERFLOW_THRESHOLD_INTERVAL,
+                         timer_test_callback, &state);
+    ck_assert_ptr_ne(timer, NULL);
+
+    test_sleep_ms(1500U);
+    ck_assert_uint_eq(atomic_load(&state.callCount), 0U);
+
+    Timer_Destroy(timer);
+}
+END_TEST
+
 START_TEST(test_timer_repeats_callback)
 {
     struct TimerCallbackState state = { 0 };
@@ -249,6 +267,7 @@ timer_suite(void)
     tcase_add_test(testcase, test_timer_create_rejects_zero_interval);
     tcase_add_test(testcase, test_timer_callback_fires_and_receives_userdata);
     tcase_add_test(testcase, test_timer_destroy_before_first_fire_prevents_callback);
+    tcase_add_test(testcase, test_timer_large_interval_does_not_fire_early);
     tcase_add_test(testcase, test_timer_repeats_callback);
     tcase_add_test(testcase, test_timer_destroy_waits_for_callback_completion);
     tcase_add_test(testcase, test_timer_callbacks_do_not_overlap);
