@@ -27,6 +27,8 @@
 #include <errno.h>
 #include <time.h>
 
+#include "runtime_config.h"
+
 #ifdef _MSC_VER
 #else //_MSC_VER
 #include <unistd.h>
@@ -80,6 +82,9 @@ Timer_Create(uint32_t interval, void (*handler)(void *), void *userData)
 
     ret->thread = Thread_Launch(Timer_Main, ret, "Timer", NULL);
     if (ret->thread == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Failed to create timer thread for interval %u seconds (%u/%u tracked threads active)",
+                __func__, interval, Thread_getCount(), Config_getThreadLimit());
         Mutex_Destroy(ret->mutex);
         free(ret);
         return NULL;
