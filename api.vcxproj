@@ -275,22 +275,6 @@
     <ClCompile Include="win32\bobins.c" />
     <ClCompile Include="win32\getopt.c" />
     <ClCompile Include="win32\getopt_long.c" />
-    <ClCompile Include="win32\json\arraylist.c" />
-    <ClCompile Include="win32\json\debug.c" />
-    <ClCompile Include="win32\json\json_object.c" />
-    <ClCompile Include="win32\json\json_tokener.c" />
-    <ClCompile Include="win32\json\json_util.c" />
-    <ClCompile Include="win32\json\linkhash.c" />
-    <ClCompile Include="win32\json\printbuf.c" />
-    <ClCompile Include="win32\uuid\clear.c" />
-    <ClCompile Include="win32\uuid\compare.c" />
-    <ClCompile Include="win32\uuid\copy.c" />
-    <ClCompile Include="win32\uuid\isnull.c" />
-    <ClCompile Include="win32\uuid\pack.c" />
-    <ClCompile Include="win32\uuid\parse.c" />
-    <ClCompile Include="win32\uuid\unpack.c" />
-    <ClCompile Include="win32\uuid\unparse.c" />
-    <ClCompile Include="win32\uuid\uuid_time.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="include\razorback.h" />
@@ -382,21 +366,7 @@
     <ClInclude Include="win32\bobins.h" />
     <ClInclude Include="win32\config.h" />
     <ClInclude Include="win32\getopt.h" />
-    <ClInclude Include="win32\json\arraylist.h" />
-    <ClInclude Include="win32\json\bits.h" />
-    <ClInclude Include="win32\json\debug.h" />
-    <ClInclude Include="win32\json\json-config.h" />
-    <ClInclude Include="win32\json\json.h" />
-    <ClInclude Include="win32\json\json_object.h" />
-    <ClInclude Include="win32\json\json_object_private.h" />
-    <ClInclude Include="win32\json\json_tokener.h" />
-    <ClInclude Include="win32\json\json_util.h" />
-    <ClInclude Include="win32\json\linkhash.h" />
-    <ClInclude Include="win32\json\printbuf.h" />
     <ClInclude Include="win32\safewindows.h" />
-    <ClInclude Include="win32\uuid\uuid.h" />
-    <ClInclude Include="win32\uuid\uuidd.h" />
-    <ClInclude Include="win32\uuid\uuidP.h" />
   </ItemGroup>
   <ItemGroup>
     <Library Include="..\..\..\..\..\zlib-Win32\lib\zdll.lib" />

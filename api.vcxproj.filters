@@ -219,54 +219,6 @@
     <ClCompile Include="win32\bobins.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="win32\uuid\clear.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\uuid\compare.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\uuid\copy.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\uuid\isnull.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\uuid\pack.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\uuid\parse.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\uuid\unpack.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\uuid\unparse.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\uuid\uuid_time.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\json\arraylist.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\json\debug.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\json\json_object.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\json\json_tokener.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\json\json_util.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\json\linkhash.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="win32\json\printbuf.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\timer.c">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -572,49 +524,7 @@
     <ClInclude Include="win32\bobins.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="win32\uuid\uuid.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="win32\safewindows.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\uuid\uuidP.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\uuid\uuidd.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\json\json-config.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\json\debug.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\json\arraylist.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\json\bits.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\json\json.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\json\printbuf.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\json\json_object.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\json\json_object_private.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\json\json_tokener.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\json\json_util.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="win32\json\linkhash.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="include\razorback\timer.h">
