@@ -38,8 +38,11 @@ struct TimerCallbackState {
     _Atomic unsigned int concurrentCount;
     _Atomic unsigned int maxConcurrentCount;
     _Atomic bool callbackEntered;
+    _Atomic bool callbackExited;
     _Atomic bool allowCallbackExit;
     _Atomic bool sawExpectedUserData;
+    _Atomic bool selfDestroyReturned;
+    struct Timer *selfDestroyTimer;
     unsigned int callbackDelayMs;
 };
 
@@ -123,6 +126,19 @@ timer_test_callback(void *userData)
         test_sleep_ms(state->callbackDelayMs);
 
     atomic_fetch_sub(&state->concurrentCount, 1U);
+    atomic_store(&state->callbackExited, true);
+}
+
+static void
+timer_self_destroy_callback(void *userData)
+{
+    struct TimerCallbackState *state = userData;
+
+    atomic_store(&state->callbackEntered, true);
+    atomic_fetch_add(&state->callCount, 1U);
+    Timer_Destroy(state->selfDestroyTimer);
+    atomic_store(&state->selfDestroyReturned, true);
+    atomic_store(&state->callbackExited, true);
 }
 
 static void *
@@ -255,6 +271,24 @@ START_TEST(test_timer_callbacks_do_not_overlap)
 }
 END_TEST
 
+START_TEST(test_timer_destroy_from_callback_defers_cleanup)
+{
+    struct TimerCallbackState state = { 0 };
+    struct Timer *timer;
+
+    timer = Timer_Create(1U, timer_self_destroy_callback, &state);
+    ck_assert_ptr_ne(timer, NULL);
+    state.selfDestroyTimer = timer;
+
+    ck_assert(wait_for_condition(&state.callbackEntered, 2500U));
+    ck_assert(wait_for_condition(&state.selfDestroyReturned, 500U));
+    ck_assert(wait_for_condition(&state.callbackExited, 500U));
+
+    test_sleep_ms(1300U);
+    ck_assert_uint_eq(atomic_load(&state.callCount), 1U);
+}
+END_TEST
+
 static Suite *
 timer_suite(void)
 {
@@ -271,6 +305,7 @@ timer_suite(void)
     tcase_add_test(testcase, test_timer_repeats_callback);
     tcase_add_test(testcase, test_timer_destroy_waits_for_callback_completion);
     tcase_add_test(testcase, test_timer_callbacks_do_not_overlap);
+    tcase_add_test(testcase, test_timer_destroy_from_callback_defers_cleanup);
     tcase_set_timeout(testcase, 20);
 
     suite_add_tcase(suite, testcase);
