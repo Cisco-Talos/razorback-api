@@ -65,7 +65,7 @@ RZB_Init_API ()
         }
         configureLogging();
         if (!Telemetry_Initialize()) {
-            rzb_log(LOG_ERR, LOG_C_CORE, "%s: OpenTelemetry initialization failed, continuing without tracing",
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: OpenTelemetry initialization failed, continuing without telemetry",
                     __func__);
         }
         atexit(Telemetry_Shutdown);

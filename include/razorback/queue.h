@@ -36,7 +36,6 @@ extern "C" {
 
 #define COMMAND_QUEUE "COMMAND"
 #define REQUEST_QUEUE "REQUEST"
-#define LOG_QUEUE "LOG"
 #define INPUT_QUEUE "INPUT"
 #define JUDGMENT_QUEUE "JUDGMENT"
 

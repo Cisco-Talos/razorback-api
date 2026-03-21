@@ -38,7 +38,6 @@ extern "C" {
 #define DECL_ALERT_PRIMARY_FUNC(a) bool a (struct MessageAlertPrimary *message)
 #define DECL_ALERT_CHILD_FUNC(a) bool a (struct MessageAlertChild *message)
 #define DECL_OUTPUT_EVENT_FUNC(a) bool a (struct MessageOutputEvent *message)
-#define DECL_OUTPUT_LOG_FUNC(a) bool a (struct MessageOutputLog *message)
 
 
 /** Inspection Nugget Hooks
@@ -61,7 +60,6 @@ struct RazorbackOutputHooks
     bool (*handleAlertPrimary)(struct MessageAlertPrimary *log);  ///< FP to handle primary alerts
     bool (*handleAlertChild)(struct MessageAlertChild *log);      ///< FP to handle child alerts
     bool (*handleEvent)(struct MessageOutputEvent *log);          ///< FP to handle events
-    bool (*handleLog)(struct MessageOutputLog *log);              ///< FP to handle log messages
 };
 
 /** Command and control hooks

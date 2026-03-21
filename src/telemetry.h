@@ -61,6 +61,9 @@ Telemetry_StartQueueReceiveSpan(const struct Queue *queue,
 
 bool Telemetry_InjectCurrentContext(struct TelemetryInjectedHeaders *headers);
 
+bool Telemetry_IsLogEnabled(void);
+void Telemetry_LogMessage(unsigned level, uint64_t component, const char *message);
+
 void Telemetry_FreeInjectedHeaders(struct TelemetryInjectedHeaders *headers);
 
 #ifdef __cplusplus

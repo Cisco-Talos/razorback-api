@@ -35,6 +35,16 @@
 #include <opentelemetry/context/runtime_context.h>
 #include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>
+#include <opentelemetry/exporters/otlp/otlp_http_log_record_exporter_factory.h>
+#include <opentelemetry/exporters/otlp/otlp_http_log_record_exporter_options.h>
+#include <opentelemetry/logs/log_record.h>
+#include <opentelemetry/logs/logger.h>
+#include <opentelemetry/logs/provider.h>
+#include <opentelemetry/logs/severity.h>
+#include <opentelemetry/sdk/logs/batch_log_record_processor_factory.h>
+#include <opentelemetry/sdk/logs/batch_log_record_processor_options.h>
+#include <opentelemetry/sdk/logs/logger_provider.h>
+#include <opentelemetry/sdk/logs/logger_provider_factory.h>
 #include <opentelemetry/sdk/resource/resource.h>
 #include <opentelemetry/sdk/trace/batch_span_processor_factory.h>
 #include <opentelemetry/sdk/trace/batch_span_processor_options.h>
@@ -49,6 +59,7 @@
 
 #include <cstdlib>
 #include <array>
+#include <chrono>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -57,6 +68,8 @@
 #include <vector>
 
 namespace context_api      = opentelemetry::context;
+namespace logs_api         = opentelemetry::logs;
+namespace logs_sdk         = opentelemetry::sdk::logs;
 namespace propagation_api  = opentelemetry::context::propagation;
 namespace otlp_exporter    = opentelemetry::exporter::otlp;
 namespace resource_sdk     = opentelemetry::sdk::resource;
@@ -179,11 +192,15 @@ private:
 
 struct TelemetryState
 {
-  bool initialized = false;
-  bool enabled     = false;
+  bool initialized      = false;
+  bool tracing_enabled  = false;
+  bool logging_enabled  = false;
   std::shared_ptr<trace_sdk::TracerProvider> sdk_provider;
   opentelemetry::nostd::shared_ptr<trace_api::TracerProvider> provider;
   opentelemetry::nostd::shared_ptr<trace_api::Tracer> tracer;
+  std::shared_ptr<logs_sdk::LoggerProvider> sdk_logger_provider;
+  opentelemetry::nostd::shared_ptr<logs_api::LoggerProvider> logger_provider;
+  opentelemetry::nostd::shared_ptr<logs_api::Logger> logger;
 };
 
 TelemetryState &
@@ -216,6 +233,75 @@ GetServiceName() noexcept
 
   return "razorback-api";
 }
+
+logs_api::Severity
+TranslateLogSeverity(unsigned level) noexcept
+{
+  switch (level)
+  {
+  case LOG_EMERG:
+    return logs_api::Severity::kFatal4;
+  case LOG_ALERT:
+    return logs_api::Severity::kFatal3;
+  case LOG_CRIT:
+    return logs_api::Severity::kFatal2;
+  case LOG_ERR:
+    return logs_api::Severity::kError;
+  case LOG_WARNING:
+    return logs_api::Severity::kWarn;
+  case LOG_NOTICE:
+    return logs_api::Severity::kInfo2;
+  case LOG_INFO:
+    return logs_api::Severity::kInfo;
+  case LOG_DEBUG:
+  default:
+    return logs_api::Severity::kDebug;
+  }
+}
+
+const char *
+GetLogComponentName(uint64_t component) noexcept
+{
+  switch (component)
+  {
+  case LOG_C_CORE:
+    return "core";
+  case LOG_C_NETWORK:
+    return "network";
+  case LOG_C_STOMP:
+    return "stomp";
+  case LOG_C_QUEUE:
+    return "queue";
+  case LOG_C_TRANSFER:
+    return "transfer";
+  case LOG_C_CNC:
+    return "cnc";
+  case LOG_C_CONFIG:
+    return "config";
+  case LOG_C_MAGIC:
+    return "magic";
+  case LOG_C_LIST:
+    return "list";
+  case LOG_C_JSON:
+    return "json";
+  case LOG_C_DISPATCHER:
+    return "dispatcher";
+  case LOG_C_NUGGET:
+    return "nugget";
+  default:
+    return nullptr;
+  }
+}
+
+class ScopedBoolGuard
+{
+public:
+  explicit ScopedBoolGuard(bool &flag) noexcept : flag_(flag) { flag_ = true; }
+  ~ScopedBoolGuard() { flag_ = false; }
+
+private:
+  bool &flag_;
+};
 
 std::string
 MakeSpanName(const char *operation, const char *destination)
@@ -492,7 +578,7 @@ SetCommonMessageAttributes(const opentelemetry::nostd::shared_ptr<trace_api::Spa
   }
 }
 
-void
+extern "C" void
 Telemetry_AddBlockAttributes(TelemetrySpan_t *span,
                              const struct Block *block)
 {
@@ -558,7 +644,7 @@ StartSpanWithLink(const char *span_name,
   context_api::Context extracted_context;
   context_api::Context scope_context = context_api::RuntimeContext::GetCurrent();
 
-  if (!state.enabled || state.tracer == nullptr)
+  if (!state.tracing_enabled || state.tracer == nullptr)
   {
     if (headers != nullptr)
     {
@@ -627,18 +713,23 @@ Telemetry_Initialize(void)
 
   try
   {
-    std::unique_ptr<trace_sdk::SpanExporter> exporter;
-    std::unique_ptr<trace_sdk::SpanProcessor> processor;
+    std::unique_ptr<trace_sdk::SpanExporter> trace_exporter;
+    std::unique_ptr<trace_sdk::SpanProcessor> trace_processor;
+    std::unique_ptr<logs_sdk::LogRecordExporter> log_exporter;
+    std::unique_ptr<logs_sdk::LogRecordProcessor> log_processor;
     std::vector<std::unique_ptr<propagation_api::TextMapPropagator>> propagators;
     resource_sdk::Resource resource;
     resource_sdk::ResourceAttributes resource_attributes;
-    otlp_exporter::OtlpHttpExporterOptions exporter_options;
-    trace_sdk::BatchSpanProcessorOptions batch_options;
+    otlp_exporter::OtlpHttpExporterOptions trace_exporter_options;
+    otlp_exporter::OtlpHttpLogRecordExporterOptions log_exporter_options;
+    trace_sdk::BatchSpanProcessorOptions trace_batch_options;
+    logs_sdk::BatchLogRecordProcessorOptions log_batch_options;
 
     if (state.initialized)
       return true;
 
-    state.enabled = false;
+    state.tracing_enabled = false;
+    state.logging_enabled = false;
 
     if (IsEnvTrue("OTEL_SDK_DISABLED"))
     {
@@ -646,19 +737,35 @@ Telemetry_Initialize(void)
       return true;
     }
 
-    exporter = otlp_exporter::OtlpHttpExporterFactory::Create(exporter_options);
-    processor = trace_sdk::BatchSpanProcessorFactory::Create(std::move(exporter), batch_options);
-
     resource_attributes["service.name"] = std::string(GetServiceName());
     resource_attributes["service.version"] = std::string(PACKAGE_VERSION);
     resource = resource_sdk::Resource::Create(resource_attributes);
 
-    state.sdk_provider = std::make_shared<trace_sdk::TracerProvider>(std::move(processor), resource);
+    trace_exporter = otlp_exporter::OtlpHttpExporterFactory::Create(trace_exporter_options);
+    trace_processor =
+        trace_sdk::BatchSpanProcessorFactory::Create(std::move(trace_exporter),
+                                                     trace_batch_options);
+    state.sdk_provider =
+        std::make_shared<trace_sdk::TracerProvider>(std::move(trace_processor), resource);
     state.provider = opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>(
         std::shared_ptr<trace_api::TracerProvider>(state.sdk_provider));
     trace_api::Provider::SetTracerProvider(state.provider);
     state.tracer =
         state.provider->GetTracer("razorback.api.messaging", PACKAGE_VERSION);
+    state.tracing_enabled = true;
+
+    log_exporter =
+        otlp_exporter::OtlpHttpLogRecordExporterFactory::Create(log_exporter_options);
+    log_processor = logs_sdk::BatchLogRecordProcessorFactory::Create(
+        std::move(log_exporter), log_batch_options);
+    state.sdk_logger_provider = std::shared_ptr<logs_sdk::LoggerProvider>(
+        logs_sdk::LoggerProviderFactory::Create(std::move(log_processor), resource).release());
+    state.logger_provider = opentelemetry::nostd::shared_ptr<logs_api::LoggerProvider>(
+        std::shared_ptr<logs_api::LoggerProvider>(state.sdk_logger_provider));
+    logs_api::Provider::SetLoggerProvider(state.logger_provider);
+    state.logger =
+        state.logger_provider->GetLogger("razorback.api.logging", "", PACKAGE_VERSION);
+    state.logging_enabled = true;
 
     propagators.emplace_back(new trace_api::propagation::HttpTraceContext);
     propagators.emplace_back(new opentelemetry::baggage::propagation::BaggagePropagator);
@@ -666,17 +773,20 @@ Telemetry_Initialize(void)
         opentelemetry::nostd::shared_ptr<propagation_api::TextMapPropagator>(
             new propagation_api::CompositePropagator(std::move(propagators))));
 
-    state.enabled = true;
     state.initialized = true;
     return true;
   }
   catch (...)
   {
-    rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to initialize OpenTelemetry tracing", __func__);
+    rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to initialize OpenTelemetry telemetry", __func__);
     state.tracer = opentelemetry::nostd::shared_ptr<trace_api::Tracer>();
     state.provider = opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>();
     state.sdk_provider.reset();
-    state.enabled = false;
+    state.logger = opentelemetry::nostd::shared_ptr<logs_api::Logger>();
+    state.logger_provider = opentelemetry::nostd::shared_ptr<logs_api::LoggerProvider>();
+    state.sdk_logger_provider.reset();
+    state.tracing_enabled = false;
+    state.logging_enabled = false;
     state.initialized = false;
     return false;
   }
@@ -695,14 +805,26 @@ Telemetry_Shutdown(void)
     state.sdk_provider->ForceFlush();
     state.sdk_provider->Shutdown();
   }
+  if (state.sdk_logger_provider)
+  {
+    state.sdk_logger_provider->ForceFlush();
+    state.sdk_logger_provider->Shutdown();
+  }
 
   trace_api::Provider::SetTracerProvider(
       opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>(
           std::make_shared<trace_api::NoopTracerProvider>()));
+  logs_api::Provider::SetLoggerProvider(
+      opentelemetry::nostd::shared_ptr<logs_api::LoggerProvider>(
+          std::make_shared<logs_api::NoopLoggerProvider>()));
   state.tracer = opentelemetry::nostd::shared_ptr<trace_api::Tracer>();
   state.provider = opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>();
   state.sdk_provider.reset();
-  state.enabled = false;
+  state.logger = opentelemetry::nostd::shared_ptr<logs_api::Logger>();
+  state.logger_provider = opentelemetry::nostd::shared_ptr<logs_api::LoggerProvider>();
+  state.sdk_logger_provider.reset();
+  state.tracing_enabled = false;
+  state.logging_enabled = false;
   state.initialized = false;
 }
 
@@ -740,10 +862,68 @@ Telemetry_InjectCurrentContext(struct TelemetryInjectedHeaders *headers)
   headers->entries = nullptr;
   headers->count = 0;
 
-  if (!state.enabled)
+  if (!state.tracing_enabled)
     return true;
 
   return ReplaceInjectedHeaders(context_api::RuntimeContext::GetCurrent(), headers);
+}
+
+extern "C" bool
+Telemetry_IsLogEnabled(void)
+{
+  TelemetryState &state = GetTelemetryState();
+
+  return state.logging_enabled && state.logger != nullptr;
+}
+
+extern "C" void
+Telemetry_LogMessage(unsigned level, uint64_t component, const char *message)
+{
+  TelemetryState &state = GetTelemetryState();
+  static thread_local bool is_emitting = false;
+  context_api::Context current_context;
+  trace_api::SpanContext span_context = trace_api::SpanContext::GetInvalid();
+  opentelemetry::nostd::unique_ptr<logs_api::LogRecord> log_record;
+  std::chrono::system_clock::time_point now;
+  const char *component_name = nullptr;
+
+  if (!state.logging_enabled || state.logger == nullptr || message == nullptr || is_emitting)
+    return;
+
+  try
+  {
+    ScopedBoolGuard emitting_guard(is_emitting);
+
+    log_record = state.logger->CreateLogRecord();
+    if (!log_record)
+      return;
+
+    now = std::chrono::system_clock::now();
+    log_record->SetTimestamp(opentelemetry::common::SystemTimestamp(now));
+    log_record->SetObservedTimestamp(opentelemetry::common::SystemTimestamp(now));
+    log_record->SetSeverity(TranslateLogSeverity(level));
+    log_record->SetBody(opentelemetry::nostd::string_view(message));
+    log_record->SetAttribute("rzb.log.component.mask", static_cast<int64_t>(component));
+    log_record->SetAttribute("rzb.log.syslog.level", static_cast<int64_t>(level));
+
+    component_name = GetLogComponentName(component);
+    if (component_name != nullptr)
+      log_record->SetAttribute("rzb.log.component.name", component_name);
+
+    current_context = context_api::RuntimeContext::GetCurrent();
+    span_context = trace_api::GetSpan(current_context)->GetContext();
+    if (span_context.IsValid())
+    {
+      log_record->SetTraceId(span_context.trace_id());
+      log_record->SetSpanId(span_context.span_id());
+      log_record->SetTraceFlags(span_context.trace_flags());
+    }
+
+    state.logger->EmitLogRecord(std::move(log_record));
+  }
+  catch (...)
+  {
+  }
 }
 
 extern "C" TelemetrySpan_t *
@@ -766,7 +946,7 @@ Telemetry_UpdateContext(TelemetryContextCarrier_t **context)
   if (context == nullptr)
     return false;
 
-  if (!state.enabled)
+  if (!state.tracing_enabled)
   {
     DestroyContextCarrier(*context);
     *context = nullptr;
@@ -804,7 +984,7 @@ Telemetry_StartSpanWithKind(const char *spanName,
   context_api::Context parent_context;
   context_api::Context scope_context;
 
-  if (!state.enabled || state.tracer == nullptr)
+  if (!state.tracing_enabled || state.tracer == nullptr)
     return nullptr;
 
   try

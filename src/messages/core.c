@@ -272,11 +272,8 @@ Message_Init() {
     MessageCacheResp_Init();
     MessageInspectionSubmission_Init();
     MessageJudgmentSubmission_Init();
-    MessageLogSubmission_Init();
-    MessageLogSubmission_Init();
     MessageAlertPrimary_Init();
     MessageAlertChild_Init();
-    MessageOutputLog_Init();
     MessageOutputEvent_Init();
 
     Message_CnC_Bye_Init();

@@ -438,12 +438,6 @@ Razorback_Output_Thread (Thread_t *thread)
                 return;
             }
             break;
-        case MESSAGE_TYPE_OUTPUT_LOG:
-            if (asprintf(&name, "Log.%s", hooks->pattern) == -1) {
-                rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to allocate queue name", __func__);
-                return;
-            }
-            break;
         default:
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unsupported output message type %u", __func__, hooks->messageType);
             return;
@@ -490,9 +484,6 @@ Razorback_Output_Thread (Thread_t *thread)
                 break;
             case MESSAGE_TYPE_OUTPUT_EVENT:
                 hooks->handleEvent((struct MessageOutputEvent *)message->message);
-                break;
-            case MESSAGE_TYPE_OUTPUT_LOG:
-                hooks->handleLog((struct MessageOutputLog *)message->message);
                 break;
             default:
                 rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unsupported output message type %u",

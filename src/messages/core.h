@@ -35,11 +35,8 @@ void MessageCacheReq_Init(void);
 void MessageCacheResp_Init(void);
 void MessageInspectionSubmission_Init(void);
 void MessageJudgmentSubmission_Init(void);
-void MessageLogSubmission_Init(void);
-void MessageLogSubmission_Init(void);
 void MessageAlertPrimary_Init(void);
 void MessageAlertChild_Init(void);
-void MessageOutputLog_Init(void);
 void MessageOutputEvent_Init(void);
 
 #ifdef __cplusplus

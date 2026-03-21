@@ -78,9 +78,7 @@ messages/cnc/term.c \
 messages/core.c \
 messages/inspection.c \
 messages/judgment.c \
-messages/log.c \
 messages/output_event.c \
-messages/output_log.c \
 messages/output_inspection.c \
 ntvl.c \
 nugget.c \

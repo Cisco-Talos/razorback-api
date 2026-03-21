@@ -80,7 +80,6 @@ extern "C" {
 #define MESSAGE_TYPE_BLOCK          ( MESSAGE_GROUP_SUBMIT | 1 )    ///< Data Block Submission
 #define MESSAGE_TYPE_JUDGMENT       ( MESSAGE_GROUP_SUBMIT | 2 )    ///< Judgment Submission
 #define MESSAGE_TYPE_INSPECTION     ( MESSAGE_GROUP_SUBMIT | 3 )    ///< Inspection Submission
-#define MESSAGE_TYPE_LOG            ( MESSAGE_GROUP_SUBMIT | 4 )    ///< Log Message
 #define MESSAGE_TYPE_ALERT          ( MESSAGE_GROUP_SUBMIT | 5 )    ///< Alert Message
 /// @}
 
@@ -90,7 +89,6 @@ extern "C" {
 #define MESSAGE_TYPE_ALERT_PRIMARY      ( MESSAGE_GROUP_OUTPUT | 1 )    ///< Block turns to bad
 #define MESSAGE_TYPE_ALERT_CHILD        ( MESSAGE_GROUP_OUTPUT | 2 )    ///< Block turns to bad due to child
 #define MESSAGE_TYPE_OUTPUT_EVENT       ( MESSAGE_GROUP_OUTPUT | 3 )    ///< Event Record
-#define MESSAGE_TYPE_OUTPUT_LOG         ( MESSAGE_GROUP_OUTPUT | 4 )    ///< Log Record
 #define MESSAGE_TYPE_OUTPUT_INSPECTION  ( MESSAGE_GROUP_OUTPUT | 5 )    ///< Inspection status
 /// @}
 
@@ -431,21 +429,6 @@ SO_PUBLIC extern struct Message * MessageError_Initialize(
 );
 
 /**
- * Initialize a log message.
- * @param nuggetId The source nugget.
- * @param priority The message level.
- * @param message The message text.
- * @param eventId The optional event id, use NULL if no event is linked to this log message.
- * @return A new message on success,  NULL On failure.
- */
-SO_PUBLIC extern struct Message * MessageLog_Initialize(
-    const uuid_t nuggetId,
-    uint8_t priority,
-    char *message,
-    struct EventId *eventId
-);
-
-/**
  * Initialize a primary alert message.
  * @param event The event that triggered inspection.
  * @param block The block that triggered the alert.
@@ -503,17 +486,6 @@ SO_PUBLIC extern struct Message * MessageAlertChild_Initialize(
  */
 SO_PUBLIC extern struct Message * MessageOutputEvent_Initialize(
     struct Event *event,
-    struct Nugget *nugget
-);
-
-/**
- * Initialize a log output message.
- * @param log The log message received to be output.
- * @param nugget The nugget that sent the log message.
- * @return A new message on success,  NULL On failure.
- */
-SO_PUBLIC extern struct Message * MessageOutputLog_Initialize(
-    struct MessageLogSubmission *log,
     struct Nugget *nugget
 );
 
