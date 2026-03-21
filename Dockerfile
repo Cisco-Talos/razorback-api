@@ -32,7 +32,15 @@ ENV DEBIAN_FRONTEND=noninteractive
         libssh-dev \
         libjson-c-dev \
         libmagic-dev \
-        librabbitmq-dev
+        librabbitmq-dev \
+        libprotobuf-dev \
+        protobuf-compiler \
+        protobuf-compiler-grpc \
+        libgrpc++-dev \
+        nlohmann-json3-dev \
+        libgtest-dev
+
+
 
 
 
@@ -55,6 +63,8 @@ FROM ${BASE_IMAGE}
         libjson-c5 \
         libmagic1 \
         librabbitmq4 \
+        libgrpc++1.51t64 \
+        libprotobuf17 \
         && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
     COPY --from=builder /razorback /razorback

@@ -27,6 +27,8 @@ APIVERSION=API_LIB_VERSION_NUMBER
 
 # Pull in the checks for the build tools.
 m4_include([common_m4/build_tools.m4])
+AC_PROG_CXX
+LT_LANG([C++])
 
 # Pull in the platform specific build/configure environment options.
 m4_include([common_m4/platform_flags.m4])
@@ -81,6 +83,24 @@ AS_IF([test "x$have_check" != "xyes"], [
     AC_MSG_WARN([libcheck not found; unit tests will not be built])
 ])
 
+if test "x$prefix" != "xNONE"; then
+    PKG_CONFIG_PATH="$prefix/lib/pkgconfig:$prefix/lib64/pkgconfig:$PKG_CONFIG_PATH"
+    export PKG_CONFIG_PATH
+fi
+
+PKG_CHECK_MODULES([OPENTELEMETRY_CPP],
+                  [opentelemetry_trace opentelemetry_exporter_otlp_http],
+                  [have_opentelemetry_cpp=yes],
+                  [have_opentelemetry_cpp=no])
+AS_IF([test "x$have_opentelemetry_cpp" != "xyes"], [
+    AC_MSG_ERROR([opentelemetry-cpp is required; install opentelemetry_trace and opentelemetry_exporter_otlp_http])
+])
+
+PKG_CHECK_MODULES([PROTOBUF], [protobuf], [], [
+    AC_MSG_ERROR([protobuf is required to link opentelemetry-cpp OTLP exporters])
+])
+OPENTELEMETRY_CPP_LIBS="$OPENTELEMETRY_CPP_LIBS -lopentelemetry_proto -lopentelemetry_http_client_curl $PROTOBUF_LIBS"
+
 AC_PATH_PROG([JV], [jv], [])
 AM_CONDITIONAL([HAVE_JV], [test -n "$JV"])
 AS_IF([test -z "$JV"], [
@@ -92,6 +112,8 @@ AC_SUBST(APIVERSION)
 AC_SUBST(JV)
 AC_SUBST(LIBS)
 AC_SUBST(extra_incl)
+AC_SUBST(OPENTELEMETRY_CPP_CFLAGS)
+AC_SUBST(OPENTELEMETRY_CPP_LIBS)
 
 AC_CONFIG_FILES([ \
 razorback.pc \

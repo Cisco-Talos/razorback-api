@@ -30,6 +30,7 @@
 #include "block_pool_private.h"
 #include "fantasia.h"
 #include "runtime_config.h"
+#include "telemetry.h"
 #ifdef _MSC_VER
 #else //_MSC_VER
 #include <sys/mman.h>
@@ -102,6 +103,7 @@ BlockPool_CreateItem(struct RazorbackContext *context)
 
     uuid_copy(item->pEvent->pId->uuidNuggetId, context->uuidNuggetId);
     uuid_copy(item->pEvent->uuidApplicationType, context->uuidApplicationType);
+    Telemetry_UpdateContext(&item->telemetryContext);
 
     List_Push(sg_bpList, item);
     return item;
@@ -324,6 +326,24 @@ BlockPool_GetHash (struct BlockPoolItem *p_pItem) {
 }
 
 void
+BlockPool_AddCommonTelemetryAttributes(const struct BlockPoolItem *p_pItem,
+                                       TelemetrySpan_t *span)
+{
+    ASSERT(p_pItem != NULL);
+    if (p_pItem == NULL || span == NULL) {
+        return;
+    }
+
+    Telemetry_AddIntAttribute(span, "rzb.block_pool.item_status",
+                              (int64_t)p_pItem->iStatus);
+    Telemetry_AddBoolAttribute(span, "rzb.block_pool.has_data",
+                               p_pItem->pDataHead != NULL);
+
+    if (p_pItem->pEvent != NULL && p_pItem->pEvent->pBlock != NULL)
+        Telemetry_AddBlockAttributes(span, p_pItem->pEvent->pBlock);
+}
+
+void
 BlockPool_DestroyItemDataList(struct BlockPoolData *p_pData) {
     struct BlockPoolData *l_pData = p_pData;
     struct BlockPoolData *l_pDataNext;
@@ -373,6 +393,7 @@ BlockPool_DestroyItemData(struct BlockPoolItem *p_pItem) {
         Event_Destroy(p_pItem->pEvent);
     }
 
+    Telemetry_ClearContext(&p_pItem->telemetryContext);
     BlockPool_DestroyItemDataList(p_pItem->pDataHead);
     Mutex_Destroy(p_pItem->mutex);
     free(p_pItem);

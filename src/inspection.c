@@ -36,6 +36,7 @@
 #include "transfer/core.h"
 #include "connected_entity_private.h"
 #include "runtime_config.h"
+#include "telemetry.h"
 #include <errno.h>
 static void Inspection_Thread (Thread_t *p_pThread);
 
@@ -70,7 +71,14 @@ Inspection_Thread (Thread_t *p_pThread)
     enum TransferStatus transfered;
     int transferTries = 0;
     struct ConnectedEntity *dispatcher = NULL;
+    struct TelemetrySpan *processSpan = NULL;
+    struct TelemetrySpan *inspectSpan = NULL;
+    struct TelemetrySpan *runSpan = NULL;
     void *threadData = NULL;
+    bool processSuccess = false;
+    bool runSuccess = false;
+    const char *processError = NULL;
+    const char *runError = NULL;
 
     l_pContext = Thread_GetContext (p_pThread);
     if ((l_pQueue =
@@ -101,21 +109,41 @@ Inspection_Thread (Thread_t *p_pThread)
             // drop message
             continue;
         }
+        processSpan = Telemetry_StartMessageProcessSpan(l_pQueue, message);
+        inspectSpan = NULL;
+        runSpan = NULL;
+        processSuccess = false;
+        processError = NULL;
+        if (message->type != MESSAGE_TYPE_INSPECTION) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to wrong type %u",
+                    __func__, message->type);
+            processError = "unexpected inspection message type";
+            Telemetry_EndSpan(processSpan, false, processError);
+            message->destroy(message);
+            continue;
+        }
         l_misMessage = message->message;
         if (l_misMessage->pBlock == NULL) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to NULL block",
                     __func__);
+            processError = "inspection message missing block";
+            Telemetry_EndSpan(processSpan, false, processError);
             message->destroy(message);
             continue;
         }
         if (l_misMessage->pBlock->pId->pHash == NULL) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to NULL Hash",
                     __func__);
+            processError = "inspection message missing block hash";
+            Telemetry_EndSpan(processSpan, false, processError);
             message->destroy(message);
             continue;
         }
         l_pBlock = l_misMessage->pBlock;
         l_misMessage->pBlock = NULL;
+        inspectSpan = Telemetry_StartSpanWithKind("inspect block", NULL,
+                                                  TELEMETRY_SPAN_KIND_CONSUMER);
+        Telemetry_AddBlockAttributes(inspectSpan, l_pBlock);
         transfered = TRANSFER_FAIL_LOCAL;
         transferTries = 0;
         while (transferTries < 20) {
@@ -139,17 +167,26 @@ Inspection_Thread (Thread_t *p_pThread)
         // TODO - Return JUSDGEMENT_ERROR
         if (transfered != TRANSFER_OK) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to transfer block giving up", __func__);
+            processError = "failed to fetch block from dispatcher";
+            Telemetry_EndSpan(inspectSpan, false, processError);
+            Telemetry_EndSpan(processSpan, false, processError);
             message->destroy(message);
             continue;
         }
 
         if (l_pBlock->data.pointer == NULL || l_pBlock->data.fileName == NULL) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: No data block", __func__);
+            processError = "inspection block has no local data";
+            Telemetry_EndSpan(inspectSpan, false, processError);
+            Telemetry_EndSpan(processSpan, false, processError);
             message->destroy(message);
             continue;
         }
         if ((l_pEventId = EventId_Clone(l_misMessage->eventId)) == NULL) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed create new event id", __func__);
+            processError = "failed to clone event id";
+            Telemetry_EndSpan(inspectSpan, false, processError);
+            Telemetry_EndSpan(processSpan, false, processError);
             message->destroy(message);
             continue;
         }
@@ -158,6 +195,9 @@ Inspection_Thread (Thread_t *p_pThread)
         // Clone the block for the inspector to use.
         if ((l_pClonedBlock = Block_Clone(l_pBlock)) == NULL) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed create new block", __func__);
+            processError = "failed to clone inspection block";
+            Telemetry_EndSpan(inspectSpan, false, processError);
+            Telemetry_EndSpan(processSpan, false, processError);
             message->destroy(message);
             continue;
         }
@@ -177,17 +217,29 @@ Inspection_Thread (Thread_t *p_pThread)
         l_pBlock->data.mapHandle = NULL;
 #endif
 
-
+        runSpan = Telemetry_StartSpan("run inspection", NULL);
+        Telemetry_AddBlockAttributes(runSpan, l_pClonedBlock);
         l_iResult =
                 l_pContext->inspector.hooks->processBlock(l_pClonedBlock,
                                                           l_misMessage->eventId,
                                                           l_misMessage->pEventMetadata, threadData);
+        runSuccess = (l_iResult == JUDGMENT_REASON_DONE ||
+                      l_iResult == JUDGMENT_REASON_DEFERRED);
+        runError = NULL;
+        if (l_iResult == JUDGMENT_REASON_ERROR)
+            runError = "inspector returned error judgment";
+        else if (!runSuccess)
+            runError = "inspector returned invalid judgment";
+        Telemetry_EndSpan(runSpan, runSuccess, runError);
 
         message->destroy(message);
         if ((l_iResult != JUDGMENT_REASON_DONE)
                 && (l_iResult != JUDGMENT_REASON_ERROR)
                 && (l_iResult != JUDGMENT_REASON_DEFERRED)) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Bad return from inspection", __func__);
+            processError = "inspector returned invalid judgment";
+            Telemetry_EndSpan(inspectSpan, false, processError);
+            Telemetry_EndSpan(processSpan, false, processError);
             continue;
         }
 
@@ -201,13 +253,22 @@ Inspection_Thread (Thread_t *p_pThread)
         Block_Destroy(l_pClonedBlock);
         if ((l_mjsMessage = MessageJudgmentSubmission_Initialize(l_iResult, judgment)) == NULL) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);
+            processError = "failed to create judgment submission";
         } else {
-            Queue_Put(l_pContext->inspector.judgmentQueue, l_mjsMessage);
+            if (!Queue_Put(l_pContext->inspector.judgmentQueue, l_mjsMessage)) {
+                rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to send judgment submission", __func__);
+                processError = "failed to send judgment submission";
+            } else {
+                processSuccess = true;
+                processError = NULL;
+            }
             l_mjsMessage->destroy(l_mjsMessage);
         }
         Mutex_Unlock(sg_mPauseLock);
         Block_Destroy(l_pBlock);
         EventId_Destroy(l_pEventId);
+        Telemetry_EndSpan(inspectSpan, processSuccess, processError);
+        Telemetry_EndSpan(processSpan, processSuccess, processError);
     }
     if (l_pContext->inspector.hooks->cleanupThread != NULL)
         l_pContext->inspector.hooks->cleanupThread(threadData);
@@ -215,4 +276,3 @@ Inspection_Thread (Thread_t *p_pThread)
     rzb_log(LOG_DEBUG, LOG_C_CORE, "%s: Inspection Thread Exiting", __func__);
     return;
 }
-

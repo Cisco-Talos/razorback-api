@@ -29,6 +29,8 @@ bool BlockPool_Init(struct RazorbackContext *p_pContext);
 void BlockPool_ForEachItem(int (*function) (struct BlockPoolItem *, void *), void *userData);
 void BlockPool_Item_Lock(void *a);
 void BlockPool_Item_Unlock(void *a);
+void BlockPool_AddCommonTelemetryAttributes(const struct BlockPoolItem *p_pItem,
+                                            TelemetrySpan_t *span);
 
 void BlockPool_SetStatus(struct BlockPoolItem *p_pItem, uint32_t p_iStatus);
 uint32_t BlockPool_GetStatus(struct BlockPoolItem *p_pItem);

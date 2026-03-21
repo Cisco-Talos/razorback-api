@@ -19,8 +19,11 @@
 #include "config.h"
 
 #include "init.h"
+#include "telemetry.h"
 #include <curl/curl.h>
+#include <razorback/log.h>
 #include <razorback/visibility.h>
+#include <stdlib.h>
 
 
 static bool initCurl() {
@@ -61,6 +64,11 @@ RZB_Init_API ()
             exit(1);
         }
         configureLogging();
+        if (!Telemetry_Initialize()) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: OpenTelemetry initialization failed, continuing without tracing",
+                    __func__);
+        }
+        atexit(Telemetry_Shutdown);
         Magic_Init();
         initcache();
         initUuids();
@@ -77,4 +85,3 @@ RZB_Init_API ()
     return true;
 #endif
 }
-

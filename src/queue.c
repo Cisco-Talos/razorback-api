@@ -39,6 +39,7 @@
 #include <amqp_framing.h>
 #include "runtime_config.h"
 #include "messages/core.h"
+#include "telemetry.h"
 #define MBUF_SIZE 1024
 #define AMQP_CHAN_ID 1
 
@@ -716,6 +717,7 @@ Queue_Get (struct Queue *queue)
 {
     struct Message *ret = NULL;
     struct MessageHeader *header = NULL;
+    struct TelemetrySpan *receiveSpan = NULL;
     amqp_rpc_reply_t res;
     amqp_envelope_t envelope;
     int headerIndex = 0;
@@ -723,6 +725,8 @@ Queue_Get (struct Queue *queue)
     bool envelopeReady = false;
     bool rejectDelivery = false;
     bool requeueDelivery = false;
+    bool receiveSuccess = false;
+    const char *receiveError = NULL;
 
     ASSERT (queue);
     if (queue == NULL) {
@@ -754,6 +758,7 @@ Queue_Get (struct Queue *queue)
         AMQP_error(res, __func__);
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error consuming message, reconnecting read side", __func__);
         Queue_Reconnect(queue, QUEUE_FLAG_RECV);
+        receiveError = "failed to consume message";
         goto cleanup;
     }
     if ((ret = (struct Message *)calloc(1,sizeof(struct Message))) == NULL)
@@ -761,12 +766,14 @@ Queue_Get (struct Queue *queue)
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating message struct", __func__);
         rejectDelivery = true;
         requeueDelivery = true;
+        receiveError = "failed to allocate message container";
         goto cleanup;
     }
     if ((ret->headers = Message_Header_List_Create()) == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating message header list", __func__);
         rejectDelivery = true;
         requeueDelivery = true;
+        receiveError = "failed to allocate message header list";
         goto cleanup;
     }
 
@@ -775,6 +782,7 @@ Queue_Get (struct Queue *queue)
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating message body", __func__);
         rejectDelivery = true;
         requeueDelivery = true;
+        receiveError = "failed to allocate message body";
         goto cleanup;
     }
     memcpy(ret->serialized, envelope.message.body.bytes, envelope.message.body.len);
@@ -788,6 +796,7 @@ Queue_Get (struct Queue *queue)
                 rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to duplicate message header name", __func__);
                 rejectDelivery = true;
                 requeueDelivery = true;
+                receiveError = "failed to duplicate message header name";
                 goto cleanup;
             }
             //rzb_log(LOG_DEBUG, LOG_C_QUEUE, "%s: Processing header %s - Kind: %u", __func__, name, entry.value.kind);
@@ -798,6 +807,7 @@ Queue_Get (struct Queue *queue)
                     free(name);
                     rejectDelivery = true;
                     requeueDelivery = true;
+                    receiveError = "failed to copy inbound utf8 header";
                     goto cleanup;
                 }
             } else if (entry.value.kind == AMQP_FIELD_KIND_BYTES) {
@@ -807,6 +817,7 @@ Queue_Get (struct Queue *queue)
                     free(name);
                     rejectDelivery = true;
                     requeueDelivery = true;
+                    receiveError = "failed to duplicate inbound byte header";
                     goto cleanup;
                 }
                 //rzb_log(LOG_DEBUG, LOG_C_QUEUE, "%s: Header %s: %s", __func__, name, value);
@@ -815,6 +826,7 @@ Queue_Get (struct Queue *queue)
                     free(name);
                     rejectDelivery = true;
                     requeueDelivery = true;
+                    receiveError = "failed to copy inbound byte header";
                     goto cleanup;
                 }
                 free(value);
@@ -823,10 +835,13 @@ Queue_Get (struct Queue *queue)
         }
     }
 
+    receiveSpan = Telemetry_StartQueueReceiveSpan(queue, ret);
+
     if ((queue->iFlags & QUEUE_FLAG_EXTERNAL_MODE) != QUEUE_FLAG_EXTERNAL_MODE) {
         if ((header = (struct MessageHeader *) List_Find(ret->headers, sg_messageTypeHeaderName)) == NULL) {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-type", __func__);
             rejectDelivery = true;
+            receiveError = "message type header missing";
             goto cleanup;
         }
         ret->type = strtoul(header->sValue, NULL, 10);
@@ -834,6 +849,7 @@ Queue_Get (struct Queue *queue)
         if ((header = (struct MessageHeader *) List_Find(ret->headers, sg_messageVersionHeaderName)) == NULL) {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message header missing - rzb-msg-ver", __func__);
             rejectDelivery = true;
+            receiveError = "message version header missing";
             goto cleanup;
         }
         ret->version = strtoul(header->sValue, NULL, 10);
@@ -841,11 +857,13 @@ Queue_Get (struct Queue *queue)
         if (!Message_Setup(ret)) {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message_Setup failed", __func__);
             rejectDelivery = true;
+            receiveError = "message setup failed";
             goto cleanup;
         }
         if(!ret->deserialize(ret)) {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Message deserialize failed: type %u body %s", __func__, ret->type, ret->serialized);
             rejectDelivery = true;
+            receiveError = "message deserialize failed";
             goto cleanup;
         }
     }
@@ -856,6 +874,9 @@ Queue_Get (struct Queue *queue)
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to ack delivery: %s",
                 __func__, amqp_error_string2(ackErr));
         Queue_Reconnect(queue, QUEUE_FLAG_RECV);
+        receiveError = "failed to acknowledge delivery";
+    } else {
+        receiveSuccess = true;
     }
 
 cleanup:
@@ -864,6 +885,7 @@ cleanup:
             Queue_Reject_Delivery(queue, envelope.delivery_tag, requeueDelivery, __func__);
         amqp_destroy_envelope(&envelope);
     }
+    Telemetry_EndSpan(receiveSpan, receiveSuccess && !rejectDelivery, receiveError);
     Mutex_Unlock (queue->mReadMutex);
 
     if (rejectDelivery) {
@@ -905,15 +927,22 @@ Message_Header_To_AMQP_TableEntry(void *h, void *c)
 SO_PUBLIC bool
 Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *dest)
 {
-    amqp_bytes_t message_bytes;
+    amqp_bytes_t message_bytes = amqp_empty_bytes;
     char *messageType = NULL;
     char *messageVer = NULL;
-    amqp_bytes_t exchange;
+    amqp_bytes_t exchange = amqp_empty_bytes;
     int amqpErr;
     size_t headerCount;
+    size_t injectedHeaderCount = 0;
     unsigned int attempt;
     struct HeaderIteratorContext ctx;
+    struct TelemetrySpan *sendSpan = NULL;
+    struct TelemetryInjectedHeaders injectedHeaders = { 0, NULL };
     bool ret = false;
+    const char *sendError = NULL;
+    size_t i;
+    amqp_basic_properties_t props;
+
     ASSERT (queue != NULL);
     ASSERT (message != NULL);
     ASSERT (dest != NULL);
@@ -930,14 +959,14 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
         rzb_log(LOG_DEBUG, LOG_C_QUEUE,
                 "%s: Refusing to send message type %u to '%s' because the connection is shutting down",
                 __func__, message->type, dest);
-        Mutex_Unlock(queue->mWriteMutex);
-        return false;
+        sendError = "queue is shutting down";
+        goto cleanup;
     }
     if (queue->pWriteSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Write socket unavailable, attempting reconnect", __func__);
         if (!Queue_Reconnect(queue, QUEUE_FLAG_SEND) || queue->pWriteSocket == NULL) {
-            Mutex_Unlock(queue->mWriteMutex);
-            return false;
+            sendError = "write reconnect failed";
+            goto cleanup;
         }
     }
 
@@ -947,21 +976,23 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
         if (!message->serialize(message))
         {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to serialize message", __func__);
-            Mutex_Unlock (queue->mWriteMutex);
-            return false;
+            sendError = "message serialization failed";
+            goto cleanup;
         }
     }
 
+    sendSpan = Telemetry_StartQueueSendSpan(queue, message, dest, &injectedHeaders);
+    injectedHeaderCount = injectedHeaders.count;
+
     if (asprintf(&messageType, "%u", message->type) == -1)
     {
-        Mutex_Unlock (queue->mWriteMutex);
-        return false;
+        sendError = "failed to allocate message type header";
+        goto cleanup;
     }
     if (asprintf(&messageVer, "%u", message->version) == -1)
     {
-        free(messageType);
-        Mutex_Unlock (queue->mWriteMutex);
-        return false;
+        sendError = "failed to allocate message version header";
+        goto cleanup;
     }
 
     message_bytes.len = message->length;
@@ -972,18 +1003,16 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     } else {
         exchange = amqp_empty_bytes;
     }
-    amqp_basic_properties_t props;
+    memset(&props, 0, sizeof(props));
     props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_HEADERS_FLAG;
     props.content_type = amqp_cstring_bytes("application/json");
     props.delivery_mode = 2; /* persistent delivery mode */
     headerCount = (message->headers != NULL) ? List_Length(message->headers) : 0;
-    props.headers.num_entries = 2 + headerCount;
+    props.headers.num_entries = 2 + injectedHeaderCount + headerCount;
     props.headers.entries = (amqp_table_entry_t *)calloc(props.headers.num_entries, sizeof(amqp_table_entry_t));
     if (props.headers.entries == NULL) {
-        free(messageType);
-        free(messageVer);
-        Mutex_Unlock(queue->mWriteMutex);
-        return false;
+        sendError = "failed to allocate AMQP header table";
+        goto cleanup;
     }
     props.headers.entries[0].key = amqp_cstring_bytes("rzb-msg-type");
     props.headers.entries[0].value.kind = AMQP_FIELD_KIND_UTF8;
@@ -991,14 +1020,18 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     props.headers.entries[1].key = amqp_cstring_bytes("rzb-msg-ver");
     props.headers.entries[1].value.kind = AMQP_FIELD_KIND_UTF8;
     props.headers.entries[1].value.value.bytes = amqp_cstring_bytes(messageVer);
-    ctx.nextEntry = &(props.headers.entries[2]);
+    for (i = 0; i < injectedHeaderCount; ++i) {
+        props.headers.entries[2 + i].key =
+            amqp_cstring_bytes(injectedHeaders.entries[i].name);
+        props.headers.entries[2 + i].value.kind = AMQP_FIELD_KIND_UTF8;
+        props.headers.entries[2 + i].value.value.bytes =
+            amqp_cstring_bytes(injectedHeaders.entries[i].value);
+    }
+    ctx.nextEntry = &(props.headers.entries[2 + injectedHeaderCount]);
     if (message->headers != NULL &&
         !List_ForEach(message->headers, Message_Header_To_AMQP_TableEntry, &ctx)) {
-        free(props.headers.entries);
-        free(messageType);
-        free(messageVer);
-        Mutex_Unlock(queue->mWriteMutex);
-        return false;
+        sendError = "failed to convert Razorback headers to AMQP headers";
+        goto cleanup;
     }
 
     for (attempt = 0; attempt < 2; attempt++) {
@@ -1006,6 +1039,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
             rzb_log(LOG_ERR, LOG_C_QUEUE,
                     "%s: Broker reported an outbound connection error, reconnecting",
                     __func__);
+            sendError = "outbound broker connection error";
             if (attempt == 0 &&
                 Queue_Reconnect(queue, QUEUE_FLAG_SEND) &&
                 queue->pWriteSocket != NULL) {
@@ -1022,11 +1056,13 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
             0, 0, &props, message_bytes);
         if (amqpErr == AMQP_STATUS_OK) {
             ret = true;
+            sendError = NULL;
             break;
         }
 
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to publish message: %s",
                 __func__, amqp_error_string2(amqpErr));
+        sendError = amqp_error_string2(amqpErr);
         if (attempt == 0 &&
             Queue_Reconnect(queue, QUEUE_FLAG_SEND) &&
             queue->pWriteSocket != NULL) {
@@ -1034,11 +1070,14 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
         }
         break;
     }
+
+cleanup:
     free(props.headers.entries);
     free(messageType);
     free(messageVer);
-
+    Telemetry_FreeInjectedHeaders(&injectedHeaders);
     Mutex_Unlock (queue->mWriteMutex);
+    Telemetry_EndSpan(sendSpan, ret, sendError);
     return ret;
 }
 

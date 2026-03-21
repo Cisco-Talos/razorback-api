@@ -46,6 +46,7 @@
 #include "runtime_config.h"
 #include "connected_entity_private.h"
 #include "inspection.h"
+#include "telemetry.h"
 
 static void Razorback_Output_Thread (Thread_t *thread);
 static int Context_KeyCmp(void *a, const void *b);
@@ -398,7 +399,10 @@ Razorback_Output_Thread (Thread_t *thread)
 {
     struct Message *message;
     struct RazorbackOutputHooks *hooks;
+    struct TelemetrySpan *processSpan;
     char *name;
+    bool processSuccess;
+    const char *processError;
 
     ASSERT(thread != NULL);
     if (thread == NULL) {
@@ -466,10 +470,15 @@ Razorback_Output_Thread (Thread_t *thread)
         }
 
         if (message->type != hooks->messageType) {
+            processSpan = Telemetry_StartMessageProcessSpan(hooks->queue, message);
+            Telemetry_EndSpan(processSpan, false, "unexpected output message type");
             message->destroy(message);
             continue;
         }
 
+        processSpan = Telemetry_StartMessageProcessSpan(hooks->queue, message);
+        processSuccess = true;
+        processError = NULL;
         switch (message->type) {
             case MESSAGE_TYPE_ALERT_PRIMARY:
                 hooks->handleAlertPrimary((struct MessageAlertPrimary*)message->message);
@@ -483,7 +492,14 @@ Razorback_Output_Thread (Thread_t *thread)
             case MESSAGE_TYPE_OUTPUT_LOG:
                 hooks->handleLog((struct MessageOutputLog *)message->message);
                 break;
+            default:
+                rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unsupported output message type %u",
+                        __func__, message->type);
+                processSuccess = false;
+                processError = "unsupported output message type";
+                break;
         }
+        Telemetry_EndSpan(processSpan, processSuccess, processError);
         message->destroy(message);
     }
     Queue_Terminate(hooks->queue);

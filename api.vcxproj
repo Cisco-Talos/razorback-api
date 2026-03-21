@@ -306,6 +306,7 @@
     <ClInclude Include="include\razorback\socket.h" />
     <ClInclude Include="include\razorback\string_list.h" />
     <ClInclude Include="include\razorback\submission.h" />
+    <ClInclude Include="include\razorback\telemetry.h" />
     <ClInclude Include="include\razorback\thread.h" />
     <ClInclude Include="include\razorback\thread_pool.h" />
     <ClInclude Include="include\razorback\timer.h" />

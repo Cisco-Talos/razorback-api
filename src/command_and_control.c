@@ -35,6 +35,7 @@
 #include "connected_entity_private.h"
 #include "local_cache.h"
 #include "messages/cnc/core.h"
+#include "telemetry.h"
 
 #include <signal.h>
 #include <time.h>
@@ -260,15 +261,23 @@ CommandAndControl_PrintUuid(int p_iLevel, const char *p_fmt, uuid_t p_uuid, uint
 static int
 CommandAndControl_DispatchCommand (struct RazorbackContext *p_pContext, void*userData) {
     struct Message *message;
+    struct TelemetrySpan *processSpan = NULL;
     uuid_t source, dest;
     char l_sUuidSource[UUID_STRING_LENGTH], l_sUuidDest[UUID_STRING_LENGTH];
     uint32_t l_iDataTypeIttr;
+    int result = LIST_EACH_OK;
+    const char *processError = NULL;
 
     ASSERT(userData != NULL);
+    ASSERT(p_pContext != NULL);
     ASSERT(p_pContext->pCommandHooks != NULL);
 
     if (userData == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Command Dropped: Message NULL", __func__);
+        return LIST_EACH_ERROR;
+    }
+    if (p_pContext == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CNC, "%s: Command Dropped: Context NULL", __func__);
         return LIST_EACH_ERROR;
     }
     if (p_pContext->pCommandHooks == NULL) {
@@ -277,12 +286,7 @@ CommandAndControl_DispatchCommand (struct RazorbackContext *p_pContext, void*use
     }
 
     message = userData;
-
-
-    if (p_pContext->pCommandHooks == NULL) {
-        rzb_log(LOG_ERR, LOG_C_CNC, "%s: Command Dropped: C&C Hooks NULL", __func__);
-        return LIST_EACH_ERROR;
-    }
+    processSpan = Telemetry_StartMessageProcessSpan(sg_readQueue, message);
 
     rzb_log(LOG_DEBUG, LOG_C_CNC,
             "%s: C&C Message Dispatch: Type: 0x%08x Length: 0x%08x Version: 0x%08x", __func__,
@@ -309,11 +313,10 @@ CommandAndControl_DispatchCommand (struct RazorbackContext *p_pContext, void*use
                                         UUID_TYPE_NUGGET);
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: ==== End Hello Message ====", __func__);
             if (p_pContext->pCommandHooks->processHelloMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processHelloMessage(message)) {
-                    return LIST_EACH_OK;
-                } else
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processHelloMessage(message)) {
+                    processError = "hello message handler failed";
+                    result = LIST_EACH_ERROR;
+                }
             }
             break;
         case MESSAGE_TYPE_REG_REQ:
@@ -338,147 +341,124 @@ CommandAndControl_DispatchCommand (struct RazorbackContext *p_pContext, void*use
             rzb_log(LOG_DEBUG, LOG_C_CNC,
                     "%s: C&C Msg Dispatch: ==== End Registration Request Message ====", __func__);
             if (p_pContext->pCommandHooks->processRegReqMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processRegReqMessage(message)) {
-                    return LIST_EACH_OK;
-                } else
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processRegReqMessage(message)) {
+                    processError = "registration request handler failed";
+                    result = LIST_EACH_ERROR;
+                }
             }
             break;
         case MESSAGE_TYPE_REG_RESP:
             rzb_log(LOG_DEBUG, LOG_C_CNC,
                     "%s: C&C Msg Dispatch: Registration Response Message", __func__);
             if (p_pContext->pCommandHooks->processRegRespMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processRegRespMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processRegRespMessage(message)) {
+                    processError = "registration response handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
         case MESSAGE_TYPE_REG_ERR:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Registration Error Message", __func__);
             if (p_pContext->pCommandHooks->processRegErrMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processRegErrMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processRegErrMessage(message)) {
+                    processError = "registration error handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
         case MESSAGE_TYPE_CONFIG_UPDATE:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Configuration Update Message", __func__);
             if (p_pContext->pCommandHooks->processConfUpdateMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processConfUpdateMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processConfUpdateMessage(message)) {
+                    processError = "configuration update handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
         case MESSAGE_TYPE_CONFIG_ACK:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Configuration Ack Message", __func__);
             if (p_pContext->pCommandHooks->processConfAckMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processConfAckMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processConfAckMessage(message)) {
+                    processError = "configuration ack handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
         case MESSAGE_TYPE_CONFIG_ERR:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Configuration Error Message", __func__);
             if (p_pContext->pCommandHooks->processConfErrMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processConfErrMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processConfErrMessage(message)) {
+                    processError = "configuration error handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
         case MESSAGE_TYPE_PAUSE:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Pause Message", __func__);
             if (p_pContext->pCommandHooks->processPauseMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processPauseMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processPauseMessage(message)) {
+                    processError = "pause handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
         case MESSAGE_TYPE_PAUSED:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Paused Message", __func__);
             if (p_pContext->pCommandHooks->processPausedMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processPausedMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processPausedMessage(message)) {
+                    processError = "paused handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
         case MESSAGE_TYPE_GO:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Go Message", __func__);
             if (p_pContext->pCommandHooks->processGoMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processGoMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processGoMessage(message)) {
+                    processError = "go handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
         case MESSAGE_TYPE_RUNNING:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Running Message", __func__);
             if (p_pContext->pCommandHooks->processRunningMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processRunningMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processRunningMessage(message)) {
+                    processError = "running handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
         case MESSAGE_TYPE_TERM:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Terminate Message", __func__);
             if (p_pContext->pCommandHooks->processTermMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processTermMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processTermMessage(message)) {
+                    processError = "terminate handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
         case MESSAGE_TYPE_BYE:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Bye Message", __func__);
             if (p_pContext->pCommandHooks->processByeMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processByeMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processByeMessage(message)) {
+                    processError = "bye handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
         case MESSAGE_TYPE_CLEAR:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Cache Clear Message", __func__);
-            return CommandAndControl_processCacheClearMessage(p_pContext);
+            result = CommandAndControl_processCacheClearMessage(p_pContext);
+            if (result != LIST_EACH_OK)
+                processError = "cache clear handler failed";
             break;
         case MESSAGE_TYPE_REREG:
             rzb_log(LOG_DEBUG, LOG_C_CNC, "%s: C&C Msg Dispatch: Re-Register Message", __func__);
             if (p_pContext->pCommandHooks->processReRegMessage != NULL) {
-                if (p_pContext->
-                        pCommandHooks->processReRegMessage(message)) {
-                    return LIST_EACH_OK;
-                } else {
-                    return LIST_EACH_ERROR;
+                if (!p_pContext->pCommandHooks->processReRegMessage(message)) {
+                    processError = "re-register handler failed";
+                    result = LIST_EACH_ERROR;
                 }
             }
             break;
@@ -486,9 +466,13 @@ CommandAndControl_DispatchCommand (struct RazorbackContext *p_pContext, void*use
             rzb_log(LOG_ERR, LOG_C_CNC,
                     "%s: Dropped C&C Message: Bad Type (%i)", __func__,
                     message->type);
-            return LIST_EACH_ERROR;
+            processError = "unsupported command message type";
+            result = LIST_EACH_ERROR;
+            break;
     }
-    return LIST_EACH_OK;
+
+    Telemetry_EndSpan(processSpan, result == LIST_EACH_OK, processError);
+    return result;
 }
 
 bool

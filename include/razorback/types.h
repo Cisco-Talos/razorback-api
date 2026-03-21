@@ -46,6 +46,9 @@ typedef struct _Semaphore Semaphore_t;
 typedef struct _List List_t;
 typedef struct _Thread Thread_t;
 
+typedef struct TelemetryContextCarrier TelemetryContextCarrier_t;
+typedef struct TelemetrySpan TelemetrySpan_t;
+
 
 #define UUID_STRING_LENGTH 37   ///< The size of a UUID String including the null
 
@@ -143,6 +146,7 @@ struct BlockPoolItem
     struct BlockPoolData *pDataTail;                     ///< Tail Item
     void (*submittedCallback) (struct BlockPoolItem *);  ///< Post submission call back
     struct Event *pEvent;                                ///< Event data for the submission.
+    TelemetryContextCarrier_t *telemetryContext;         ///< Trace context propagated across worker threads
     void *userData;                                      ///< User data attached to the item
 };
 

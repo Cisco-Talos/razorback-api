@@ -36,6 +36,7 @@
 #include "connected_entity_private.h"
 #include "transfer/core.h"
 #include "runtime_config.h"
+#include "telemetry.h"
 #include <string.h>
 
 struct ThreadPool *requestThreadPool= NULL;
@@ -122,6 +123,7 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
     uint32_t sfflags = 0;
     uint32_t entflags = 0;
     BlockPool_Item_Lock(p_pItem);
+    Telemetry_UpdateContext(&p_pItem->telemetryContext);
 
     if ( (p_pItem->pEvent->pBlock->pParentId != NULL ) &&
             BlockId_IsEqual(p_pItem->pEvent->pBlock->pId, p_pItem->pEvent->pBlock->pParentId) )
@@ -188,6 +190,9 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
     struct BlockPoolItem *item = NULL;
     struct Queue *queue = NULL;
     struct Message *message = NULL;
+    struct TelemetrySpan *itemSpan = NULL;
+    bool itemSuccess = false;
+    const char *itemError = NULL;
 #if 0
     struct timespec l_tsTimeOut;
     l_tsTimeOut.tv_sec=1;
@@ -204,9 +209,15 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
             continue;
         }
         BlockPool_Item_Lock(item);
+        itemSpan = Telemetry_StartSpan("request global cache", &item->telemetryContext);
+        BlockPool_AddCommonTelemetryAttributes(item, itemSpan);
+        itemSuccess = false;
+        itemError = NULL;
         if (BlockPool_GetStatus(item) != BLOCK_POOL_STATUS_CHECK_GLOBAL_CACHE)
         {
             rzb_log(LOG_ERR,LOG_C_CORE, "%s: Item (%p) in queue with wrong status", __func__, item );
+            itemError = "block pool item in wrong state for cache request";
+            Telemetry_EndSpan(itemSpan, false, itemError);
             BlockPool_Item_Unlock(item);
             continue;
         }
@@ -216,12 +227,23 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
                         sg_pContext->uuidNuggetId, item->pEvent->pBlock->pId)) == NULL)
         {
             rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to initialize cache request", __func__);
+            itemError = "failed to initialize cache request";
+            Telemetry_EndSpan(itemSpan, false, itemError);
             BlockPool_Item_Unlock(item);
             continue;
         }
-        Queue_Put(queue, message);
+        if (!Queue_Put(queue, message))
+        {
+            rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to send cache request", __func__);
+            itemError = "failed to send cache request";
+        }
+        else
+        {
+            itemSuccess = true;
+        }
         BlockPool_Item_Unlock(item);
         message->destroy(message);
+        Telemetry_EndSpan(itemSpan, itemSuccess, itemError);
     }
 }
 
@@ -260,6 +282,7 @@ Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void * use
             if ((l_pRes->iSfFlags & SF_FLAG_CANHAZ) != SF_FLAG_CANHAZ)
                 BlockPool_SetFlags(p_pItem, p_pItem->iStatus | BLOCK_POOL_FLAG_EVENT_ONLY);
 
+            Telemetry_UpdateContext(&p_pItem->telemetryContext);
             List_Push(submitQueue, p_pItem);
         }
     }
@@ -274,6 +297,9 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
     struct MessageCacheResp *l_mcrMessage;
     struct CacheResult *l_pRes;
     struct Queue *queue;
+    struct TelemetrySpan *processSpan;
+    bool processSuccess;
+    const char *processError;
     // TODO: Not what we think it is!!
     if ((queue = ResponseQueue_Initialize(sg_pContext->uuidNuggetId, QUEUE_FLAG_RECV)) == NULL)
         return;
@@ -288,6 +314,17 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
     {
         if ((message = Queue_Get(queue)) == NULL)
             continue;
+        processSpan = Telemetry_StartMessageProcessSpan(queue, message);
+        processSuccess = false;
+        processError = NULL;
+        if (message->type != MESSAGE_TYPE_RESP) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unexpected cache response message type %u",
+                    __func__, message->type);
+            processError = "unexpected cache response message type";
+            Telemetry_EndSpan(processSpan, false, processError);
+            message->destroy(message);
+            continue;
+        }
         l_mcrMessage = message->message;
         // Copy the item into thread local storage.
         l_pRes->pId = l_mcrMessage->pId;
@@ -296,7 +333,9 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
         rzb_log(LOG_DEBUG,LOG_C_CORE, "%s: Got flags SF: 0x%08x, ENT: 0x%08x", __func__, l_pRes->iSfFlags, l_pRes->iEntFlags);
         BlockPool_ForEachItem(Submission_GlobalCache_ResponseHandler, NULL);
         // Destroy allocated items in thread local storage.
+        processSuccess = true;
         message->destroy(message);
+        Telemetry_EndSpan(processSpan, processSuccess, processError);
     }
 
     Thread_SetUserData(p_pThread, NULL);
@@ -316,6 +355,9 @@ Submission_SubmitThread(Thread_t *p_pThread)
     uint32_t reason = 0;
     struct BlockPoolItem *item = NULL;
     struct Queue *queue = NULL;
+    struct TelemetrySpan *itemSpan = NULL;
+    bool itemSuccess = false;
+    const char *itemError = NULL;
 
 #if 0
     struct timespec l_tsTimeOut;
@@ -336,9 +378,15 @@ Submission_SubmitThread(Thread_t *p_pThread)
         }
 
         BlockPool_Item_Lock(item);
+        itemSpan = Telemetry_StartSpan("submit block", &item->telemetryContext);
+        BlockPool_AddCommonTelemetryAttributes(item, itemSpan);
+        itemSuccess = false;
+        itemError = NULL;
         if (BlockPool_GetStatus(item) != BLOCK_POOL_STATUS_SUBMIT_DATA)
         {
             rzb_log(LOG_ERR,LOG_C_CORE, "%s: Dequeued item with wrong state", __func__);
+            itemError = "block pool item in wrong state for submission";
+            Telemetry_EndSpan(itemSpan, false, itemError);
             BlockPool_Item_Unlock(item);
             continue;
         }
@@ -358,6 +406,7 @@ Submission_SubmitThread(Thread_t *p_pThread)
                 {
                     rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to find usable dispatcher", __func__);
                     transfered = TRANSFER_FAIL_LOCAL;
+                    itemError = "failed to find usable dispatcher";
                     transferTries++;
                     break;
                 }
@@ -375,8 +424,10 @@ Submission_SubmitThread(Thread_t *p_pThread)
             if (transfered != TRANSFER_OK)
             {
                 rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to transfer block giving up", __func__);
+                itemError = "failed to transfer block";
                 if (item->submittedCallback != NULL)
                     item->submittedCallback(item);
+                Telemetry_EndSpan(itemSpan, false, itemError);
                 BlockPool_Item_Unlock(item);
                 BlockPool_DestroyItem(item);
                 continue;
@@ -390,15 +441,24 @@ Submission_SubmitThread(Thread_t *p_pThread)
         if ((message = MessageBlockSubmission_Initialize( item->pEvent, reason, storedLocality)) == NULL)
         {
             rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to create message", __func__);
+            itemError = "failed to create block submission message";
             if (item->submittedCallback != NULL)
                 item->submittedCallback(item);
+            Telemetry_EndSpan(itemSpan, false, itemError);
             BlockPool_Item_Unlock(item);
             BlockPool_DestroyItem(item);
             continue;
         }
 
         if(!Queue_Put(queue, message))
+        {
             rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to put message", __func__);
+            itemError = "failed to send block submission";
+        }
+        else
+        {
+            itemSuccess = true;
+        }
 
         // Set the event to null so we don't destroy it.
         ((struct MessageBlockSubmission*)message->message)->pEvent = NULL;
@@ -415,11 +475,14 @@ Submission_SubmitThread(Thread_t *p_pThread)
             BlockPool_DestroyItemDataList(item->pDataHead);
             item->pDataHead = NULL;
             item->pDataTail = NULL;
+            Telemetry_ClearContext(&item->telemetryContext);
+            Telemetry_EndSpan(itemSpan, itemSuccess, itemError);
             BlockPool_Item_Unlock(item);
             continue;
         }
         else
         {
+            Telemetry_EndSpan(itemSpan, itemSuccess, itemError);
             BlockPool_Item_Unlock(item);
             BlockPool_DestroyItem(item);
             continue;

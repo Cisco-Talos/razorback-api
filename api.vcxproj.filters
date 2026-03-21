@@ -488,6 +488,9 @@
     <ClInclude Include="include\razorback\submission.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="include\razorback\telemetry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="include\razorback\thread.h">
       <Filter>Header Files</Filter>
     </ClInclude>
