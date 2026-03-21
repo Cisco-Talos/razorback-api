@@ -28,7 +28,6 @@
 #include <time.h>
 
 #include "runtime_config.h"
-
 #ifdef _MSC_VER
 #else //_MSC_VER
 #include <unistd.h>
@@ -44,11 +43,12 @@ struct Timer
     void *userData;            /* User data provided to the event function. */
     void (*function)(void *);  /* Function to call when the timer expires. */
     bool bStopRequested;       /* Has timer shutdown been requested? */
+    bool bDestroyDeferred;     /* Will the worker free the timer on exit? */
 };
 
 static void Timer_Main(Thread_t *thread);
 static bool Timer_ShouldStop(struct Timer *timer);
-static void Timer_RequestStop(struct Timer *timer);
+static bool Timer_ShouldDeferDestroy(struct Timer *timer);
 static void Timer_SleepMilliseconds(uint32_t milliseconds);
 
 SO_PUBLIC struct Timer *
@@ -73,6 +73,7 @@ Timer_Create(uint32_t interval, void (*handler)(void *), void *userData)
     ret->userData = userData;
     ret->interval = interval;
     ret->bStopRequested = false;
+    ret->bDestroyDeferred = false;
 
     ret->mutex = Mutex_Create(MUTEX_MODE_NORMAL);
     if (ret->mutex == NULL) {
@@ -96,16 +97,43 @@ Timer_Create(uint32_t interval, void (*handler)(void *), void *userData)
 SO_PUBLIC void
 Timer_Destroy(struct Timer *timer)
 {
+    Thread_t *current;
+    Thread_t *timerThread;
+    bool destroyDeferred;
+
     ASSERT(timer != NULL);
     if (timer == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: timer is NULL", __func__);
         return;
     }
 
-    Timer_RequestStop(timer);
-    if (timer->thread != NULL) {
-        Thread_Join(timer->thread);
-        Thread_Destroy(timer->thread);
+    current = Thread_GetCurrent();
+
+    Mutex_Lock(timer->mutex);
+    timer->bStopRequested = true;
+    timerThread = timer->thread;
+    destroyDeferred = timer->bDestroyDeferred;
+
+    if (current != NULL && current == timerThread) {
+        timer->bDestroyDeferred = true;
+        Mutex_Unlock(timer->mutex);
+        Thread_Destroy(current);
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Timer_Destroy called from the timer callback thread; deferring timer cleanup until callback exit",
+                __func__);
+        return;
+    }
+    Mutex_Unlock(timer->mutex);
+
+    if (current != NULL)
+        Thread_Destroy(current);
+
+    if (timerThread != NULL) {
+        Thread_Join(timerThread);
+        if (destroyDeferred) {
+            return;
+        }
+        Thread_Destroy(timerThread);
         timer->thread = NULL;
     }
 
@@ -148,6 +176,12 @@ Timer_Main(Thread_t *thread)
 
         timer->function(timer->userData);
     }
+
+    if (Timer_ShouldDeferDestroy(timer)) {
+        timer->thread = NULL;
+        Mutex_Destroy(timer->mutex);
+        free(timer);
+    }
 }
 
 static bool
@@ -167,18 +201,21 @@ Timer_ShouldStop(struct Timer *timer)
     return ret;
 }
 
-static void
-Timer_RequestStop(struct Timer *timer)
+static bool
+Timer_ShouldDeferDestroy(struct Timer *timer)
 {
+    bool ret;
+
     ASSERT(timer != NULL);
     if (timer == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: timer is NULL", __func__);
-        return;
+        return false;
     }
 
     Mutex_Lock(timer->mutex);
-    timer->bStopRequested = true;
+    ret = timer->bDestroyDeferred;
     Mutex_Unlock(timer->mutex);
+    return ret;
 }
 
 static void
