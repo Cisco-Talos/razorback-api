@@ -354,6 +354,55 @@ ReplaceContextCarrier(const context_api::Context &context,
 }
 
 bool
+ReplaceInjectedHeaders(const context_api::Context &context,
+                       struct TelemetryInjectedHeaders *headers) noexcept
+{
+  propagation_api::TextMapPropagator *propagator_ptr = nullptr;
+  opentelemetry::nostd::shared_ptr<propagation_api::TextMapPropagator> propagator;
+  InjectedHeadersCarrier carrier;
+
+  if (headers == nullptr)
+    return false;
+
+  FreeTelemetryHeaders(headers->entries, headers->count);
+  headers->entries = nullptr;
+  headers->count = 0;
+
+  propagator = propagation_api::GlobalTextMapPropagator::GetGlobalPropagator();
+  propagator_ptr = propagator.get();
+  if (propagator_ptr == nullptr)
+    return false;
+
+  propagator_ptr->Inject(carrier, context);
+  headers->count = carrier.Headers().size();
+  if (headers->count == 0)
+    return true;
+
+  headers->entries = static_cast<struct TelemetryHeader *>(
+      calloc(headers->count, sizeof(struct TelemetryHeader)));
+  if (headers->entries == nullptr)
+  {
+    headers->count = 0;
+    return false;
+  }
+
+  for (size_t i = 0; i < headers->count; ++i)
+  {
+    headers->entries[i].name = strdup(carrier.Headers()[i].first.c_str());
+    headers->entries[i].value = strdup(carrier.Headers()[i].second.c_str());
+    if (headers->entries[i].name == nullptr || headers->entries[i].value == nullptr)
+    {
+      FreeTelemetryHeaders(headers->entries, headers->count);
+      headers->entries = nullptr;
+      headers->count = 0;
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool
 SetMessageHeaderValue(struct Message *message, const char *name, const char *value) noexcept
 {
   struct MessageHeader *header = NULL;
@@ -508,7 +557,6 @@ StartSpanWithLink(const char *span_name,
   trace_api::SpanContext linked_context = trace_api::SpanContext::GetInvalid();
   context_api::Context extracted_context;
   context_api::Context scope_context = context_api::RuntimeContext::GetCurrent();
-  InjectedHeadersCarrier carrier;
 
   if (!state.enabled || state.tracer == nullptr)
   {
@@ -558,26 +606,7 @@ StartSpanWithLink(const char *span_name,
       InjectContextIntoMessageHeaders(context_api::RuntimeContext::GetCurrent(), const_cast<struct Message *>(message));
 
     if (inject_headers && headers != nullptr)
-    {
-      propagation_api::GlobalTextMapPropagator::GetGlobalPropagator()->Inject(
-          carrier, context_api::RuntimeContext::GetCurrent());
-
-      headers->count = carrier.Headers().size();
-      headers->entries =
-          static_cast<struct TelemetryHeader *>(calloc(headers->count, sizeof(struct TelemetryHeader)));
-      if (headers->entries == nullptr)
-      {
-        headers->count = 0;
-      }
-      else
-      {
-        for (size_t i = 0; i < headers->count; ++i)
-        {
-          headers->entries[i].name = strdup(carrier.Headers()[i].first.c_str());
-          headers->entries[i].value = strdup(carrier.Headers()[i].second.c_str());
-        }
-      }
-    }
+      (void)ReplaceInjectedHeaders(context_api::RuntimeContext::GetCurrent(), headers);
 
     return handle;
   }
@@ -697,6 +726,24 @@ Telemetry_StartQueueReceiveSpan(const struct Queue *queue,
   return StartSpanWithLink("receive", trace_api::SpanKind::kClient, queue, message,
                            destination, "receive", "receive", MessageContextMode::kParent,
                            true, false, nullptr);
+}
+
+extern "C" bool
+Telemetry_InjectCurrentContext(struct TelemetryInjectedHeaders *headers)
+{
+  TelemetryState &state = GetTelemetryState();
+
+  if (headers == nullptr)
+    return false;
+
+  FreeTelemetryHeaders(headers->entries, headers->count);
+  headers->entries = nullptr;
+  headers->count = 0;
+
+  if (!state.enabled)
+    return true;
+
+  return ReplaceInjectedHeaders(context_api::RuntimeContext::GetCurrent(), headers);
 }
 
 extern "C" TelemetrySpan_t *

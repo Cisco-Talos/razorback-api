@@ -24,6 +24,7 @@
 #include <razorback/log.h>
 #include <razorback/hash.h>
 #include <razorback/block_pool.h>
+#include <razorback/telemetry.h>
 #include <razorback/transfer.h>
 
 #include <curl/curl.h>
@@ -35,6 +36,7 @@
 
 #include "transfer/core.h"
 #include "runtime_config.h"
+#include "../telemetry.h"
 
 #ifndef P_tmpdir
 #define P_tmpdir "/tmp"
@@ -77,6 +79,7 @@ struct StoreContext
     struct BlockPoolItem *item;
     struct BlockPoolData *dataItem;
     size_t bytesRead;
+    size_t bytesTransferred;
     char * filename;
     uint8_t protocol;
     uint16_t port;
@@ -204,6 +207,128 @@ HTTP_ConfigureCurl(CURL *curl, uint8_t protocol, const char *url)
     return true;
 }
 
+static void
+HTTP_AddCommonTelemetryAttributes(TelemetrySpan_t *span,
+                                  const struct Block *block,
+                                  uint8_t protocol,
+                                  const char *address,
+                                  uint16_t port,
+                                  const char *url,
+                                  const char *method)
+{
+    const char *scheme = NULL;
+    bool secure = false;
+
+    if (span == NULL)
+        return;
+
+    if (block != NULL)
+        Telemetry_AddBlockAttributes(span, block);
+
+    if (method != NULL && method[0] != '\0')
+        Telemetry_AddStringAttribute(span, "http.request.method", method);
+
+    if (address != NULL && address[0] != '\0')
+        Telemetry_AddStringAttribute(span, "server.address", address);
+
+    Telemetry_AddIntAttribute(span, "server.port", (int64_t)port);
+
+    if (url != NULL && url[0] != '\0')
+        Telemetry_AddStringAttribute(span, "url.full", url);
+
+    if (HTTP_GetProtocolSettings(protocol, &scheme, &secure, __func__))
+        Telemetry_AddStringAttribute(span, "url.scheme", scheme);
+}
+
+static void
+HTTP_AddErrorTypeAttribute(TelemetrySpan_t *span,
+                           const char *errorType)
+{
+    if (span == NULL || errorType == NULL || errorType[0] == '\0')
+        return;
+
+    Telemetry_AddStringAttribute(span, "error.type", errorType);
+}
+
+static void
+HTTP_AddStatusCodeErrorType(TelemetrySpan_t *span,
+                            long httpCode)
+{
+    char errorType[32];
+
+    if (span == NULL || httpCode <= 0)
+        return;
+
+    if (snprintf(errorType, sizeof(errorType), "%ld", httpCode) < 0)
+        return;
+
+    Telemetry_AddStringAttribute(span, "error.type", errorType);
+}
+
+static void
+HTTP_FreeRequestHeaders(struct curl_slist **requestHeaders)
+{
+    if (requestHeaders == NULL || *requestHeaders == NULL)
+        return;
+
+    curl_slist_free_all(*requestHeaders);
+    *requestHeaders = NULL;
+}
+
+static bool
+HTTP_ApplyTelemetryHeaders(CURL *curl,
+                           struct curl_slist **requestHeaders)
+{
+    struct TelemetryInjectedHeaders injectedHeaders = { 0, NULL };
+    size_t i;
+
+    if (curl == NULL || requestHeaders == NULL)
+        return false;
+
+    if (!Telemetry_InjectCurrentContext(&injectedHeaders))
+        return false;
+
+    for (i = 0; i < injectedHeaders.count; ++i) {
+        char *headerLine = NULL;
+        struct curl_slist *nextHeaders;
+
+        if (injectedHeaders.entries[i].name == NULL ||
+                injectedHeaders.entries[i].value == NULL) {
+            continue;
+        }
+
+        if (asprintf(&headerLine, "%s: %s",
+                     injectedHeaders.entries[i].name,
+                     injectedHeaders.entries[i].value) == -1) {
+            Telemetry_FreeInjectedHeaders(&injectedHeaders);
+            HTTP_FreeRequestHeaders(requestHeaders);
+            return false;
+        }
+
+        nextHeaders = curl_slist_append(*requestHeaders, headerLine);
+        free(headerLine);
+        if (nextHeaders == NULL) {
+            Telemetry_FreeInjectedHeaders(&injectedHeaders);
+            HTTP_FreeRequestHeaders(requestHeaders);
+            return false;
+        }
+
+        *requestHeaders = nextHeaders;
+    }
+
+    Telemetry_FreeInjectedHeaders(&injectedHeaders);
+
+    if (*requestHeaders == NULL)
+        return true;
+
+    if (curl_easy_setopt(curl, CURLOPT_HTTPHEADER, *requestHeaders) != CURLE_OK) {
+        HTTP_FreeRequestHeaders(requestHeaders);
+        return false;
+    }
+
+    return true;
+}
+
 static size_t
 read_callback(char *buffer, size_t size, size_t nitems, void *userdata) {
     struct StoreContext *context = (struct StoreContext *)userdata;
@@ -219,8 +344,15 @@ read_callback(char *buffer, size_t size, size_t nitems, void *userdata) {
             nitems = (context->dataItem->iLength - context->bytesRead);
             //rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Read too much data from file, read truncated: %zu", __func__, nitems);
         }
-        context->bytesRead+= size * nitems;
-        return fread(buffer,size, nitems, context->dataItem->data.file);
+        {
+            size_t itemsRead = fread(buffer, size, nitems,
+                                     context->dataItem->data.file);
+            size_t fileBytesRead = size * itemsRead;
+
+            context->bytesRead += fileBytesRead;
+            context->bytesTransferred += fileBytesRead;
+            return itemsRead;
+        }
     } else {
 
         size_t want = size * nitems;
@@ -244,6 +376,7 @@ read_callback(char *buffer, size_t size, size_t nitems, void *userdata) {
             memcpy(buffer+read, context->dataItem->data.pointer + context->bytesRead, to_read);
             read += to_read;
             context->bytesRead += to_read;
+            context->bytesTransferred += to_read;
             if (context->bytesRead == context->dataItem->iLength) {
                 // If we have read all the data in the current buffer then
                 // move to the next buffer
@@ -286,12 +419,17 @@ HTTP_Try_Store(void *i, void*ud)
     CURL *curl = NULL;
     curl_mime *mime = NULL;
     curl_mimepart *part = NULL;
+    struct curl_slist *requestHeaders = NULL;
+    TelemetrySpan_t *requestSpan = NULL;
     CURLcode res;
     long http_code = 0;
+    const char *requestError = NULL;
+    bool spanSuccess = false;
 
     // Reset all the context states incase this is a retry
     status->dataItem = status->item->pDataHead;
     status->bytesRead = 0;
+    status->bytesTransferred = 0;
     if (status->dataItem->iFlags == BLOCK_POOL_DATA_FLAG_FILE) {
         rewind(status->dataItem->data.file);
     }
@@ -301,22 +439,46 @@ HTTP_Try_Store(void *i, void*ud)
         status->status = TRANSFER_FAIL_LOCAL;
         return LIST_EACH_OK;
     }
+    requestSpan = Telemetry_StartSpanWithKind("POST",
+                                              NULL,
+                                              TELEMETRY_SPAN_KIND_CLIENT);
+    HTTP_AddCommonTelemetryAttributes(
+        requestSpan,
+        (status->item != NULL && status->item->pEvent != NULL) ?
+            status->item->pEvent->pBlock : NULL,
+        status->protocol,
+        address,
+        status->port,
+        url,
+        "POST");
+    Telemetry_AddIntAttribute(requestSpan, "rzb.transfer.bytes_expected",
+                              (int64_t)status->item->pEvent->pBlock->pId->iLength);
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Attempting to store %s at %s", __func__, status->filename, url);
     curl = curl_easy_init();
     if (curl == NULL) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to initialize curl", __func__);
+        HTTP_AddErrorTypeAttribute(requestSpan, "curl.init");
+        requestError = "failed to initialize curl";
         status->status = TRANSFER_FAIL_LOCAL;
         goto cleanup;
+    }
+    if (!HTTP_ApplyTelemetryHeaders(curl, &requestHeaders)) {
+        rzb_log(LOG_WARNING, LOG_C_TRANSFER,
+                "%s: Failed to apply telemetry HTTP headers", __func__);
     }
     mime = curl_mime_init(curl);
     if (mime == NULL) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to initialize curl MIME data", __func__);
+        HTTP_AddErrorTypeAttribute(requestSpan, "curl.mime_init");
+        requestError = "failed to initialize curl MIME data";
         status->status = TRANSFER_FAIL_LOCAL;
         goto cleanup;
     }
     part = curl_mime_addpart(mime);
     if (part == NULL) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to create curl MIME part", __func__);
+        HTTP_AddErrorTypeAttribute(requestSpan, "curl.mime_addpart");
+        requestError = "failed to create curl MIME part";
         status->status = TRANSFER_FAIL_LOCAL;
         goto cleanup;
     }
@@ -339,6 +501,8 @@ HTTP_Try_Store(void *i, void*ud)
     {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to configure HTTP transport request",
                 __func__);
+        HTTP_AddErrorTypeAttribute(requestSpan, "curl.request_config");
+        requestError = "failed to configure HTTP transport request";
         status->status = TRANSFER_FAIL_LOCAL;
         goto cleanup;
     }
@@ -347,20 +511,30 @@ HTTP_Try_Store(void *i, void*ud)
     if(res != CURLE_OK) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: curl_easy_perform() failed: %s", __func__,
                 curl_easy_strerror(res));
+        HTTP_AddErrorTypeAttribute(requestSpan, "curl.perform");
+        requestError = curl_easy_strerror(res);
         status->status = TRANSFER_FAIL_DISPATCHER;
     }
     if (curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code) != CURLE_OK) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to get response code", __func__);
+        HTTP_AddErrorTypeAttribute(requestSpan, "curl.response_code");
+        requestError = "failed to get HTTP response code";
         status->status = TRANSFER_FAIL_LOCAL;
     }
 
 cleanup:
+    if (http_code > 0)
+        Telemetry_AddIntAttribute(requestSpan, "http.response.status_code",
+                                  (int64_t)http_code);
+    Telemetry_AddIntAttribute(requestSpan, "rzb.transfer.bytes_transferred",
+                              (int64_t)status->bytesTransferred);
     if (mime != NULL) {
         curl_mime_free(mime);
     }
     if (curl != NULL) {
         curl_easy_cleanup(curl);
     }
+    HTTP_FreeRequestHeaders(&requestHeaders);
     free(url);
     // Rewind the filehandle after the request
     if (status->dataItem != NULL && status->dataItem->iFlags == BLOCK_POOL_DATA_FLAG_FILE)
@@ -372,17 +546,25 @@ cleanup:
         status->status = TRANSFER_FAIL_LOCAL;
     }
     if (status->status == TRANSFER_FAIL_LOCAL) {
+        if (requestError == NULL)
+            requestError = "HTTP store request failed locally";
+        Telemetry_EndSpan(requestSpan, false, requestError);
         return LIST_EACH_OK;
     }
     if (http_code != 200) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to store file: %zi", __func__, http_code);
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to store file: %s", __func__, status->memory);
         status->status = TRANSFER_FAIL_DISPATCHER;
+        spanSuccess = (http_code >= 100 && http_code < 400);
+        if (!spanSuccess)
+            HTTP_AddStatusCodeErrorType(requestSpan, http_code);
+        Telemetry_EndSpan(requestSpan, spanSuccess, spanSuccess ? NULL : requestError);
         return LIST_EACH_OK;
     }
 
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Successfully stored file", __func__);
     status->status = TRANSFER_OK;
+    Telemetry_EndSpan(requestSpan, true, NULL);
     return LIST_EACH_END;
 }
 
@@ -416,6 +598,7 @@ Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
         .item = item,
         .dataItem = item->pDataHead,
         .bytesRead = 0,
+        .bytesTransferred = 0,
         .filename = NULL,
         .protocol = dispatcher->dispatcher->protocol,
         .port = dispatcher->dispatcher->port,
@@ -445,6 +628,7 @@ Transfer_HTTP_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatch
 
 static const char * tempFileTemplate = "rzb-XXXXXX";
 struct FetchContext {
+    struct Block *block;
     char * filename;
     char * tmpFileName;
     FILE * fd;
@@ -519,8 +703,12 @@ HTTP_Try_Fetch(void *i, void*ud)
     char *address = i;
     char *url = NULL;
     CURL *curl = NULL;
+    struct curl_slist *requestHeaders = NULL;
+    TelemetrySpan_t *requestSpan = NULL;
     long http_code = 0;
     CURLcode res;
+    const char *requestError = NULL;
+    bool spanSuccess = false;
 
 
     rewind(status->fd);
@@ -535,12 +723,30 @@ HTTP_Try_Fetch(void *i, void*ud)
         status->status = TRANSFER_FAIL_LOCAL;
         return LIST_EACH_OK;
     }
+    requestSpan = Telemetry_StartSpanWithKind("GET",
+                                              NULL,
+                                              TELEMETRY_SPAN_KIND_CLIENT);
+    HTTP_AddCommonTelemetryAttributes(requestSpan,
+                                      status->block,
+                                      status->protocol,
+                                      address,
+                                      status->port,
+                                      url,
+                                      "GET");
+    Telemetry_AddIntAttribute(requestSpan, "rzb.transfer.bytes_expected",
+                              (int64_t)status->expectedSize);
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Attempting to fetch %s from %s", __func__, status->filename, url);
     curl = curl_easy_init();
     if (curl == NULL) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to initialize curl", __func__);
+        HTTP_AddErrorTypeAttribute(requestSpan, "curl.init");
+        requestError = "failed to initialize curl";
         status->status = TRANSFER_FAIL_LOCAL;
         goto cleanup;
+    }
+    if (!HTTP_ApplyTelemetryHeaders(curl, &requestHeaders)) {
+        rzb_log(LOG_WARNING, LOG_C_TRANSFER,
+                "%s: Failed to apply telemetry HTTP headers", __func__);
     }
     if (!HTTP_ConfigureCurl(curl, status->protocol, url) ||
             (curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteFileCallback) != CURLE_OK) ||
@@ -549,6 +755,8 @@ HTTP_Try_Fetch(void *i, void*ud)
     {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to configure HTTP transport request",
                 __func__);
+        HTTP_AddErrorTypeAttribute(requestSpan, "curl.request_config");
+        requestError = "failed to configure HTTP transport request";
         status->status = TRANSFER_FAIL_LOCAL;
         goto cleanup;
     }
@@ -558,30 +766,51 @@ HTTP_Try_Fetch(void *i, void*ud)
     if(res != CURLE_OK) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: curl_easy_perform() failed: %s", __func__,
                 curl_easy_strerror(res));
+        HTTP_AddErrorTypeAttribute(requestSpan, "curl.perform");
+        requestError = curl_easy_strerror(res);
         status->status = TRANSFER_FAIL_DISPATCHER;
     }
     if (curl_easy_getinfo (curl, CURLINFO_RESPONSE_CODE, &http_code) != CURLE_OK) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to get response code", __func__);
+        HTTP_AddErrorTypeAttribute(requestSpan, "curl.response_code");
+        requestError = "failed to get HTTP response code";
         status->status = TRANSFER_FAIL_LOCAL;
     }
 cleanup:
+    if (http_code > 0)
+        Telemetry_AddIntAttribute(requestSpan, "http.response.status_code",
+                                  (int64_t)http_code);
+    Telemetry_AddIntAttribute(requestSpan, "rzb.transfer.bytes_transferred",
+                              (int64_t)status->size);
     if (curl != NULL) {
         curl_easy_cleanup(curl);
     }
+    HTTP_FreeRequestHeaders(&requestHeaders);
     free(url);
     if (status->status == TRANSFER_FAIL_LOCAL) {
+        if (requestError == NULL)
+            requestError = "HTTP fetch request failed locally";
+        Telemetry_EndSpan(requestSpan, false, requestError);
         return LIST_EACH_OK;
     }
     if (http_code != 200) {
         status->status = TRANSFER_FAIL_DISPATCHER;
+        spanSuccess = (http_code >= 100 && http_code < 400);
+        if (!spanSuccess)
+            HTTP_AddStatusCodeErrorType(requestSpan, http_code);
+        Telemetry_EndSpan(requestSpan, spanSuccess, spanSuccess ? NULL : requestError);
         return LIST_EACH_OK;
     }
     if (status->size != status->expectedSize) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: File size mismatch, got %zu expected %zu", __func__, status->size, status->expectedSize);
         status->status = TRANSFER_FAIL_DISPATCHER;
+        HTTP_AddErrorTypeAttribute(requestSpan, "http.response.body.size_mismatch");
+        requestError = "fetched file size did not match expected size";
+        Telemetry_EndSpan(requestSpan, false, requestError);
         return LIST_EACH_OK;
     }
     status->status = TRANSFER_OK;
+    Telemetry_EndSpan(requestSpan, true, NULL);
     return LIST_EACH_END;
 }
 
@@ -605,6 +834,7 @@ SO_PUBLIC enum TransferStatus
 Transfer_HTTP_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 {
     struct FetchContext context = {
+        .block = block,
         .filename = NULL,
         .tmpFileName = NULL,
         .fd = NULL,
