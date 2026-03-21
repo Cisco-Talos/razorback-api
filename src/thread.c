@@ -72,6 +72,7 @@ static void handler(int sig);
 #endif //_MSC_VER
 static void Thread_Lock(void *);
 static void Thread_Unlock(void *);
+static void Thread_LogLaunchFailure(const char *threadName, const char *reason);
 
 static void
 initThreading (void)
@@ -88,6 +89,33 @@ initThreading (void)
 #else
     initThreading_pthreads();
 #endif
+}
+
+static void
+Thread_LogLaunchFailure(const char *threadName, const char *reason)
+{
+    uint32_t count;
+    uint32_t limit;
+
+    count = (sg_threadList == NULL) ? 0U : List_Length(sg_threadList);
+    limit = Config_getThreadLimit();
+
+    if (limit > 0U && count >= limit) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Failed to launch thread '%s': Global.MaxThreads limit reached (%u/%u). %s",
+                __func__,
+                (threadName != NULL) ? threadName : "(unnamed)",
+                count, limit,
+                (reason != NULL) ? reason : "No additional detail");
+        return;
+    }
+
+    rzb_log(LOG_ERR, LOG_C_CORE,
+            "%s: Failed to launch thread '%s' (%u/%u active). %s",
+            __func__,
+            (threadName != NULL) ? threadName : "(unnamed)",
+            count, limit,
+            (reason != NULL) ? reason : "No additional detail");
 }
 
 #ifdef _MSC_VER
@@ -162,11 +190,15 @@ Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
     // initialize running mutex
     if ((thread->mMutex = Mutex_Create(MUTEX_MODE_RECURSIVE)) == NULL)
     {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Failed to launch thread '%s': unable to create thread mutex",
+                __func__, (name != NULL) ? name : "(unnamed)");
         free(thread);
         return NULL;
     }
 
     if (!List_Push(sg_threadList, thread)) {
+        Thread_LogLaunchFailure(name, "Failed to reserve a tracked thread slot");
         Mutex_Destroy(thread->mMutex);
         free(thread);
         return NULL;
@@ -174,16 +206,23 @@ Thread_Launch (void (*fpFunction) (Thread_t *), void *userData,
 
 #ifdef _MSC_VER
     thread->hThread = CreateThread(NULL, 0, Thread_MainWrapper, thread, 0, &thread->iThread);
+    if (thread->hThread == NULL)
+    {
+        Thread_LogLaunchFailure(name, "CreateThread failed");
+        List_Remove(sg_threadList, thread);
+        Mutex_Destroy(thread->mMutex);
+        free(thread);
+        return NULL;
+    }
 #else //_MSC_VER
     // start thread, check for error
     if (pthread_create
         (&thread->iThread, &g_attr, Thread_MainWrapper, thread) != 0)
     {
+        Thread_LogLaunchFailure(name, "pthread_create failed");
+        List_Remove(sg_threadList, thread);
         Mutex_Destroy(thread->mMutex);
         free (thread);
-        rzb_log (LOG_ERR,LOG_C_CORE,
-                 "%s: Failed to launch thread in Thread_Launch due to pthread_create error (%i)", __func__,
-                 errno);
         return NULL;
     }
 #endif //_MSC_VER
@@ -423,6 +462,12 @@ Thread_getCount (void)
     uint32_t num;
     num = List_Length(sg_threadList);
     return num;
+}
+
+SO_PUBLIC uint32_t
+Thread_getLimit(void)
+{
+    return Config_getThreadLimit();
 }
 
 SO_PUBLIC int

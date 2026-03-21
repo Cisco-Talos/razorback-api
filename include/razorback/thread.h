@@ -149,6 +149,12 @@ SO_PUBLIC extern void Thread_Yield(void);
 SO_PUBLIC extern uint32_t Thread_getCount(void);
 
 /**
+ * Get the configured global tracked-thread limit.
+ * @return The maximum number of tracked threads allowed.
+ */
+SO_PUBLIC extern uint32_t Thread_getLimit(void);
+
+/**
  * Get the current thread wrapper.
  * @return Current thread wrapper, or NULL if no wrapper is registered.
  */
