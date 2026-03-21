@@ -21,6 +21,7 @@
 #include <razorback/messages.h>
 #include <razorback/log.h>
 #include <razorback/list.h>
+#include <razorback/telemetry.h>
 
 #include "messages/core.h"
 #include "messages/cnc/core.h"
@@ -113,6 +114,7 @@ Message_Destroy(struct Message *message)
     if (message->headers != NULL) {
         List_Destroy(message->headers);
     }
+    Telemetry_ClearContext(&message->telemetryContext);
     free(message);
 }
 

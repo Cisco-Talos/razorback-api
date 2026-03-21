@@ -76,7 +76,10 @@ void Razorback_Destroy_Context(struct RazorbackContext *context) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Context is NULL", __func__);
         return;
     }
-    Semaphore_Destroy(context->regSem);
+    if (context->inspector.dataTypeList != NULL)
+        free(context->inspector.dataTypeList);
+    if (context->regSem != NULL)
+        Semaphore_Destroy(context->regSem);
     free(context);
 }
 
@@ -172,19 +175,19 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
     if ((context->inspector.judgmentQueue = Queue_Create(JUDGMENT_QUEUE, false, QUEUE_FLAG_SEND)) == NULL) {
         rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to create judgment queue", __func__);
         Razorback_Remove_Context(context);
-        return false;
+        return NULL;
     }
 
     if (!Inspection_Launch (context, initialThreads, maxThreads)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to launch inspection threads", __func__);
         Razorback_Remove_Context(context);
-        return false;
+        return NULL;
     }
     // XXX: This has interesting side effects -> this is not the context we expect later in execution.
     if (!Submission_Init (context)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission api", __func__);
         Razorback_Remove_Context(context);
-        return false;
+        return NULL;
     }
 
     return context;
@@ -269,9 +272,7 @@ Razorback_Shutdown_Context (struct RazorbackContext *context) {
     CommandAndControl_Pause();
     CommandAndControl_SendBye(context);
 
-    if (context->inspector.threadPool != NULL) {
-        ThreadPool_KillWorkers(context->inspector.threadPool);
-    }
+    Inspection_Shutdown(context);
 
     List_Remove(sg_ContextList, context);
 
@@ -283,6 +284,7 @@ Razorback_Shutdown_Context (struct RazorbackContext *context) {
 
     if (context->inspector.judgmentQueue != NULL) {
         Queue_Terminate(context->inspector.judgmentQueue);
+        context->inspector.judgmentQueue = NULL;
     }
 
     if (context->output.threads != NULL) {

@@ -110,7 +110,11 @@ struct RazorbackContext
         struct RazorbackInspectionHooks *hooks;  ///< Inspection Hooks
         uint32_t dataTypeCount;                  ///< Inspection Data Type Count
         uuid_t *dataTypeList;                    ///< Inspection Data Type UUID Array
-        struct ThreadPool *threadPool;           ///< Inspection Thread Pool
+        struct Queue *inspectionQueue;           ///< Shared inspector broker queue
+        Thread_t *receiverThread;                ///< Broker receive and ack thread
+        List_t *pendingMessages;                 ///< Internal inspection work queue
+        List_t *completedMessages;               ///< Completed messages awaiting ack
+        struct ThreadPool *threadPool;           ///< Inspection worker thread pool
         struct Queue *judgmentQueue;             ///< Judgment queue structure
 
     } inspector;

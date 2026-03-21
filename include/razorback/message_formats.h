@@ -34,9 +34,12 @@ struct Message
     uint32_t type;                          ///< Message type
     size_t length;                          ///< Message length
     uint32_t version;                       ///< Message version
+    uint64_t brokerDeliveryTag;             ///< Broker delivery tag for deferred ack handling
+    TelemetryContextCarrier_t *telemetryContext; ///< Cross-thread telemetry context for deferred processing
     List_t *headers;                        ///< Message headers list
     void *message;                          ///< Message structure
     uint8_t *serialized;                    ///< Serialized message string
+    bool brokerAckPending;                  ///< True when the broker delivery still needs to be acked or rejected
     bool (*serialize)(struct Message *);    ///< Pointer to message serialization function
     bool (*deserialize)(struct Message *);  ///< Pointer to message deserialization function
     void (*destroy)(struct Message *);      ///< Pointer to message destructor

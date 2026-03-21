@@ -126,6 +126,40 @@ SO_PUBLIC extern void Queue_Terminate(struct Queue *p_pQ);
 SO_PUBLIC extern struct Message * Queue_Get(struct Queue *queue);
 
 /**
+ * Gets a message from the queue with configurable ack behavior.
+ * @param queue the queue.
+ * @param autoAck true to ack before returning, false to leave the delivery pending.
+ * @param timeoutMilliseconds timeout for the receive poll. A value of 0 blocks indefinitely.
+ * @return A message struct, NULL on error or timeout (errno==EAGAIN on timeout).
+ */
+SO_PUBLIC extern struct Message * Queue_Get_Ex(
+    struct Queue *queue,
+    bool autoAck,
+    uint32_t timeoutMilliseconds
+);
+
+/**
+ * Acknowledge a message previously received with deferred ack enabled.
+ * @param queue the queue.
+ * @param message the received message.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool Queue_Ack_Message(struct Queue *queue, struct Message *message);
+
+/**
+ * Reject a message previously received with deferred ack enabled.
+ * @param queue the queue.
+ * @param message the received message.
+ * @param requeue true to request broker redelivery, false to discard.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool Queue_Reject_Message(
+    struct Queue *queue,
+    struct Message *message,
+    bool requeue
+);
+
+/**
  * Sends a message to the queue.
  * @param queue the queue.
  * @param message the message to send.

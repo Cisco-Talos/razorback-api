@@ -232,6 +232,37 @@ Queue_Reject_Delivery(struct Queue *queue, uint64_t delivery_tag, bool requeue,
     return true;
 }
 
+/** Acknowledge a broker delivery by tag without taking ownership of queue locking. */
+static bool
+Queue_Acknowledge_Delivery(struct Queue *queue, uint64_t delivery_tag,
+                           const char *context)
+{
+    int amqpErr;
+
+    ASSERT(queue != NULL);
+    ASSERT(context != NULL);
+    if (queue == NULL || context == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: invalid ack arguments", __func__);
+        return false;
+    }
+    if (queue->pReadSocket == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: read socket missing while acknowledging delivery",
+                context);
+        return false;
+    }
+
+    amqpErr = amqp_basic_ack(queue->pReadSocket->pConn, AMQP_CHAN_ID,
+                             delivery_tag, 0);
+    if (amqpErr < 0) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: failed to ack delivery: %s",
+                context, amqp_error_string2(amqpErr));
+        Queue_Reconnect(queue, QUEUE_FLAG_RECV);
+        return false;
+    }
+
+    return true;
+}
+
 /** Close an AMQP channel/connection pair and free the wrapper socket state. */
 static void
 AMQP_Socket_Close (AMQP_Socket_t *socket)
@@ -713,15 +744,16 @@ Queue_Terminate (struct Queue *p_pQ)
 }
 
 SO_PUBLIC struct Message *
-Queue_Get (struct Queue *queue)
+Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
 {
     struct Message *ret = NULL;
     struct MessageHeader *header = NULL;
     struct TelemetrySpan *receiveSpan = NULL;
     amqp_rpc_reply_t res;
     amqp_envelope_t envelope;
+    struct timeval timeout;
+    struct timeval *timeoutPtr = NULL;
     int headerIndex = 0;
-    int ackErr;
     bool envelopeReady = false;
     bool rejectDelivery = false;
     bool requeueDelivery = false;
@@ -751,10 +783,28 @@ Queue_Get (struct Queue *queue)
     }
 
     amqp_maybe_release_buffers(queue->pReadSocket->pConn);
-    res = amqp_consume_message(queue->pReadSocket->pConn, &envelope, NULL, 0);
+    if (timeoutMilliseconds > 0) {
+        timeout.tv_sec = timeoutMilliseconds / 1000;
+        timeout.tv_usec = (timeoutMilliseconds % 1000) * 1000;
+        timeoutPtr = &timeout;
+    }
+    res = amqp_consume_message(queue->pReadSocket->pConn, &envelope, timeoutPtr, 0);
     envelopeReady = (res.reply_type == AMQP_RESPONSE_NORMAL);
 
     if (AMQP_RESPONSE_NORMAL != res.reply_type) {
+        if (res.reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION &&
+            res.library_error == AMQP_STATUS_TIMEOUT) {
+            errno = EAGAIN;
+            if (!AMQP_Service_Connection(queue->pReadSocket, __func__)) {
+                rzb_log(LOG_ERR, LOG_C_QUEUE,
+                        "%s: Error servicing read connection after timeout, reconnecting read side",
+                        __func__);
+                Queue_Reconnect(queue, QUEUE_FLAG_RECV);
+                receiveError = "failed to service read connection";
+                errno = EIO;
+            }
+            goto cleanup;
+        }
         AMQP_error(res, __func__);
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error consuming message, reconnecting read side", __func__);
         Queue_Reconnect(queue, QUEUE_FLAG_RECV);
@@ -787,6 +837,8 @@ Queue_Get (struct Queue *queue)
     }
     memcpy(ret->serialized, envelope.message.body.bytes, envelope.message.body.len);
     ret->length = envelope.message.body.len;
+    ret->brokerDeliveryTag = envelope.delivery_tag;
+    ret->brokerAckPending = false;
     if (envelope.message.properties._flags & AMQP_BASIC_HEADERS_FLAG) {
         //rzb_log(LOG_DEBUG, LOG_C_QUEUE, "%s: Message has %u headers", __func__, envelope.message.properties.headers.num_entries);
         for (headerIndex = 0; headerIndex < envelope.message.properties.headers.num_entries; headerIndex++) {
@@ -868,14 +920,14 @@ Queue_Get (struct Queue *queue)
         }
     }
 
-    ackErr = amqp_basic_ack(queue->pReadSocket->pConn, AMQP_CHAN_ID,
-                            envelope.delivery_tag, 0);
-    if (ackErr < 0) {
-        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to ack delivery: %s",
-                __func__, amqp_error_string2(ackErr));
-        Queue_Reconnect(queue, QUEUE_FLAG_RECV);
-        receiveError = "failed to acknowledge delivery";
+    if (autoAck) {
+        if (!Queue_Acknowledge_Delivery(queue, envelope.delivery_tag, __func__)) {
+            receiveError = "failed to acknowledge delivery";
+        } else {
+            receiveSuccess = true;
+        }
     } else {
+        ret->brokerAckPending = true;
         receiveSuccess = true;
     }
 
@@ -897,6 +949,86 @@ cleanup:
         }
         return NULL;
     }
+
+    return ret;
+}
+
+SO_PUBLIC struct Message *
+Queue_Get(struct Queue *queue)
+{
+    return Queue_Get_Ex(queue, true, 0);
+}
+
+SO_PUBLIC bool
+Queue_Ack_Message(struct Queue *queue, struct Message *message)
+{
+    bool ret;
+
+    ASSERT(queue != NULL);
+    ASSERT(message != NULL);
+    if (queue == NULL || message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue or message is NULL", __func__);
+        return false;
+    }
+
+    if (!message->brokerAckPending)
+        return true;
+
+    Mutex_Lock(queue->mReadMutex);
+    if (queue->bShuttingDown) {
+        Mutex_Unlock(queue->mReadMutex);
+        return false;
+    }
+
+    if (queue->pReadSocket == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Read socket unavailable, attempting reconnect", __func__);
+        if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV) || queue->pReadSocket == NULL) {
+            Mutex_Unlock(queue->mReadMutex);
+            return false;
+        }
+    }
+
+    ret = Queue_Acknowledge_Delivery(queue, message->brokerDeliveryTag, __func__);
+    Mutex_Unlock(queue->mReadMutex);
+    if (ret)
+        message->brokerAckPending = false;
+
+    return ret;
+}
+
+SO_PUBLIC bool
+Queue_Reject_Message(struct Queue *queue, struct Message *message, bool requeue)
+{
+    bool ret;
+
+    ASSERT(queue != NULL);
+    ASSERT(message != NULL);
+    if (queue == NULL || message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue or message is NULL", __func__);
+        return false;
+    }
+
+    if (!message->brokerAckPending)
+        return true;
+
+    Mutex_Lock(queue->mReadMutex);
+    if (queue->bShuttingDown) {
+        Mutex_Unlock(queue->mReadMutex);
+        return false;
+    }
+
+    if (queue->pReadSocket == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Read socket unavailable, attempting reconnect", __func__);
+        if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV) || queue->pReadSocket == NULL) {
+            Mutex_Unlock(queue->mReadMutex);
+            return false;
+        }
+    }
+
+    ret = Queue_Reject_Delivery(queue, message->brokerDeliveryTag, requeue, __func__);
+    Mutex_Unlock(queue->mReadMutex);
+    if (ret)
+        message->brokerAckPending = false;
 
     return ret;
 }
