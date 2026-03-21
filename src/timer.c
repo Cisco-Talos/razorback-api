@@ -44,11 +44,12 @@ struct Timer
     void (*function)(void *);  /* Function to call when the timer expires. */
     bool bStopRequested;       /* Has timer shutdown been requested? */
     bool bDestroyDeferred;     /* Will the worker free the timer on exit? */
+    bool bCleanupDone;         /* Have the timer resources already been released? */
+    uint32_t destroyWaiters;   /* Number of external destroy callers waiting on join. */
 };
 
 static void Timer_Main(Thread_t *thread);
 static bool Timer_ShouldStop(struct Timer *timer);
-static bool Timer_ShouldDeferDestroy(struct Timer *timer);
 static void Timer_SleepMilliseconds(uint32_t milliseconds);
 
 SO_PUBLIC struct Timer *
@@ -74,6 +75,8 @@ Timer_Create(uint32_t interval, void (*handler)(void *), void *userData)
     ret->interval = interval;
     ret->bStopRequested = false;
     ret->bDestroyDeferred = false;
+    ret->bCleanupDone = false;
+    ret->destroyWaiters = 0;
 
     ret->mutex = Mutex_Create(MUTEX_MODE_NORMAL);
     if (ret->mutex == NULL) {
@@ -99,7 +102,7 @@ Timer_Destroy(struct Timer *timer)
 {
     Thread_t *current;
     Thread_t *timerThread;
-    bool destroyDeferred;
+    bool cleanupNeeded = false;
 
     ASSERT(timer != NULL);
     if (timer == NULL) {
@@ -112,7 +115,6 @@ Timer_Destroy(struct Timer *timer)
     Mutex_Lock(timer->mutex);
     timer->bStopRequested = true;
     timerThread = timer->thread;
-    destroyDeferred = timer->bDestroyDeferred;
 
     if (current != NULL && current == timerThread) {
         timer->bDestroyDeferred = true;
@@ -123,6 +125,9 @@ Timer_Destroy(struct Timer *timer)
                 __func__);
         return;
     }
+
+    if (!timer->bCleanupDone && timerThread != NULL)
+        timer->destroyWaiters++;
     Mutex_Unlock(timer->mutex);
 
     if (current != NULL)
@@ -130,16 +135,24 @@ Timer_Destroy(struct Timer *timer)
 
     if (timerThread != NULL) {
         Thread_Join(timerThread);
-        if (destroyDeferred) {
-            return;
-        }
-        Thread_Destroy(timerThread);
-        timer->thread = NULL;
     }
 
-    if (timer->mutex != NULL)
+    Mutex_Lock(timer->mutex);
+    if (timer->destroyWaiters > 0)
+        timer->destroyWaiters--;
+    if (!timer->bCleanupDone && timer->destroyWaiters == 0) {
+        timer->bCleanupDone = true;
+        timer->thread = NULL;
+        cleanupNeeded = true;
+    }
+    Mutex_Unlock(timer->mutex);
+
+    if (cleanupNeeded) {
+        if (timerThread != NULL)
+            Thread_Destroy(timerThread);
         Mutex_Destroy(timer->mutex);
-    free(timer);
+        free(timer);
+    }
 }
 
 static void
@@ -177,11 +190,17 @@ Timer_Main(Thread_t *thread)
         timer->function(timer->userData);
     }
 
-    if (Timer_ShouldDeferDestroy(timer)) {
+    Mutex_Lock(timer->mutex);
+    if (timer->bDestroyDeferred && timer->destroyWaiters == 0 && !timer->bCleanupDone) {
+        timer->bCleanupDone = true;
         timer->thread = NULL;
+        Mutex_Unlock(timer->mutex);
+        Thread_Destroy(thread);
         Mutex_Destroy(timer->mutex);
         free(timer);
+        return;
     }
+    Mutex_Unlock(timer->mutex);
 }
 
 static bool
@@ -197,23 +216,6 @@ Timer_ShouldStop(struct Timer *timer)
 
     Mutex_Lock(timer->mutex);
     ret = timer->bStopRequested;
-    Mutex_Unlock(timer->mutex);
-    return ret;
-}
-
-static bool
-Timer_ShouldDeferDestroy(struct Timer *timer)
-{
-    bool ret;
-
-    ASSERT(timer != NULL);
-    if (timer == NULL) {
-        rzb_log(LOG_ERR, LOG_C_CORE, "%s: timer is NULL", __func__);
-        return false;
-    }
-
-    Mutex_Lock(timer->mutex);
-    ret = timer->bDestroyDeferred;
     Mutex_Unlock(timer->mutex);
     return ret;
 }

@@ -20,6 +20,7 @@
 
 #include <check.h>
 
+#include <razorback/thread.h>
 #include <razorback/timer.h>
 
 #include <errno.h>
@@ -97,6 +98,21 @@ wait_for_call_count_at_least(_Atomic unsigned int *count,
     return atomic_load(count) >= target;
 }
 
+static bool
+wait_for_thread_count(uint32_t target, unsigned int timeoutMs)
+{
+    unsigned int elapsed = 0U;
+
+    while (elapsed < timeoutMs) {
+        if (Thread_getCount() == target)
+            return true;
+        test_sleep_ms(TIMER_TEST_POLL_MS);
+        elapsed += TIMER_TEST_POLL_MS;
+    }
+
+    return Thread_getCount() == target;
+}
+
 static void
 update_max_concurrency(_Atomic unsigned int *maxConcurrent, unsigned int value)
 {
@@ -138,6 +154,22 @@ timer_self_destroy_callback(void *userData)
     atomic_fetch_add(&state->callCount, 1U);
     Timer_Destroy(state->selfDestroyTimer);
     atomic_store(&state->selfDestroyReturned, true);
+    atomic_store(&state->callbackExited, true);
+}
+
+static void
+timer_self_destroy_and_block_callback(void *userData)
+{
+    struct TimerCallbackState *state = userData;
+
+    atomic_store(&state->callbackEntered, true);
+    atomic_fetch_add(&state->callCount, 1U);
+    Timer_Destroy(state->selfDestroyTimer);
+    atomic_store(&state->selfDestroyReturned, true);
+
+    while (!atomic_load(&state->allowCallbackExit))
+        test_sleep_ms(TIMER_TEST_POLL_MS);
+
     atomic_store(&state->callbackExited, true);
 }
 
@@ -286,6 +318,40 @@ START_TEST(test_timer_destroy_from_callback_defers_cleanup)
 
     test_sleep_ms(1300U);
     ck_assert_uint_eq(atomic_load(&state.callCount), 1U);
+    ck_assert(wait_for_thread_count(0U, 1000U));
+}
+END_TEST
+
+START_TEST(test_timer_external_destroy_after_self_destroy_is_safe)
+{
+    struct TimerCallbackState state = { 0 };
+    struct DestroyThreadContext destroyContext = { 0 };
+    struct Timer *timer;
+    pthread_t destroyThread;
+
+    state.allowCallbackExit = false;
+    timer = Timer_Create(1U, timer_self_destroy_and_block_callback, &state);
+    ck_assert_ptr_ne(timer, NULL);
+    state.selfDestroyTimer = timer;
+
+    ck_assert(wait_for_condition(&state.callbackEntered, 2500U));
+    ck_assert(wait_for_condition(&state.selfDestroyReturned, 500U));
+
+    destroyContext.timer = timer;
+    ck_assert_int_eq(pthread_create(&destroyThread, NULL, destroy_timer_thread,
+                                    &destroyContext), 0);
+    ck_assert(wait_for_condition(&destroyContext.started, 500U));
+
+    test_sleep_ms(200U);
+    ck_assert(!atomic_load(&destroyContext.completed));
+
+    atomic_store(&state.allowCallbackExit, true);
+    ck_assert(wait_for_condition(&state.callbackExited, 500U));
+    ck_assert_int_eq(pthread_join(destroyThread, NULL), 0);
+    ck_assert(atomic_load(&destroyContext.completed));
+
+    test_sleep_ms(1300U);
+    ck_assert_uint_eq(atomic_load(&state.callCount), 1U);
 }
 END_TEST
 
@@ -306,6 +372,7 @@ timer_suite(void)
     tcase_add_test(testcase, test_timer_destroy_waits_for_callback_completion);
     tcase_add_test(testcase, test_timer_callbacks_do_not_overlap);
     tcase_add_test(testcase, test_timer_destroy_from_callback_defers_cleanup);
+    tcase_add_test(testcase, test_timer_external_destroy_after_self_destroy_is_safe);
     tcase_set_timeout(testcase, 20);
 
     suite_add_tcase(suite, testcase);
