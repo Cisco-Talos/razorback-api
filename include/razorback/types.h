@@ -47,6 +47,8 @@ typedef struct _List List_t;
 typedef struct _Thread Thread_t;
 
 typedef struct TelemetryContextCarrier TelemetryContextCarrier_t;
+typedef struct TelemetryMetric TelemetryMetric_t;
+typedef struct TelemetryObservation TelemetryObservation_t;
 typedef struct TelemetrySpan TelemetrySpan_t;
 
 

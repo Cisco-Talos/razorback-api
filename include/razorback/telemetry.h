@@ -17,7 +17,7 @@
  */
 
 /** @file telemetry.h
- * Telemetry span helpers.
+ * Telemetry tracing and metrics helpers.
  */
 #ifndef RAZORBACK_PUBLIC_TELEMETRY_H
 #define RAZORBACK_PUBLIC_TELEMETRY_H
@@ -36,6 +36,29 @@ typedef enum TelemetrySpanKind
     TELEMETRY_SPAN_KIND_PRODUCER = 2,
     TELEMETRY_SPAN_KIND_CLIENT = 3
 } TelemetrySpanKind_t;
+
+typedef enum TelemetryMetricAttributeType
+{
+    TELEMETRY_METRIC_ATTRIBUTE_STRING = 0,
+    TELEMETRY_METRIC_ATTRIBUTE_INT = 1,
+    TELEMETRY_METRIC_ATTRIBUTE_DOUBLE = 2,
+    TELEMETRY_METRIC_ATTRIBUTE_BOOL = 3
+} TelemetryMetricAttributeType_t;
+
+typedef struct TelemetryMetricAttribute
+{
+    const char *name;
+    TelemetryMetricAttributeType_t type;
+    const char *stringValue;
+    int64_t intValue;
+    double doubleValue;
+    bool boolValue;
+} TelemetryMetricAttribute_t;
+
+typedef void (*TelemetryObservableCallback_t)(
+    TelemetryObservation_t *observation,
+    void *userData
+);
 
 /**
  * Capture the current tracing context into a reusable carrier.
@@ -132,6 +155,236 @@ SO_PUBLIC extern void Telemetry_EndSpan(
     TelemetrySpan_t *span,
     bool success,
     const char *description
+);
+
+/**
+ * Create a uint64 counter instrument.
+ * @param name Metric name.
+ * @param description Metric description.
+ * @param unit Metric unit.
+ * @return A metric handle on success, or NULL when metrics are unavailable.
+ */
+SO_PUBLIC extern TelemetryMetric_t * Telemetry_CreateUInt64Counter(
+    const char *name,
+    const char *description,
+    const char *unit
+);
+
+/**
+ * Create a double counter instrument.
+ * @param name Metric name.
+ * @param description Metric description.
+ * @param unit Metric unit.
+ * @return A metric handle on success, or NULL when metrics are unavailable.
+ */
+SO_PUBLIC extern TelemetryMetric_t * Telemetry_CreateDoubleCounter(
+    const char *name,
+    const char *description,
+    const char *unit
+);
+
+/**
+ * Create an int64 up-down counter instrument.
+ * @param name Metric name.
+ * @param description Metric description.
+ * @param unit Metric unit.
+ * @return A metric handle on success, or NULL when metrics are unavailable.
+ */
+SO_PUBLIC extern TelemetryMetric_t * Telemetry_CreateInt64UpDownCounter(
+    const char *name,
+    const char *description,
+    const char *unit
+);
+
+/**
+ * Create a double up-down counter instrument.
+ * @param name Metric name.
+ * @param description Metric description.
+ * @param unit Metric unit.
+ * @return A metric handle on success, or NULL when metrics are unavailable.
+ */
+SO_PUBLIC extern TelemetryMetric_t * Telemetry_CreateDoubleUpDownCounter(
+    const char *name,
+    const char *description,
+    const char *unit
+);
+
+/**
+ * Create a uint64 histogram instrument.
+ * @param name Metric name.
+ * @param description Metric description.
+ * @param unit Metric unit.
+ * @return A metric handle on success, or NULL when metrics are unavailable.
+ */
+SO_PUBLIC extern TelemetryMetric_t * Telemetry_CreateUInt64Histogram(
+    const char *name,
+    const char *description,
+    const char *unit
+);
+
+/**
+ * Create a double histogram instrument.
+ * @param name Metric name.
+ * @param description Metric description.
+ * @param unit Metric unit.
+ * @return A metric handle on success, or NULL when metrics are unavailable.
+ */
+SO_PUBLIC extern TelemetryMetric_t * Telemetry_CreateDoubleHistogram(
+    const char *name,
+    const char *description,
+    const char *unit
+);
+
+/**
+ * Create an int64 observable gauge instrument.
+ * @param name Metric name.
+ * @param description Metric description.
+ * @param unit Metric unit.
+ * @param callback Callback invoked during metric collection.
+ * @param userData Opaque user pointer passed to the callback.
+ * @return A metric handle on success, or NULL when metrics are unavailable.
+ */
+SO_PUBLIC extern TelemetryMetric_t * Telemetry_CreateInt64ObservableGauge(
+    const char *name,
+    const char *description,
+    const char *unit,
+    TelemetryObservableCallback_t callback,
+    void *userData
+);
+
+/**
+ * Create a double observable gauge instrument.
+ * @param name Metric name.
+ * @param description Metric description.
+ * @param unit Metric unit.
+ * @param callback Callback invoked during metric collection.
+ * @param userData Opaque user pointer passed to the callback.
+ * @return A metric handle on success, or NULL when metrics are unavailable.
+ */
+SO_PUBLIC extern TelemetryMetric_t * Telemetry_CreateDoubleObservableGauge(
+    const char *name,
+    const char *description,
+    const char *unit,
+    TelemetryObservableCallback_t callback,
+    void *userData
+);
+
+/**
+ * Destroy a metric instrument handle.
+ * @param metric Metric handle to release.
+ */
+SO_PUBLIC extern void Telemetry_DestroyMetric(TelemetryMetric_t *metric);
+
+/**
+ * Add a value to a uint64 counter.
+ * @param metric Counter handle created by Telemetry_CreateUInt64Counter.
+ * @param value Value to add.
+ * @param attributes Optional attribute array.
+ * @param attributeCount Number of attributes in the array.
+ */
+SO_PUBLIC extern void Telemetry_CounterAddUInt64(
+    TelemetryMetric_t *metric,
+    uint64_t value,
+    const TelemetryMetricAttribute_t *attributes,
+    size_t attributeCount
+);
+
+/**
+ * Add a value to a double counter.
+ * @param metric Counter handle created by Telemetry_CreateDoubleCounter.
+ * @param value Value to add.
+ * @param attributes Optional attribute array.
+ * @param attributeCount Number of attributes in the array.
+ */
+SO_PUBLIC extern void Telemetry_CounterAddDouble(
+    TelemetryMetric_t *metric,
+    double value,
+    const TelemetryMetricAttribute_t *attributes,
+    size_t attributeCount
+);
+
+/**
+ * Add a value to an int64 up-down counter.
+ * @param metric Counter handle created by Telemetry_CreateInt64UpDownCounter.
+ * @param value Value to add.
+ * @param attributes Optional attribute array.
+ * @param attributeCount Number of attributes in the array.
+ */
+SO_PUBLIC extern void Telemetry_UpDownCounterAddInt64(
+    TelemetryMetric_t *metric,
+    int64_t value,
+    const TelemetryMetricAttribute_t *attributes,
+    size_t attributeCount
+);
+
+/**
+ * Add a value to a double up-down counter.
+ * @param metric Counter handle created by Telemetry_CreateDoubleUpDownCounter.
+ * @param value Value to add.
+ * @param attributes Optional attribute array.
+ * @param attributeCount Number of attributes in the array.
+ */
+SO_PUBLIC extern void Telemetry_UpDownCounterAddDouble(
+    TelemetryMetric_t *metric,
+    double value,
+    const TelemetryMetricAttribute_t *attributes,
+    size_t attributeCount
+);
+
+/**
+ * Record a value to a uint64 histogram.
+ * @param metric Histogram handle created by Telemetry_CreateUInt64Histogram.
+ * @param value Value to record.
+ * @param attributes Optional attribute array.
+ * @param attributeCount Number of attributes in the array.
+ */
+SO_PUBLIC extern void Telemetry_HistogramRecordUInt64(
+    TelemetryMetric_t *metric,
+    uint64_t value,
+    const TelemetryMetricAttribute_t *attributes,
+    size_t attributeCount
+);
+
+/**
+ * Record a value to a double histogram.
+ * @param metric Histogram handle created by Telemetry_CreateDoubleHistogram.
+ * @param value Value to record.
+ * @param attributes Optional attribute array.
+ * @param attributeCount Number of attributes in the array.
+ */
+SO_PUBLIC extern void Telemetry_HistogramRecordDouble(
+    TelemetryMetric_t *metric,
+    double value,
+    const TelemetryMetricAttribute_t *attributes,
+    size_t attributeCount
+);
+
+/**
+ * Observe an int64 value inside an observable gauge callback.
+ * @param observation Observation handle passed to the callback.
+ * @param value Value to observe.
+ * @param attributes Optional attribute array.
+ * @param attributeCount Number of attributes in the array.
+ */
+SO_PUBLIC extern void Telemetry_ObservableObserveInt64(
+    TelemetryObservation_t *observation,
+    int64_t value,
+    const TelemetryMetricAttribute_t *attributes,
+    size_t attributeCount
+);
+
+/**
+ * Observe a double value inside an observable gauge callback.
+ * @param observation Observation handle passed to the callback.
+ * @param value Value to observe.
+ * @param attributes Optional attribute array.
+ * @param attributeCount Number of attributes in the array.
+ */
+SO_PUBLIC extern void Telemetry_ObservableObserveDouble(
+    TelemetryObservation_t *observation,
+    double value,
+    const TelemetryMetricAttribute_t *attributes,
+    size_t attributeCount
 );
 
 #ifdef __cplusplus

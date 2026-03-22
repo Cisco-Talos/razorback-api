@@ -89,11 +89,11 @@ if test "x$prefix" != "xNONE"; then
 fi
 
 PKG_CHECK_MODULES([OPENTELEMETRY_CPP],
-                  [opentelemetry_trace opentelemetry_exporter_otlp_http opentelemetry_exporter_otlp_http_log],
+                  [opentelemetry_trace opentelemetry_exporter_otlp_http opentelemetry_exporter_otlp_http_log opentelemetry_exporter_otlp_http_metric],
                   [have_opentelemetry_cpp=yes],
                   [have_opentelemetry_cpp=no])
 AS_IF([test "x$have_opentelemetry_cpp" != "xyes"], [
-    AC_MSG_ERROR([opentelemetry-cpp is required; install opentelemetry_trace, opentelemetry_exporter_otlp_http, and opentelemetry_exporter_otlp_http_log])
+    AC_MSG_ERROR([opentelemetry-cpp is required; install opentelemetry_trace, opentelemetry_exporter_otlp_http, opentelemetry_exporter_otlp_http_log, and opentelemetry_exporter_otlp_http_metric])
 ])
 
 PKG_CHECK_MODULES([PROTOBUF], [protobuf], [], [

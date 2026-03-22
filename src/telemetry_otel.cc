@@ -28,6 +28,7 @@
 #include <razorback/hash.h>
 #include <razorback/uuids.h>
 
+#include <opentelemetry/common/key_value_iterable.h>
 #include <opentelemetry/baggage/propagation/baggage_propagator.h>
 #include <opentelemetry/context/propagation/global_propagator.h>
 #include <opentelemetry/context/propagation/composite_propagator.h>
@@ -37,14 +38,27 @@
 #include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>
 #include <opentelemetry/exporters/otlp/otlp_http_log_record_exporter_factory.h>
 #include <opentelemetry/exporters/otlp/otlp_http_log_record_exporter_options.h>
+#include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_factory.h>
+#include <opentelemetry/exporters/otlp/otlp_http_metric_exporter_options.h>
 #include <opentelemetry/logs/log_record.h>
 #include <opentelemetry/logs/logger.h>
 #include <opentelemetry/logs/provider.h>
 #include <opentelemetry/logs/severity.h>
+#include <opentelemetry/metrics/async_instruments.h>
+#include <opentelemetry/metrics/meter.h>
+#include <opentelemetry/metrics/noop.h>
+#include <opentelemetry/metrics/observer_result.h>
+#include <opentelemetry/metrics/provider.h>
+#include <opentelemetry/metrics/sync_instruments.h>
 #include <opentelemetry/sdk/logs/batch_log_record_processor_factory.h>
 #include <opentelemetry/sdk/logs/batch_log_record_processor_options.h>
 #include <opentelemetry/sdk/logs/logger_provider.h>
 #include <opentelemetry/sdk/logs/logger_provider_factory.h>
+#include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_factory.h>
+#include <opentelemetry/sdk/metrics/export/periodic_exporting_metric_reader_options.h>
+#include <opentelemetry/sdk/metrics/meter_provider.h>
+#include <opentelemetry/sdk/metrics/meter_provider_factory.h>
+#include <opentelemetry/sdk/metrics/view/view_registry.h>
 #include <opentelemetry/sdk/resource/resource.h>
 #include <opentelemetry/sdk/trace/batch_span_processor_factory.h>
 #include <opentelemetry/sdk/trace/batch_span_processor_options.h>
@@ -67,9 +81,12 @@
 #include <utility>
 #include <vector>
 
+namespace common_api      = opentelemetry::common;
 namespace context_api      = opentelemetry::context;
 namespace logs_api         = opentelemetry::logs;
 namespace logs_sdk         = opentelemetry::sdk::logs;
+namespace metrics_api      = opentelemetry::metrics;
+namespace metrics_sdk      = opentelemetry::sdk::metrics;
 namespace propagation_api  = opentelemetry::context::propagation;
 namespace otlp_exporter    = opentelemetry::exporter::otlp;
 namespace resource_sdk     = opentelemetry::sdk::resource;
@@ -99,8 +116,114 @@ struct TelemetrySpan
   opentelemetry::nostd::unique_ptr<context_api::Token> token;
 };
 
+enum class TelemetryMetricKind
+{
+  kNone,
+  kUInt64Counter,
+  kDoubleCounter,
+  kInt64UpDownCounter,
+  kDoubleUpDownCounter,
+  kUInt64Histogram,
+  kDoubleHistogram,
+  kInt64ObservableGauge,
+  kDoubleObservableGauge
+};
+
+struct TelemetryMetric
+{
+  TelemetryMetricKind kind = TelemetryMetricKind::kNone;
+  opentelemetry::nostd::unique_ptr<metrics_api::Counter<uint64_t>> uint64Counter;
+  opentelemetry::nostd::unique_ptr<metrics_api::Counter<double>> doubleCounter;
+  opentelemetry::nostd::unique_ptr<metrics_api::UpDownCounter<int64_t>> int64UpDownCounter;
+  opentelemetry::nostd::unique_ptr<metrics_api::UpDownCounter<double>> doubleUpDownCounter;
+  opentelemetry::nostd::unique_ptr<metrics_api::Histogram<uint64_t>> uint64Histogram;
+  opentelemetry::nostd::unique_ptr<metrics_api::Histogram<double>> doubleHistogram;
+  opentelemetry::nostd::shared_ptr<metrics_api::ObservableInstrument> observableGauge;
+  TelemetryObservableCallback_t observableCallback = nullptr;
+  void *observableUserData = nullptr;
+};
+
+struct TelemetryObservation
+{
+  opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<int64_t>> int64Observer;
+  opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<double>> doubleObserver;
+};
+
 namespace
 {
+class MetricAttributesIterable final : public common_api::KeyValueIterable
+{
+public:
+  MetricAttributesIterable(const TelemetryMetricAttribute_t *attributes,
+                           size_t count) noexcept
+      : attributes_(attributes), count_(count)
+  {
+  }
+
+  bool ForEachKeyValue(
+      opentelemetry::nostd::function_ref<bool(opentelemetry::nostd::string_view,
+                                              common_api::AttributeValue)> callback)
+      const noexcept override
+  {
+    if (attributes_ == nullptr || count_ == 0)
+      return true;
+
+    for (size_t i = 0; i < count_; ++i)
+    {
+      const TelemetryMetricAttribute_t &attribute = attributes_[i];
+
+      if (attribute.name == nullptr || attribute.name[0] == '\0')
+        continue;
+
+      switch (attribute.type)
+      {
+      case TELEMETRY_METRIC_ATTRIBUTE_STRING:
+        if (!callback(attribute.name,
+                      opentelemetry::nostd::string_view(
+                          attribute.stringValue != nullptr ? attribute.stringValue : "")))
+          return false;
+        break;
+      case TELEMETRY_METRIC_ATTRIBUTE_INT:
+        if (!callback(attribute.name, attribute.intValue))
+          return false;
+        break;
+      case TELEMETRY_METRIC_ATTRIBUTE_DOUBLE:
+        if (!callback(attribute.name, attribute.doubleValue))
+          return false;
+        break;
+      case TELEMETRY_METRIC_ATTRIBUTE_BOOL:
+        if (!callback(attribute.name, attribute.boolValue))
+          return false;
+        break;
+      default:
+        break;
+      }
+    }
+
+    return true;
+  }
+
+  size_t size() const noexcept override
+  {
+    size_t valid_count = 0;
+
+    if (attributes_ == nullptr || count_ == 0)
+      return 0;
+
+    for (size_t i = 0; i < count_; ++i)
+    {
+      if (attributes_[i].name != nullptr && attributes_[i].name[0] != '\0')
+        ++valid_count;
+    }
+
+    return valid_count;
+  }
+
+private:
+  const TelemetryMetricAttribute_t *attributes_;
+  size_t count_;
+};
+
 class InjectedHeadersCarrier final : public propagation_api::TextMapCarrier
 {
 public:
@@ -195,12 +318,16 @@ struct TelemetryState
   bool initialized      = false;
   bool tracing_enabled  = false;
   bool logging_enabled  = false;
+  bool metrics_enabled  = false;
   std::shared_ptr<trace_sdk::TracerProvider> sdk_provider;
   opentelemetry::nostd::shared_ptr<trace_api::TracerProvider> provider;
   opentelemetry::nostd::shared_ptr<trace_api::Tracer> tracer;
   std::shared_ptr<logs_sdk::LoggerProvider> sdk_logger_provider;
   opentelemetry::nostd::shared_ptr<logs_api::LoggerProvider> logger_provider;
   opentelemetry::nostd::shared_ptr<logs_api::Logger> logger;
+  std::shared_ptr<metrics_sdk::MeterProvider> sdk_meter_provider;
+  opentelemetry::nostd::shared_ptr<metrics_api::MeterProvider> meter_provider;
+  opentelemetry::nostd::shared_ptr<metrics_api::Meter> meter;
 };
 
 TelemetryState &
@@ -316,6 +443,12 @@ MakeSpanName(const char *operation, const char *destination)
   }
 
   return name;
+}
+
+const char *
+SafeString(const char *value) noexcept
+{
+  return value != nullptr ? value : "";
 }
 
 context_api::Context
@@ -704,6 +837,82 @@ StartSpanWithLink(const char *span_name,
     return nullptr;
   }
 }
+
+template <typename Instrument, typename Value>
+void
+AddMetricValue(Instrument *instrument,
+               Value value,
+               const TelemetryMetricAttribute_t *attributes,
+               size_t attribute_count) noexcept
+{
+  MetricAttributesIterable metric_attributes(attributes, attribute_count);
+
+  if (instrument == nullptr)
+    return;
+
+  instrument->Add(value, metric_attributes, context_api::RuntimeContext::GetCurrent());
+}
+
+template <typename Instrument, typename Value>
+void
+RecordMetricValue(Instrument *instrument,
+                  Value value,
+                  const TelemetryMetricAttribute_t *attributes,
+                  size_t attribute_count) noexcept
+{
+  MetricAttributesIterable metric_attributes(attributes, attribute_count);
+
+  if (instrument == nullptr)
+    return;
+
+  instrument->Record(value, metric_attributes, context_api::RuntimeContext::GetCurrent());
+}
+
+void
+TelemetryObservableGaugeCallbackBridge(metrics_api::ObserverResult observer_result,
+                                       void *state) noexcept
+{
+  auto *metric = static_cast<TelemetryMetric_t *>(state);
+  TelemetryObservation_t observation;
+
+  if (metric == nullptr || metric->observableCallback == nullptr)
+    return;
+
+  try
+  {
+    switch (metric->kind)
+    {
+    case TelemetryMetricKind::kInt64ObservableGauge:
+      if (!opentelemetry::nostd::holds_alternative<
+              opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<int64_t>>>(
+              observer_result))
+        return;
+      observation.int64Observer =
+          opentelemetry::nostd::get<
+              opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<int64_t>>>(
+              observer_result);
+      break;
+    case TelemetryMetricKind::kDoubleObservableGauge:
+      if (!opentelemetry::nostd::holds_alternative<
+              opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<double>>>(
+              observer_result))
+        return;
+      observation.doubleObserver =
+          opentelemetry::nostd::get<
+              opentelemetry::nostd::shared_ptr<metrics_api::ObserverResultT<double>>>(
+              observer_result);
+      break;
+    default:
+      return;
+    }
+
+    metric->observableCallback(&observation, metric->observableUserData);
+  }
+  catch (...)
+  {
+    rzb_log(LOG_ERR, LOG_C_CORE, "%s: observable metric callback failed", __func__);
+  }
+}
 }  // namespace
 
 extern "C" bool
@@ -717,19 +926,24 @@ Telemetry_Initialize(void)
     std::unique_ptr<trace_sdk::SpanProcessor> trace_processor;
     std::unique_ptr<logs_sdk::LogRecordExporter> log_exporter;
     std::unique_ptr<logs_sdk::LogRecordProcessor> log_processor;
+    std::unique_ptr<metrics_sdk::PushMetricExporter> metric_exporter;
+    std::unique_ptr<metrics_sdk::MetricReader> metric_reader;
     std::vector<std::unique_ptr<propagation_api::TextMapPropagator>> propagators;
     resource_sdk::Resource resource;
     resource_sdk::ResourceAttributes resource_attributes;
     otlp_exporter::OtlpHttpExporterOptions trace_exporter_options;
     otlp_exporter::OtlpHttpLogRecordExporterOptions log_exporter_options;
+    otlp_exporter::OtlpHttpMetricExporterOptions metric_exporter_options;
     trace_sdk::BatchSpanProcessorOptions trace_batch_options;
     logs_sdk::BatchLogRecordProcessorOptions log_batch_options;
+    metrics_sdk::PeriodicExportingMetricReaderOptions metric_reader_options;
 
     if (state.initialized)
       return true;
 
     state.tracing_enabled = false;
     state.logging_enabled = false;
+    state.metrics_enabled = false;
 
     if (IsEnvTrue("OTEL_SDK_DISABLED"))
     {
@@ -767,6 +981,24 @@ Telemetry_Initialize(void)
         state.logger_provider->GetLogger("razorback.api.logging", "", PACKAGE_VERSION);
     state.logging_enabled = true;
 
+    metric_exporter =
+        otlp_exporter::OtlpHttpMetricExporterFactory::Create(metric_exporter_options);
+    metric_reader = metrics_sdk::PeriodicExportingMetricReaderFactory::Create(
+        std::move(metric_exporter), metric_reader_options);
+    state.sdk_meter_provider = std::shared_ptr<metrics_sdk::MeterProvider>(
+        metrics_sdk::MeterProviderFactory::Create(
+            std::unique_ptr<metrics_sdk::ViewRegistry>(new metrics_sdk::ViewRegistry()),
+            resource)
+            .release());
+    state.sdk_meter_provider->AddMetricReader(
+        std::shared_ptr<metrics_sdk::MetricReader>(metric_reader.release()));
+    state.meter_provider = opentelemetry::nostd::shared_ptr<metrics_api::MeterProvider>(
+        std::shared_ptr<metrics_api::MeterProvider>(state.sdk_meter_provider));
+    metrics_api::Provider::SetMeterProvider(state.meter_provider);
+    state.meter =
+        state.meter_provider->GetMeter("razorback.api.metrics", PACKAGE_VERSION);
+    state.metrics_enabled = true;
+
     propagators.emplace_back(new trace_api::propagation::HttpTraceContext);
     propagators.emplace_back(new opentelemetry::baggage::propagation::BaggagePropagator);
     propagation_api::GlobalTextMapPropagator::SetGlobalPropagator(
@@ -785,8 +1017,15 @@ Telemetry_Initialize(void)
     state.logger = opentelemetry::nostd::shared_ptr<logs_api::Logger>();
     state.logger_provider = opentelemetry::nostd::shared_ptr<logs_api::LoggerProvider>();
     state.sdk_logger_provider.reset();
+    metrics_api::Provider::SetMeterProvider(
+        opentelemetry::nostd::shared_ptr<metrics_api::MeterProvider>(
+            std::make_shared<metrics_api::NoopMeterProvider>()));
+    state.meter = opentelemetry::nostd::shared_ptr<metrics_api::Meter>();
+    state.meter_provider = opentelemetry::nostd::shared_ptr<metrics_api::MeterProvider>();
+    state.sdk_meter_provider.reset();
     state.tracing_enabled = false;
     state.logging_enabled = false;
+    state.metrics_enabled = false;
     state.initialized = false;
     return false;
   }
@@ -810,6 +1049,11 @@ Telemetry_Shutdown(void)
     state.sdk_logger_provider->ForceFlush();
     state.sdk_logger_provider->Shutdown();
   }
+  if (state.sdk_meter_provider)
+  {
+    state.sdk_meter_provider->ForceFlush();
+    state.sdk_meter_provider->Shutdown();
+  }
 
   trace_api::Provider::SetTracerProvider(
       opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>(
@@ -817,14 +1061,21 @@ Telemetry_Shutdown(void)
   logs_api::Provider::SetLoggerProvider(
       opentelemetry::nostd::shared_ptr<logs_api::LoggerProvider>(
           std::make_shared<logs_api::NoopLoggerProvider>()));
+  metrics_api::Provider::SetMeterProvider(
+      opentelemetry::nostd::shared_ptr<metrics_api::MeterProvider>(
+          std::make_shared<metrics_api::NoopMeterProvider>()));
   state.tracer = opentelemetry::nostd::shared_ptr<trace_api::Tracer>();
   state.provider = opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>();
   state.sdk_provider.reset();
   state.logger = opentelemetry::nostd::shared_ptr<logs_api::Logger>();
   state.logger_provider = opentelemetry::nostd::shared_ptr<logs_api::LoggerProvider>();
   state.sdk_logger_provider.reset();
+  state.meter = opentelemetry::nostd::shared_ptr<metrics_api::Meter>();
+  state.meter_provider = opentelemetry::nostd::shared_ptr<metrics_api::MeterProvider>();
+  state.sdk_meter_provider.reset();
   state.tracing_enabled = false;
   state.logging_enabled = false;
+  state.metrics_enabled = false;
   state.initialized = false;
 }
 
@@ -1083,6 +1334,399 @@ Telemetry_EndSpan(TelemetrySpan_t *span, bool success, const char *description)
   }
 
   delete span;
+}
+
+extern "C" TelemetryMetric_t *
+Telemetry_CreateUInt64Counter(const char *name,
+                              const char *description,
+                              const char *unit)
+{
+  TelemetryState &state = GetTelemetryState();
+  TelemetryMetric_t *metric = nullptr;
+
+  if (!state.metrics_enabled || state.meter == nullptr || name == nullptr || name[0] == '\0')
+    return nullptr;
+
+  try
+  {
+    metric = new TelemetryMetric;
+    metric->kind = TelemetryMetricKind::kUInt64Counter;
+    metric->uint64Counter =
+        state.meter->CreateUInt64Counter(SafeString(name), SafeString(description),
+                                         SafeString(unit));
+    if (metric->uint64Counter == nullptr)
+    {
+      delete metric;
+      return nullptr;
+    }
+    return metric;
+  }
+  catch (...)
+  {
+    delete metric;
+    rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to create telemetry metric", __func__);
+    return nullptr;
+  }
+}
+
+extern "C" TelemetryMetric_t *
+Telemetry_CreateDoubleCounter(const char *name,
+                              const char *description,
+                              const char *unit)
+{
+  TelemetryState &state = GetTelemetryState();
+  TelemetryMetric_t *metric = nullptr;
+
+  if (!state.metrics_enabled || state.meter == nullptr || name == nullptr || name[0] == '\0')
+    return nullptr;
+
+  try
+  {
+    metric = new TelemetryMetric;
+    metric->kind = TelemetryMetricKind::kDoubleCounter;
+    metric->doubleCounter =
+        state.meter->CreateDoubleCounter(SafeString(name), SafeString(description),
+                                         SafeString(unit));
+    if (metric->doubleCounter == nullptr)
+    {
+      delete metric;
+      return nullptr;
+    }
+    return metric;
+  }
+  catch (...)
+  {
+    delete metric;
+    rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to create telemetry metric", __func__);
+    return nullptr;
+  }
+}
+
+extern "C" TelemetryMetric_t *
+Telemetry_CreateInt64UpDownCounter(const char *name,
+                                   const char *description,
+                                   const char *unit)
+{
+  TelemetryState &state = GetTelemetryState();
+  TelemetryMetric_t *metric = nullptr;
+
+  if (!state.metrics_enabled || state.meter == nullptr || name == nullptr || name[0] == '\0')
+    return nullptr;
+
+  try
+  {
+    metric = new TelemetryMetric;
+    metric->kind = TelemetryMetricKind::kInt64UpDownCounter;
+    metric->int64UpDownCounter =
+        state.meter->CreateInt64UpDownCounter(SafeString(name),
+                                              SafeString(description),
+                                              SafeString(unit));
+    if (metric->int64UpDownCounter == nullptr)
+    {
+      delete metric;
+      return nullptr;
+    }
+    return metric;
+  }
+  catch (...)
+  {
+    delete metric;
+    rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to create telemetry metric", __func__);
+    return nullptr;
+  }
+}
+
+extern "C" TelemetryMetric_t *
+Telemetry_CreateDoubleUpDownCounter(const char *name,
+                                    const char *description,
+                                    const char *unit)
+{
+  TelemetryState &state = GetTelemetryState();
+  TelemetryMetric_t *metric = nullptr;
+
+  if (!state.metrics_enabled || state.meter == nullptr || name == nullptr || name[0] == '\0')
+    return nullptr;
+
+  try
+  {
+    metric = new TelemetryMetric;
+    metric->kind = TelemetryMetricKind::kDoubleUpDownCounter;
+    metric->doubleUpDownCounter =
+        state.meter->CreateDoubleUpDownCounter(SafeString(name),
+                                               SafeString(description),
+                                               SafeString(unit));
+    if (metric->doubleUpDownCounter == nullptr)
+    {
+      delete metric;
+      return nullptr;
+    }
+    return metric;
+  }
+  catch (...)
+  {
+    delete metric;
+    rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to create telemetry metric", __func__);
+    return nullptr;
+  }
+}
+
+extern "C" TelemetryMetric_t *
+Telemetry_CreateUInt64Histogram(const char *name,
+                                const char *description,
+                                const char *unit)
+{
+  TelemetryState &state = GetTelemetryState();
+  TelemetryMetric_t *metric = nullptr;
+
+  if (!state.metrics_enabled || state.meter == nullptr || name == nullptr || name[0] == '\0')
+    return nullptr;
+
+  try
+  {
+    metric = new TelemetryMetric;
+    metric->kind = TelemetryMetricKind::kUInt64Histogram;
+    metric->uint64Histogram =
+        state.meter->CreateUInt64Histogram(SafeString(name), SafeString(description),
+                                           SafeString(unit));
+    if (metric->uint64Histogram == nullptr)
+    {
+      delete metric;
+      return nullptr;
+    }
+    return metric;
+  }
+  catch (...)
+  {
+    delete metric;
+    rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to create telemetry metric", __func__);
+    return nullptr;
+  }
+}
+
+extern "C" TelemetryMetric_t *
+Telemetry_CreateDoubleHistogram(const char *name,
+                                const char *description,
+                                const char *unit)
+{
+  TelemetryState &state = GetTelemetryState();
+  TelemetryMetric_t *metric = nullptr;
+
+  if (!state.metrics_enabled || state.meter == nullptr || name == nullptr || name[0] == '\0')
+    return nullptr;
+
+  try
+  {
+    metric = new TelemetryMetric;
+    metric->kind = TelemetryMetricKind::kDoubleHistogram;
+    metric->doubleHistogram =
+        state.meter->CreateDoubleHistogram(SafeString(name), SafeString(description),
+                                           SafeString(unit));
+    if (metric->doubleHistogram == nullptr)
+    {
+      delete metric;
+      return nullptr;
+    }
+    return metric;
+  }
+  catch (...)
+  {
+    delete metric;
+    rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to create telemetry metric", __func__);
+    return nullptr;
+  }
+}
+
+extern "C" TelemetryMetric_t *
+Telemetry_CreateInt64ObservableGauge(const char *name,
+                                     const char *description,
+                                     const char *unit,
+                                     TelemetryObservableCallback_t callback,
+                                     void *userData)
+{
+  TelemetryState &state = GetTelemetryState();
+  TelemetryMetric_t *metric = nullptr;
+
+  if (!state.metrics_enabled || state.meter == nullptr || name == nullptr ||
+      name[0] == '\0' || callback == nullptr)
+    return nullptr;
+
+  try
+  {
+    metric = new TelemetryMetric;
+    metric->kind = TelemetryMetricKind::kInt64ObservableGauge;
+    metric->observableCallback = callback;
+    metric->observableUserData = userData;
+    metric->observableGauge = state.meter->CreateInt64ObservableGauge(
+        SafeString(name), SafeString(description), SafeString(unit));
+    if (metric->observableGauge == nullptr)
+    {
+      delete metric;
+      return nullptr;
+    }
+
+    metric->observableGauge->AddCallback(TelemetryObservableGaugeCallbackBridge,
+                                         metric);
+    return metric;
+  }
+  catch (...)
+  {
+    delete metric;
+    rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to create telemetry metric", __func__);
+    return nullptr;
+  }
+}
+
+extern "C" TelemetryMetric_t *
+Telemetry_CreateDoubleObservableGauge(const char *name,
+                                      const char *description,
+                                      const char *unit,
+                                      TelemetryObservableCallback_t callback,
+                                      void *userData)
+{
+  TelemetryState &state = GetTelemetryState();
+  TelemetryMetric_t *metric = nullptr;
+
+  if (!state.metrics_enabled || state.meter == nullptr || name == nullptr ||
+      name[0] == '\0' || callback == nullptr)
+    return nullptr;
+
+  try
+  {
+    metric = new TelemetryMetric;
+    metric->kind = TelemetryMetricKind::kDoubleObservableGauge;
+    metric->observableCallback = callback;
+    metric->observableUserData = userData;
+    metric->observableGauge = state.meter->CreateDoubleObservableGauge(
+        SafeString(name), SafeString(description), SafeString(unit));
+    if (metric->observableGauge == nullptr)
+    {
+      delete metric;
+      return nullptr;
+    }
+
+    metric->observableGauge->AddCallback(TelemetryObservableGaugeCallbackBridge,
+                                         metric);
+    return metric;
+  }
+  catch (...)
+  {
+    delete metric;
+    rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to create telemetry metric", __func__);
+    return nullptr;
+  }
+}
+
+extern "C" void
+Telemetry_DestroyMetric(TelemetryMetric_t *metric)
+{
+  if (metric != nullptr && metric->observableGauge != nullptr &&
+      metric->observableCallback != nullptr)
+  {
+    metric->observableGauge->RemoveCallback(TelemetryObservableGaugeCallbackBridge,
+                                            metric);
+  }
+
+  delete metric;
+}
+
+extern "C" void
+Telemetry_CounterAddUInt64(TelemetryMetric_t *metric,
+                           uint64_t value,
+                           const TelemetryMetricAttribute_t *attributes,
+                           size_t attributeCount)
+{
+  if (metric == nullptr || metric->kind != TelemetryMetricKind::kUInt64Counter)
+    return;
+
+  AddMetricValue(metric->uint64Counter.get(), value, attributes, attributeCount);
+}
+
+extern "C" void
+Telemetry_CounterAddDouble(TelemetryMetric_t *metric,
+                           double value,
+                           const TelemetryMetricAttribute_t *attributes,
+                           size_t attributeCount)
+{
+  if (metric == nullptr || metric->kind != TelemetryMetricKind::kDoubleCounter)
+    return;
+
+  AddMetricValue(metric->doubleCounter.get(), value, attributes, attributeCount);
+}
+
+extern "C" void
+Telemetry_UpDownCounterAddInt64(TelemetryMetric_t *metric,
+                                int64_t value,
+                                const TelemetryMetricAttribute_t *attributes,
+                                size_t attributeCount)
+{
+  if (metric == nullptr || metric->kind != TelemetryMetricKind::kInt64UpDownCounter)
+    return;
+
+  AddMetricValue(metric->int64UpDownCounter.get(), value, attributes, attributeCount);
+}
+
+extern "C" void
+Telemetry_UpDownCounterAddDouble(TelemetryMetric_t *metric,
+                                 double value,
+                                 const TelemetryMetricAttribute_t *attributes,
+                                 size_t attributeCount)
+{
+  if (metric == nullptr || metric->kind != TelemetryMetricKind::kDoubleUpDownCounter)
+    return;
+
+  AddMetricValue(metric->doubleUpDownCounter.get(), value, attributes, attributeCount);
+}
+
+extern "C" void
+Telemetry_HistogramRecordUInt64(TelemetryMetric_t *metric,
+                                uint64_t value,
+                                const TelemetryMetricAttribute_t *attributes,
+                                size_t attributeCount)
+{
+  if (metric == nullptr || metric->kind != TelemetryMetricKind::kUInt64Histogram)
+    return;
+
+  RecordMetricValue(metric->uint64Histogram.get(), value, attributes, attributeCount);
+}
+
+extern "C" void
+Telemetry_HistogramRecordDouble(TelemetryMetric_t *metric,
+                                double value,
+                                const TelemetryMetricAttribute_t *attributes,
+                                size_t attributeCount)
+{
+  if (metric == nullptr || metric->kind != TelemetryMetricKind::kDoubleHistogram)
+    return;
+
+  RecordMetricValue(metric->doubleHistogram.get(), value, attributes, attributeCount);
+}
+
+extern "C" void
+Telemetry_ObservableObserveInt64(TelemetryObservation_t *observation,
+                                 int64_t value,
+                                 const TelemetryMetricAttribute_t *attributes,
+                                 size_t attributeCount)
+{
+  MetricAttributesIterable metric_attributes(attributes, attributeCount);
+
+  if (observation == nullptr || observation->int64Observer == nullptr)
+    return;
+
+  observation->int64Observer->Observe(value, metric_attributes);
+}
+
+extern "C" void
+Telemetry_ObservableObserveDouble(TelemetryObservation_t *observation,
+                                  double value,
+                                  const TelemetryMetricAttribute_t *attributes,
+                                  size_t attributeCount)
+{
+  MetricAttributesIterable metric_attributes(attributes, attributeCount);
+
+  if (observation == nullptr || observation->doubleObserver == nullptr)
+    return;
+
+  observation->doubleObserver->Observe(value, metric_attributes);
 }
 
 extern "C" void
