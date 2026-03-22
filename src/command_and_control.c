@@ -504,12 +504,14 @@ static bool
 CommandAndControl_Register (struct RazorbackContext *p_pContext) {
     struct Message *regReq;
     struct ConnectedEntity *dispatcher = NULL;
+    double waitStartedAt;
 
     ASSERT (p_pContext != NULL);
     if (p_pContext == NULL) {
         rzb_log (LOG_ERR, LOG_C_CNC, "%s: Context is NULL", __func__);
         return false;
     }
+    waitStartedAt = Telemetry_GetMonotonicTimeSeconds();
     while ((dispatcher = ConnectedEntityList_GetDedicatedDispatcher()) == NULL) {
         rzb_log(LOG_INFO, LOG_C_CNC, "%s: Waiting for dispatcher", __func__);
 #ifdef _MSC_VER
@@ -518,6 +520,8 @@ CommandAndControl_Register (struct RazorbackContext *p_pContext) {
         sleep(1);
 #endif
     }
+    Telemetry_RecordDispatcherWait(Telemetry_GetMonotonicTimeSeconds() - waitStartedAt,
+                                   "available");
 
     if ((regReq = MessageRegistrationRequest_Initialize(
             dispatcher->uuidNuggetId,

@@ -206,6 +206,8 @@ Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
     int attempt_count = 0;
     enum TransferStatus status;
     const char *transferError = NULL;
+    const char *protocol = "none";
+    double transferStartedAt = Telemetry_GetMonotonicTimeSeconds();
 
     transferSpan = Telemetry_StartSpan("store block", NULL);
     if (item != NULL && item->pEvent != NULL)
@@ -214,6 +216,10 @@ Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
 
     if (dispatcher == NULL || dispatcher->dispatcher == NULL) {
         transferError = "missing dispatcher for store";
+        Telemetry_RecordTransferStoreDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                              "failure",
+                                              protocol);
+        Telemetry_RecordTransferFailure("store", protocol);
         Telemetry_EndSpan(transferSpan, false, transferError);
         return TRANSFER_FAIL_LOCAL;
     }
@@ -221,9 +227,14 @@ Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
     if ((trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol)) == NULL) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "Failed to find transport descriptor for protocol: %u", dispatcher->dispatcher->protocol);
         transferError = "failed to find transport descriptor for store";
+        Telemetry_RecordTransferStoreDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                              "failure",
+                                              protocol);
+        Telemetry_RecordTransferFailure("store", protocol);
         Telemetry_EndSpan(transferSpan, false, transferError);
         return TRANSFER_FAIL_LOCAL;
     }
+    protocol = trans->name;
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Transport: %s", __func__, trans->name);
 
@@ -238,6 +249,11 @@ Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
                               (int64_t)attempt_count);
     if (status != TRANSFER_OK)
         transferError = "failed to store block";
+    Telemetry_RecordTransferStoreDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                          (status == TRANSFER_OK) ? "success" : "failure",
+                                          protocol);
+    if (status != TRANSFER_OK)
+        Telemetry_RecordTransferFailure("store", protocol);
     Telemetry_EndSpan(transferSpan, status == TRANSFER_OK, transferError);
     return status;
 }
@@ -250,12 +266,18 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     int i;
     enum TransferStatus status;
     const char *transferError = NULL;
+    const char *protocol = "none";
+    double transferStartedAt = Telemetry_GetMonotonicTimeSeconds();
 
     transferSpan = Telemetry_StartSpan("fetch block", NULL);
     Telemetry_AddBlockAttributes(transferSpan, block);
 
     if (dispatcher == NULL || dispatcher->dispatcher == NULL) {
         transferError = "missing dispatcher for fetch";
+        Telemetry_RecordTransferFetchDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                              "failure",
+                                              protocol);
+        Telemetry_RecordTransferFailure("fetch", protocol);
         Telemetry_EndSpan(transferSpan, false, transferError);
         return TRANSFER_FAIL_LOCAL;
     }
@@ -263,9 +285,14 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     if ((trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol)) == NULL) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to find transport descriptor", __func__);
         transferError = "failed to find transport descriptor for fetch";
+        Telemetry_RecordTransferFetchDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                              "failure",
+                                              protocol);
+        Telemetry_RecordTransferFailure("fetch", protocol);
         Telemetry_EndSpan(transferSpan, false, transferError);
         return TRANSFER_FAIL_LOCAL;
     }
+    protocol = trans->name;
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Transport: %s", __func__, trans->name);
 
@@ -281,6 +308,11 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         Transfer_AddFileAttribute(transferSpan, block->data.fileName);
     if (status != TRANSFER_OK)
         transferError = "failed to fetch block";
+    Telemetry_RecordTransferFetchDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                          (status == TRANSFER_OK) ? "success" : "failure",
+                                          protocol);
+    if (status != TRANSFER_OK)
+        Telemetry_RecordTransferFailure("fetch", protocol);
     Telemetry_EndSpan(transferSpan, status == TRANSFER_OK, transferError);
     return status;
 }

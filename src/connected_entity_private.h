@@ -24,6 +24,8 @@ extern "C" {
 extern bool ConnectedEntityList_Start (void);
 extern void ConnectedEntityList_Stop (void);
 extern struct ConnectedEntity* ConnectedEntityList_GetDispatcher(void);
+extern uint32_t ConnectedEntityList_CountDispatchers(void);
+extern uint32_t ConnectedEntityList_CountUsableDispatchers(void);
 extern bool ConnectedEntityList_MarkDispatcherUnusable(uuid_t nuggetId);
 #ifdef __cplusplus
 }

@@ -19,7 +19,12 @@
 #include "config.h"
 
 #include "telemetry.h"
+#include "api_internal.h"
+#include "connected_entity_private.h"
+#include "submission_private.h"
 
+#include <razorback/api.h>
+#include <razorback/block_pool.h>
 #include <razorback/messages.h>
 #include <razorback/list.h>
 #include <razorback/log.h>
@@ -74,6 +79,7 @@
 #include <cstdlib>
 #include <array>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <string>
@@ -330,12 +336,311 @@ struct TelemetryState
   opentelemetry::nostd::shared_ptr<metrics_api::Meter> meter;
 };
 
+struct RazorbackStandardMetrics
+{
+  bool initialized = false;
+  TelemetryMetric_t *dispatcherWait = nullptr;
+  TelemetryMetric_t *dispatcherSelection = nullptr;
+  TelemetryMetric_t *outboundMessages = nullptr;
+  TelemetryMetric_t *outboundPublishRetry = nullptr;
+  TelemetryMetric_t *outboundReconnect = nullptr;
+  TelemetryMetric_t *inspectionInFlight = nullptr;
+  TelemetryMetric_t *inspectionDuration = nullptr;
+  TelemetryMetric_t *inspectionResults = nullptr;
+  TelemetryMetric_t *inspectionErrors = nullptr;
+  TelemetryMetric_t *shutdownRequeuedInspections = nullptr;
+  TelemetryMetric_t *blockSubmitDecisions = nullptr;
+  TelemetryMetric_t *cacheResponses = nullptr;
+  TelemetryMetric_t *cacheLookupWait = nullptr;
+  TelemetryMetric_t *submitDuration = nullptr;
+  TelemetryMetric_t *transferFetchDuration = nullptr;
+  TelemetryMetric_t *transferStoreDuration = nullptr;
+  TelemetryMetric_t *transferFailures = nullptr;
+  TelemetryMetric_t *inspectionWorkQueueDepth = nullptr;
+  TelemetryMetric_t *inspectionResultQueueDepth = nullptr;
+  TelemetryMetric_t *submitQueueDepth = nullptr;
+  TelemetryMetric_t *blockPoolSize = nullptr;
+  TelemetryMetric_t *dispatcherAvailable = nullptr;
+  TelemetryMetric_t *dispatcherUsable = nullptr;
+};
+
+struct ContextQueueDepth
+{
+  int64_t value = 0;
+};
+
 TelemetryState &
 GetTelemetryState() noexcept
 {
   static TelemetryState state;
 
   return state;
+}
+
+RazorbackStandardMetrics &
+GetRazorbackStandardMetrics() noexcept
+{
+  static RazorbackStandardMetrics metrics;
+
+  return metrics;
+}
+
+double
+GetMonotonicTimeSecondsInternal() noexcept
+{
+  return std::chrono::duration<double>(
+             std::chrono::steady_clock::now().time_since_epoch())
+      .count();
+}
+
+const char *
+MetricLabelOrUnknown(const char *value) noexcept
+{
+  return (value != nullptr && value[0] != '\0') ? value : "unknown";
+}
+
+const char *
+MetricLabelOrNone(const char *value) noexcept
+{
+  return (value != nullptr && value[0] != '\0') ? value : "none";
+}
+
+int
+CollectInspectionWorkQueueDepth(struct RazorbackContext *context, void *userData)
+{
+  auto *depth = static_cast<ContextQueueDepth *>(userData);
+
+  if (context == nullptr || depth == nullptr || context->inspector.pendingMessages == nullptr)
+    return LIST_EACH_OK;
+
+  depth->value += static_cast<int64_t>(List_Length(context->inspector.pendingMessages));
+  return LIST_EACH_OK;
+}
+
+int
+CollectInspectionResultQueueDepth(struct RazorbackContext *context, void *userData)
+{
+  auto *depth = static_cast<ContextQueueDepth *>(userData);
+
+  if (context == nullptr || depth == nullptr || context->inspector.completedMessages == nullptr)
+    return LIST_EACH_OK;
+
+  depth->value += static_cast<int64_t>(List_Length(context->inspector.completedMessages));
+  return LIST_EACH_OK;
+}
+
+void
+ObserveInspectionWorkQueueDepth(TelemetryObservation_t *observation, void *userData)
+{
+  ContextQueueDepth depth;
+
+  (void)userData;
+  (void)Razorback_ForEach_Context(CollectInspectionWorkQueueDepth, &depth);
+  Telemetry_ObservableObserveInt64(observation, depth.value, nullptr, 0);
+}
+
+void
+ObserveInspectionResultQueueDepth(TelemetryObservation_t *observation, void *userData)
+{
+  ContextQueueDepth depth;
+
+  (void)userData;
+  (void)Razorback_ForEach_Context(CollectInspectionResultQueueDepth, &depth);
+  Telemetry_ObservableObserveInt64(observation, depth.value, nullptr, 0);
+}
+
+void
+ObserveSubmitQueueDepth(TelemetryObservation_t *observation, void *userData)
+{
+  (void)userData;
+  Telemetry_ObservableObserveInt64(observation,
+                                   static_cast<int64_t>(Submission_GetSubmitQueueDepth()),
+                                   nullptr,
+                                   0);
+}
+
+void
+ObserveBlockPoolSize(TelemetryObservation_t *observation, void *userData)
+{
+  (void)userData;
+  Telemetry_ObservableObserveInt64(observation,
+                                   static_cast<int64_t>(BlockPool_GetItemCount()),
+                                   nullptr,
+                                   0);
+}
+
+void
+ObserveDispatcherAvailable(TelemetryObservation_t *observation, void *userData)
+{
+  (void)userData;
+  Telemetry_ObservableObserveInt64(observation,
+                                   static_cast<int64_t>(ConnectedEntityList_CountDispatchers()),
+                                   nullptr,
+                                   0);
+}
+
+void
+ObserveDispatcherUsable(TelemetryObservation_t *observation, void *userData)
+{
+  (void)userData;
+  Telemetry_ObservableObserveInt64(observation,
+                                   static_cast<int64_t>(ConnectedEntityList_CountUsableDispatchers()),
+                                   nullptr,
+                                   0);
+}
+
+void
+DestroyRazorbackStandardMetrics() noexcept
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetric_t **all_metrics[] = {
+      &metrics.dispatcherWait,
+      &metrics.dispatcherSelection,
+      &metrics.outboundMessages,
+      &metrics.outboundPublishRetry,
+      &metrics.outboundReconnect,
+      &metrics.inspectionInFlight,
+      &metrics.inspectionDuration,
+      &metrics.inspectionResults,
+      &metrics.inspectionErrors,
+      &metrics.shutdownRequeuedInspections,
+      &metrics.blockSubmitDecisions,
+      &metrics.cacheResponses,
+      &metrics.cacheLookupWait,
+      &metrics.submitDuration,
+      &metrics.transferFetchDuration,
+      &metrics.transferStoreDuration,
+      &metrics.transferFailures,
+      &metrics.inspectionWorkQueueDepth,
+      &metrics.inspectionResultQueueDepth,
+      &metrics.submitQueueDepth,
+      &metrics.blockPoolSize,
+      &metrics.dispatcherAvailable,
+      &metrics.dispatcherUsable,
+  };
+
+  for (auto *metric_ptr : all_metrics)
+  {
+    Telemetry_DestroyMetric(*metric_ptr);
+    *metric_ptr = nullptr;
+  }
+
+  metrics.initialized = false;
+}
+
+void
+InitializeRazorbackStandardMetrics() noexcept
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  if (metrics.initialized)
+    return;
+
+  metrics.initialized = true;
+  metrics.dispatcherWait = Telemetry_CreateDoubleHistogram(
+      "rzb.dispatcher.wait.seconds",
+      "Time spent waiting for an available dispatcher.",
+      "s");
+  metrics.dispatcherSelection = Telemetry_CreateUInt64Counter(
+      "rzb.dispatcher.selection.total",
+      "Dispatcher selection decisions.",
+      "");
+  metrics.outboundMessages = Telemetry_CreateUInt64Counter(
+      "rzb.outbound.messages.total",
+      "Outbound message serialization and publish outcomes.",
+      "");
+  metrics.outboundPublishRetry = Telemetry_CreateUInt64Counter(
+      "rzb.outbound.publish.retry.total",
+      "Outbound message publish retries after broker failures.",
+      "");
+  metrics.outboundReconnect = Telemetry_CreateUInt64Counter(
+      "rzb.outbound.reconnect.total",
+      "Outbound sender reconnect attempts.",
+      "");
+  metrics.inspectionInFlight = Telemetry_CreateInt64UpDownCounter(
+      "rzb.inspection.inflight",
+      "Inspection messages currently being processed.",
+      "");
+  metrics.inspectionDuration = Telemetry_CreateDoubleHistogram(
+      "rzb.inspection.duration.seconds",
+      "End-to-end inspection processing duration.",
+      "s");
+  metrics.inspectionResults = Telemetry_CreateUInt64Counter(
+      "rzb.inspection.results.total",
+      "Final inspection result outcomes.",
+      "");
+  metrics.inspectionErrors = Telemetry_CreateUInt64Counter(
+      "rzb.inspection.errors.total",
+      "Inspection errors grouped by phase.",
+      "");
+  metrics.shutdownRequeuedInspections = Telemetry_CreateUInt64Counter(
+      "rzb.shutdown.requeued.inspections.total",
+      "Inspection messages explicitly requeued during shutdown.",
+      "");
+  metrics.blockSubmitDecisions = Telemetry_CreateUInt64Counter(
+      "rzb.block.submit.decisions.total",
+      "Block submission decision outcomes.",
+      "");
+  metrics.cacheResponses = Telemetry_CreateUInt64Counter(
+      "rzb.cache.responses.total",
+      "Global cache response outcomes.",
+      "");
+  metrics.cacheLookupWait = Telemetry_CreateDoubleHistogram(
+      "rzb.cache.lookup.wait.seconds",
+      "Time from cache request submission to cache response handling.",
+      "s");
+  metrics.submitDuration = Telemetry_CreateDoubleHistogram(
+      "rzb.submit.duration.seconds",
+      "Submit-thread processing duration per block.",
+      "s");
+  metrics.transferFetchDuration = Telemetry_CreateDoubleHistogram(
+      "rzb.transfer.fetch.duration.seconds",
+      "Transfer fetch duration.",
+      "s");
+  metrics.transferStoreDuration = Telemetry_CreateDoubleHistogram(
+      "rzb.transfer.store.duration.seconds",
+      "Transfer store duration.",
+      "s");
+  metrics.transferFailures = Telemetry_CreateUInt64Counter(
+      "rzb.transfer.failures.total",
+      "Transfer failures grouped by operation and protocol.",
+      "");
+  metrics.inspectionWorkQueueDepth = Telemetry_CreateInt64ObservableGauge(
+      "rzb.inspection.work_queue.depth",
+      "Current inspection work queue depth.",
+      "",
+      ObserveInspectionWorkQueueDepth,
+      nullptr);
+  metrics.inspectionResultQueueDepth = Telemetry_CreateInt64ObservableGauge(
+      "rzb.inspection.result_queue.depth",
+      "Current inspection result queue depth.",
+      "",
+      ObserveInspectionResultQueueDepth,
+      nullptr);
+  metrics.submitQueueDepth = Telemetry_CreateInt64ObservableGauge(
+      "rzb.submit.queue.depth",
+      "Current block submission queue depth.",
+      "",
+      ObserveSubmitQueueDepth,
+      nullptr);
+  metrics.blockPoolSize = Telemetry_CreateInt64ObservableGauge(
+      "rzb.block_pool.size",
+      "Current number of tracked block-pool items.",
+      "",
+      ObserveBlockPoolSize,
+      nullptr);
+  metrics.dispatcherAvailable = Telemetry_CreateInt64ObservableGauge(
+      "rzb.dispatcher.available",
+      "Number of known dispatchers.",
+      "",
+      ObserveDispatcherAvailable,
+      nullptr);
+  metrics.dispatcherUsable = Telemetry_CreateInt64ObservableGauge(
+      "rzb.dispatcher.usable",
+      "Number of usable dispatchers.",
+      "",
+      ObserveDispatcherUsable,
+      nullptr);
 }
 
 bool
@@ -998,6 +1303,7 @@ Telemetry_Initialize(void)
     state.meter =
         state.meter_provider->GetMeter("razorback.api.metrics", PACKAGE_VERSION);
     state.metrics_enabled = true;
+    InitializeRazorbackStandardMetrics();
 
     propagators.emplace_back(new trace_api::propagation::HttpTraceContext);
     propagators.emplace_back(new opentelemetry::baggage::propagation::BaggagePropagator);
@@ -1011,6 +1317,7 @@ Telemetry_Initialize(void)
   catch (...)
   {
     rzb_log(LOG_ERR, LOG_C_CORE, "%s: failed to initialize OpenTelemetry telemetry", __func__);
+    DestroyRazorbackStandardMetrics();
     state.tracer = opentelemetry::nostd::shared_ptr<trace_api::Tracer>();
     state.provider = opentelemetry::nostd::shared_ptr<trace_api::TracerProvider>();
     state.sdk_provider.reset();
@@ -1038,6 +1345,8 @@ Telemetry_Shutdown(void)
 
   if (!state.initialized)
     return;
+
+  DestroyRazorbackStandardMetrics();
 
   if (state.sdk_provider)
   {
@@ -1077,6 +1386,246 @@ Telemetry_Shutdown(void)
   state.logging_enabled = false;
   state.metrics_enabled = false;
   state.initialized = false;
+}
+
+static void
+RecordSingleStringCounterMetric(TelemetryMetric_t *metric,
+                                const char *attributeName,
+                                const char *attributeValue)
+{
+  TelemetryMetricAttribute_t attributes[1] = {
+      {attributeName, TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricLabelOrUnknown(attributeValue), 0, 0.0, false},
+  };
+
+  Telemetry_CounterAddUInt64(metric, 1, attributes, 1);
+}
+
+static void
+RecordMessageTypeCounterMetric(TelemetryMetric_t *metric,
+                               uint32_t messageType,
+                               const char *attributeName,
+                               const char *attributeValue)
+{
+  char typeBuffer[32];
+  TelemetryMetricAttribute_t attributes[2];
+
+  std::snprintf(typeBuffer, sizeof(typeBuffer), "%u", messageType);
+  attributes[0] = {"message_type", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                   typeBuffer, 0, 0.0, false};
+  attributes[1] = {attributeName, TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                   MetricLabelOrUnknown(attributeValue), 0, 0.0, false};
+  Telemetry_CounterAddUInt64(metric, 1, attributes, 2);
+}
+
+static void
+RecordMessageTypeOnlyCounterMetric(TelemetryMetric_t *metric, uint32_t messageType)
+{
+  char typeBuffer[32];
+  TelemetryMetricAttribute_t attributes[1];
+
+  std::snprintf(typeBuffer, sizeof(typeBuffer), "%u", messageType);
+  attributes[0] = {"message_type", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                   typeBuffer, 0, 0.0, false};
+  Telemetry_CounterAddUInt64(metric, 1, attributes, 1);
+}
+
+extern "C" double
+Telemetry_GetMonotonicTimeSeconds(void)
+{
+  return GetMonotonicTimeSecondsInternal();
+}
+
+extern "C" void
+Telemetry_RecordDispatcherWait(double durationSeconds, const char *outcome)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[1] = {
+      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricLabelOrUnknown(outcome), 0, 0.0, false},
+  };
+
+  Telemetry_HistogramRecordDouble(metrics.dispatcherWait,
+                                  (durationSeconds >= 0.0) ? durationSeconds : 0.0,
+                                  attributes,
+                                  1);
+}
+
+extern "C" void
+Telemetry_RecordDispatcherSelection(const char *path)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  RecordSingleStringCounterMetric(metrics.dispatcherSelection, "path", path);
+}
+
+extern "C" void
+Telemetry_RecordOutboundMessage(uint32_t messageType, const char *outcome)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  RecordMessageTypeCounterMetric(metrics.outboundMessages, messageType, "outcome", outcome);
+}
+
+extern "C" void
+Telemetry_RecordOutboundPublishRetry(uint32_t messageType)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  RecordMessageTypeOnlyCounterMetric(metrics.outboundPublishRetry, messageType);
+}
+
+extern "C" void
+Telemetry_RecordOutboundReconnect(void)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  Telemetry_CounterAddUInt64(metrics.outboundReconnect, 1, nullptr, 0);
+}
+
+extern "C" void
+Telemetry_AddInspectionInFlight(int64_t delta)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  Telemetry_UpDownCounterAddInt64(metrics.inspectionInFlight, delta, nullptr, 0);
+}
+
+extern "C" void
+Telemetry_RecordInspectionDuration(double durationSeconds, const char *reason)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[1] = {
+      {"reason", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricLabelOrUnknown(reason), 0, 0.0, false},
+  };
+
+  Telemetry_HistogramRecordDouble(metrics.inspectionDuration,
+                                  (durationSeconds >= 0.0) ? durationSeconds : 0.0,
+                                  attributes,
+                                  1);
+}
+
+extern "C" void
+Telemetry_RecordInspectionResult(const char *reason)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  RecordSingleStringCounterMetric(metrics.inspectionResults, "reason", reason);
+}
+
+extern "C" void
+Telemetry_RecordInspectionError(const char *phase)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  RecordSingleStringCounterMetric(metrics.inspectionErrors, "phase", phase);
+}
+
+extern "C" void
+Telemetry_RecordShutdownRequeuedInspection(void)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  Telemetry_CounterAddUInt64(metrics.shutdownRequeuedInspections, 1, nullptr, 0);
+}
+
+extern "C" void
+Telemetry_RecordBlockSubmitDecision(const char *decision)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  RecordSingleStringCounterMetric(metrics.blockSubmitDecisions, "decision", decision);
+}
+
+extern "C" void
+Telemetry_RecordCacheResponse(const char *result)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  RecordSingleStringCounterMetric(metrics.cacheResponses, "result", result);
+}
+
+extern "C" void
+Telemetry_RecordCacheLookupWait(double durationSeconds)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+
+  Telemetry_HistogramRecordDouble(metrics.cacheLookupWait,
+                                  (durationSeconds >= 0.0) ? durationSeconds : 0.0,
+                                  nullptr,
+                                  0);
+}
+
+extern "C" void
+Telemetry_RecordSubmitDuration(double durationSeconds,
+                               const char *reason,
+                               const char *outcome)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[2] = {
+      {"reason", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricLabelOrUnknown(reason), 0, 0.0, false},
+      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricLabelOrUnknown(outcome), 0, 0.0, false},
+  };
+
+  Telemetry_HistogramRecordDouble(metrics.submitDuration,
+                                  (durationSeconds >= 0.0) ? durationSeconds : 0.0,
+                                  attributes,
+                                  2);
+}
+
+extern "C" void
+Telemetry_RecordTransferFetchDuration(double durationSeconds,
+                                      const char *outcome,
+                                      const char *protocol)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[2] = {
+      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricLabelOrUnknown(outcome), 0, 0.0, false},
+      {"protocol", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricLabelOrNone(protocol), 0, 0.0, false},
+  };
+
+  Telemetry_HistogramRecordDouble(metrics.transferFetchDuration,
+                                  (durationSeconds >= 0.0) ? durationSeconds : 0.0,
+                                  attributes,
+                                  2);
+}
+
+extern "C" void
+Telemetry_RecordTransferStoreDuration(double durationSeconds,
+                                      const char *outcome,
+                                      const char *protocol)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[2] = {
+      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricLabelOrUnknown(outcome), 0, 0.0, false},
+      {"protocol", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricLabelOrNone(protocol), 0, 0.0, false},
+  };
+
+  Telemetry_HistogramRecordDouble(metrics.transferStoreDuration,
+                                  (durationSeconds >= 0.0) ? durationSeconds : 0.0,
+                                  attributes,
+                                  2);
+}
+
+extern "C" void
+Telemetry_RecordTransferFailure(const char *operation, const char *protocol)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[2] = {
+      {"operation", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricLabelOrUnknown(operation), 0, 0.0, false},
+      {"protocol", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricLabelOrNone(protocol), 0, 0.0, false},
+  };
+
+  Telemetry_CounterAddUInt64(metrics.transferFailures, 1, attributes, 2);
 }
 
 extern "C" TelemetrySpan_t *

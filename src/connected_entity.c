@@ -30,6 +30,7 @@
 
 #include "connected_entity_private.h"
 #include "runtime_config.h"
+#include "telemetry.h"
 #include "transfer/core.h"
 #define SEARCH_KEY_NUGGET_ID    (1 << 0)
 #define SEARCH_KEY_APP_TYPE     (1 << 1)
@@ -116,6 +117,12 @@ ConnectedEntityList_Stop (void) {
 
     Timer_Destroy(timer);
     List_Destroy(sg_pEntityList);
+    sg_pEntityList = NULL;
+    if (sg_pHookList != NULL) {
+        List_Destroy(sg_pHookList);
+        sg_pHookList = NULL;
+    }
+    timer = NULL;
 }
 
 /** Return a entry or NULL
@@ -232,6 +239,41 @@ ConnectedEntityList_GetCount (void) {
     return List_Length(sg_pEntityList);
 }
 
+struct DispatcherCount {
+    uint32_t count;
+    bool onlyUsable;
+};
+
+static int ConnectedEntityList_CountDispatcherItems(void *item, void *userData);
+
+uint32_t
+ConnectedEntityList_CountDispatchers(void)
+{
+    struct DispatcherCount counter;
+
+    if (sg_pEntityList == NULL)
+        return 0;
+
+    counter.count = 0;
+    counter.onlyUsable = false;
+    List_ForEach(sg_pEntityList, ConnectedEntityList_CountDispatcherItems, &counter);
+    return counter.count;
+}
+
+uint32_t
+ConnectedEntityList_CountUsableDispatchers(void)
+{
+    struct DispatcherCount counter;
+
+    if (sg_pEntityList == NULL)
+        return 0;
+
+    counter.count = 0;
+    counter.onlyUsable = true;
+    List_ForEach(sg_pEntityList, ConnectedEntityList_CountDispatcherItems, &counter);
+    return counter.count;
+}
+
 struct CountEntity {
     uint32_t count;
     struct ConnectedEntity *entity;
@@ -253,6 +295,28 @@ ConnectedEntityList_CountNuggets(void *item, void *userData)
     {
         counter->count++;
     }
+    return LIST_EACH_OK;
+}
+
+static int
+ConnectedEntityList_CountDispatcherItems(void *item, void *userData)
+{
+    struct ConnectedEntity *entity = item;
+    struct DispatcherCount *counter = userData;
+
+    ASSERT(entity != NULL);
+    ASSERT(counter != NULL);
+    if (entity == NULL || counter == NULL)
+        return LIST_EACH_OK;
+
+    if (!ConnectedEntity_IsDispatcherType(entity->uuidNuggetType) ||
+        entity->dispatcher == NULL)
+        return LIST_EACH_OK;
+
+    if (counter->onlyUsable && !entity->dispatcher->usable)
+        return LIST_EACH_OK;
+
+    counter->count++;
     return LIST_EACH_OK;
 }
 
@@ -419,6 +483,7 @@ ConnectedEntityList_GetDispatcher(void) {
     conf_int_t localityCount = Config_getLocalityBackupCount();
     struct ConnectedEntity *entity = NULL;
     struct ConnectedEntity *ret = NULL;
+    const char *selectionPath = "none";
     conf_int_t i;
     struct ConnectedEntityKey searchKey;
 
@@ -442,6 +507,7 @@ ConnectedEntityList_GetDispatcher(void) {
     if (dispatcherCount == 0) {
         List_Destroy(dispatchers);
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: No dispatchers", __func__);
+        Telemetry_RecordDispatcherSelection("none");
         return NULL;
     }
     // Our locality
@@ -450,6 +516,7 @@ ConnectedEntityList_GetDispatcher(void) {
     searchKey.searchKeys |= SEARCH_KEY_USABLE;
     entity = List_Find(dispatchers, &searchKey);
     if (entity != NULL) {
+        selectionPath = "local";
         goto getdispdone;
     }
 
@@ -458,19 +525,24 @@ ConnectedEntityList_GetDispatcher(void) {
         searchKey.locality = localities[i];
         entity = List_Find(dispatchers, &searchKey);
         if (entity != NULL) {
+            selectionPath = "backup";
             goto getdispdone;
         }
     }
     // Random locality
     searchKey.searchKeys = SEARCH_KEY_USABLE;
     entity = List_Find(dispatchers, &searchKey);
+    if (entity != NULL)
+        selectionPath = "fallback";
 
 
 getdispdone:
     if (entity == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Failed to find any usable dispatchers", __func__);
+        Telemetry_RecordDispatcherSelection("none");
     } else {
         ret = ConnectedEntity_Clone(entity);
+        Telemetry_RecordDispatcherSelection(selectionPath);
     }
     List_Destroy(dispatchers);
     if (ret == NULL) {

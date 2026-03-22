@@ -158,6 +158,12 @@ SO_PUBLIC extern void Telemetry_EndSpan(
 );
 
 /**
+ * Get a monotonic timestamp expressed in seconds.
+ * @return Current monotonic time in seconds.
+ */
+SO_PUBLIC extern double Telemetry_GetMonotonicTimeSeconds(void);
+
+/**
  * Create a uint64 counter instrument.
  * @param name Metric name.
  * @param description Metric description.

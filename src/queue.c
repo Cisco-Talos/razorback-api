@@ -578,6 +578,9 @@ Queue_Reconnect(struct Queue *queue, int p_iSide)
     if (queue->bShuttingDown)
         return false;
 
+    if ((p_iSide & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND)
+        Telemetry_RecordOutboundReconnect();
+
     if ((p_iSide & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
         queue->pReadSocket != NULL)
     {
@@ -1098,6 +1101,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Write socket unavailable, attempting reconnect", __func__);
         if (!Queue_Reconnect(queue, QUEUE_FLAG_SEND) || queue->pWriteSocket == NULL) {
             sendError = "write reconnect failed";
+            Telemetry_RecordOutboundMessage(message->type, "publish_error");
             goto cleanup;
         }
     }
@@ -1109,6 +1113,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
         {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to serialize message", __func__);
             sendError = "message serialization failed";
+            Telemetry_RecordOutboundMessage(message->type, "serialize_error");
             goto cleanup;
         }
     }
@@ -1172,6 +1177,9 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
                     "%s: Broker reported an outbound connection error, reconnecting",
                     __func__);
             sendError = "outbound broker connection error";
+            Telemetry_RecordOutboundMessage(message->type, "publish_error");
+            if (attempt == 0)
+                Telemetry_RecordOutboundPublishRetry(message->type);
             if (attempt == 0 &&
                 Queue_Reconnect(queue, QUEUE_FLAG_SEND) &&
                 queue->pWriteSocket != NULL) {
@@ -1189,12 +1197,16 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
         if (amqpErr == AMQP_STATUS_OK) {
             ret = true;
             sendError = NULL;
+            Telemetry_RecordOutboundMessage(message->type, "published");
             break;
         }
 
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to publish message: %s",
                 __func__, amqp_error_string2(amqpErr));
         sendError = amqp_error_string2(amqpErr);
+        Telemetry_RecordOutboundMessage(message->type, "publish_error");
+        if (attempt == 0)
+            Telemetry_RecordOutboundPublishRetry(message->type);
         if (attempt == 0 &&
             Queue_Reconnect(queue, QUEUE_FLAG_SEND) &&
             queue->pWriteSocket != NULL) {

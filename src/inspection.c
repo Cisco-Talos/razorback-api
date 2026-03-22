@@ -51,6 +51,23 @@ static void Inspection_Destroy_Message(void *item);
 static bool Inspection_Complete_Message(struct RazorbackContext *p_pContext,
                                         struct Message *message);
 static void Inspection_Drain_Completed(struct RazorbackContext *p_pContext);
+static const char *Inspection_Result_Label(uint8_t result);
+
+static const char *
+Inspection_Result_Label(uint8_t result)
+{
+    switch (result) {
+    case JUDGMENT_REASON_DONE:
+        return "done";
+    case JUDGMENT_REASON_ALERT:
+        return "alert";
+    case JUDGMENT_REASON_DEFERRED:
+        return "deferred";
+    case JUDGMENT_REASON_ERROR:
+    default:
+        return "error";
+    }
+}
 
 bool
 Inspection_Launch(struct RazorbackContext *p_pContext, uint32_t initThreads, uint32_t maxThreads)
@@ -159,6 +176,7 @@ Inspection_Drain_Completed(struct RazorbackContext *p_pContext)
         if (!Queue_Ack_Message(p_pContext->inspector.inspectionQueue, message)) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to ack completed inspection message",
                     __func__);
+            Telemetry_RecordInspectionError("result_ack");
         }
         Inspection_Destroy_Message(message);
     }
@@ -206,6 +224,7 @@ Inspection_Receiver_Thread(Thread_t *p_pThread)
 
         if (Thread_IsStopped(p_pThread)) {
             Queue_Reject_Message(l_pQueue, message, true);
+            Telemetry_RecordShutdownRequeuedInspection();
             Telemetry_EndSpan(receiveSpan, false, "inspection receiver stopping");
             Inspection_Destroy_Message(message);
             break;
@@ -251,6 +270,9 @@ Inspection_Process_Message(Thread_t *p_pThread,
     bool pauseLocked = false;
     const char *processError = NULL;
     const char *runError = NULL;
+    const char *resultReason = "error";
+    const char *errorPhase = NULL;
+    double inspectionStartedAt = Telemetry_GetMonotonicTimeSeconds();
 
     (void)p_pThread;
     (void)p_pQueue;
@@ -259,6 +281,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to wrong type %u",
                 __func__, message->type);
         processError = "unexpected inspection message type";
+        errorPhase = "validation";
         goto cleanup;
     }
 
@@ -267,18 +290,21 @@ Inspection_Process_Message(Thread_t *p_pThread,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to NULL payload",
                 __func__);
         processError = "inspection message missing payload";
+        errorPhase = "validation";
         goto cleanup;
     }
     if (l_misMessage->pBlock == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to NULL block",
                 __func__);
         processError = "inspection message missing block";
+        errorPhase = "validation";
         goto cleanup;
     }
     if (l_misMessage->pBlock->pId == NULL || l_misMessage->pBlock->pId->pHash == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to NULL Hash",
                 __func__);
         processError = "inspection message missing block hash";
+        errorPhase = "validation";
         goto cleanup;
     }
 
@@ -311,6 +337,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
     if (transfered != TRANSFER_OK) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to transfer block giving up", __func__);
         processError = "failed to fetch block from dispatcher";
+        errorPhase = "transfer";
         goto cleanup;
     }
     destroyOriginalBlock = true;
@@ -318,16 +345,19 @@ Inspection_Process_Message(Thread_t *p_pThread,
     if (l_pBlock->data.pointer == NULL || l_pBlock->data.fileName == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: No data block", __func__);
         processError = "inspection block has no local data";
+        errorPhase = "transfer";
         goto cleanup;
     }
     if ((l_pEventId = EventId_Clone(l_misMessage->eventId)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed create new event id", __func__);
         processError = "failed to clone event id";
+        errorPhase = "inspection";
         goto cleanup;
     }
     if ((l_pClonedBlock = Block_Clone(l_pBlock)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed create new block", __func__);
         processError = "failed to clone inspection block";
+        errorPhase = "inspection";
         goto cleanup;
     }
 
@@ -362,12 +392,16 @@ Inspection_Process_Message(Thread_t *p_pThread,
         runError = "inspector returned invalid judgment";
     Telemetry_EndSpan(runSpan, runSuccess, runError);
     runSpan = NULL;
+    resultReason = Inspection_Result_Label(l_iResult);
+    if (l_iResult == JUDGMENT_REASON_ERROR || !runSuccess)
+        errorPhase = "inspection";
 
     if ((l_iResult != JUDGMENT_REASON_DONE) &&
         (l_iResult != JUDGMENT_REASON_ERROR) &&
         (l_iResult != JUDGMENT_REASON_DEFERRED)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Bad return from inspection", __func__);
         processError = "inspector returned invalid judgment";
+        errorPhase = "inspection";
         goto cleanup;
     }
 
@@ -376,6 +410,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
     judgment = Judgment_Create(l_pEventId, l_pClonedBlock->pId);
     if (judgment == NULL) {
         processError = "failed to create judgment";
+        errorPhase = "submission";
         goto cleanup;
     }
 
@@ -389,6 +424,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
     if ((l_mjsMessage = MessageJudgmentSubmission_Initialize(l_iResult, judgment)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);
         processError = "failed to create judgment submission";
+        errorPhase = "submission";
         judgment = NULL;
         goto cleanup;
     }
@@ -397,6 +433,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
     if (!Queue_Put(p_pContext->inspector.judgmentQueue, l_mjsMessage)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to send judgment submission", __func__);
         processError = "failed to send judgment submission";
+        errorPhase = "submission";
         goto cleanup;
     }
 
@@ -426,6 +463,11 @@ cleanup:
         EventId_Destroy(l_pEventId);
     if (runSpan != NULL)
         Telemetry_EndSpan(runSpan, false, (runError != NULL) ? runError : processError);
+    if (errorPhase != NULL)
+        Telemetry_RecordInspectionError(errorPhase);
+    Telemetry_RecordInspectionResult(resultReason);
+    Telemetry_RecordInspectionDuration(Telemetry_GetMonotonicTimeSeconds() - inspectionStartedAt,
+                                       resultReason);
     if (inspectSpan != NULL)
         Telemetry_EndSpan(inspectSpan, processSuccess, processError);
 }
@@ -455,11 +497,13 @@ Inspection_Process_Thread(Thread_t *p_pThread)
             continue;
         }
 
+        Telemetry_AddInspectionInFlight(1);
         Inspection_Process_Message(p_pThread,
                                    l_pContext,
                                    l_pContext->inspector.inspectionQueue,
                                    message,
                                    threadData);
+        Telemetry_AddInspectionInFlight(-1);
         Inspection_Complete_Message(l_pContext, message);
     }
 

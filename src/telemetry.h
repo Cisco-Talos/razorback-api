@@ -66,6 +66,31 @@ void Telemetry_LogMessage(unsigned level, uint64_t component, const char *messag
 
 void Telemetry_FreeInjectedHeaders(struct TelemetryInjectedHeaders *headers);
 
+void Telemetry_RecordDispatcherWait(double durationSeconds, const char *outcome);
+void Telemetry_RecordDispatcherSelection(const char *path);
+void Telemetry_RecordOutboundMessage(uint32_t messageType, const char *outcome);
+void Telemetry_RecordOutboundPublishRetry(uint32_t messageType);
+void Telemetry_RecordOutboundReconnect(void);
+void Telemetry_AddInspectionInFlight(int64_t delta);
+void Telemetry_RecordInspectionDuration(double durationSeconds, const char *reason);
+void Telemetry_RecordInspectionResult(const char *reason);
+void Telemetry_RecordInspectionError(const char *phase);
+void Telemetry_RecordShutdownRequeuedInspection(void);
+void Telemetry_RecordBlockSubmitDecision(const char *decision);
+void Telemetry_RecordCacheResponse(const char *result);
+void Telemetry_RecordCacheLookupWait(double durationSeconds);
+void Telemetry_RecordSubmitDuration(double durationSeconds,
+                                    const char *reason,
+                                    const char *outcome);
+void Telemetry_RecordTransferFetchDuration(double durationSeconds,
+                                           const char *outcome,
+                                           const char *protocol);
+void Telemetry_RecordTransferStoreDuration(double durationSeconds,
+                                           const char *outcome,
+                                           const char *protocol);
+void Telemetry_RecordTransferFailure(const char *operation,
+                                     const char *protocol);
+
 #ifdef __cplusplus
 }
 #endif
