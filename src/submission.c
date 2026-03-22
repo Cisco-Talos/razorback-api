@@ -126,7 +126,6 @@ Submission_RecordCacheLookupStart(struct BlockPoolItem *item)
     existing = List_Find(requestTiming, item);
     if (existing != NULL) {
         List_Remove(requestTiming, existing);
-        free(existing);
     }
     if (!List_Push(requestTiming, entry)) {
         free(entry);
@@ -152,7 +151,6 @@ Submission_RecordCacheLookupWait(struct BlockPoolItem *item)
 
     duration = Telemetry_GetMonotonicTimeSeconds() - entry->startedAt;
     List_Remove(requestTiming, entry);
-    free(entry);
     Mutex_Unlock(requestTimingLock);
 
     Telemetry_RecordCacheLookupWait(duration);
@@ -385,12 +383,14 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
 int
 Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void * userData)
 {
-    Thread_t *l_pThread;
     struct CacheResult *l_pRes;
 
-    // Pull the data out the thread.
-    l_pThread = Thread_GetCurrent();
-    l_pRes = (struct CacheResult *) Thread_GetUserData(l_pThread);
+    l_pRes = userData;
+    if (l_pRes == NULL)
+    {
+        rzb_log(LOG_ERR,LOG_C_CORE, "%s: Missing cache result context", __func__);
+        return LIST_EACH_ERROR;
+    }
 
     if (BlockPool_GetStatus(p_pItem) == BLOCK_POOL_STATUS_CHECKING_GLOBAL_CACHE)
     {
@@ -430,7 +430,6 @@ Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void * use
             List_Push(submitQueue, p_pItem);
         }
     }
-    Thread_Destroy(l_pThread);
     return LIST_EACH_OK;
 }
 
@@ -453,7 +452,6 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
         rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to allocate thread args", __func__);
         return;
     }
-    Thread_SetUserData(p_pThread, l_pRes);
     while (!Thread_IsStopped(p_pThread))
     {
         if ((message = Queue_Get(queue)) == NULL)
@@ -477,7 +475,7 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
         l_pRes->iEntFlags = l_mcrMessage->iEntFlags;
         l_pRes->matchedCount = 0;
         rzb_log(LOG_DEBUG,LOG_C_CORE, "%s: Got flags SF: 0x%08x, ENT: 0x%08x", __func__, l_pRes->iSfFlags, l_pRes->iEntFlags);
-        BlockPool_ForEachItem(Submission_GlobalCache_ResponseHandler, NULL);
+        BlockPool_ForEachItem(Submission_GlobalCache_ResponseHandler, l_pRes);
         if (l_pRes->matchedCount == 0)
             Telemetry_RecordCacheResponse("unknown_block");
         // Destroy allocated items in thread local storage.
@@ -486,7 +484,6 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
         Telemetry_EndSpan(processSpan, processSuccess, processError);
     }
 
-    Thread_SetUserData(p_pThread, NULL);
     free(l_pRes);
     // TODO: BAD
     ResponseQueue_Terminate(sg_pContext->uuidNuggetId);

@@ -430,6 +430,11 @@ HTTP_Try_Store(void *i, void*ud)
     status->dataItem = status->item->pDataHead;
     status->bytesRead = 0;
     status->bytesTransferred = 0;
+    status->status = TRANSFER_FAIL_DISPATCHER;
+    status->size = 0;
+    if (status->memory != NULL) {
+        status->memory[0] = '\0';
+    }
     if (status->dataItem->iFlags == BLOCK_POOL_DATA_FLAG_FILE) {
         rewind(status->dataItem->data.file);
     }
@@ -718,6 +723,7 @@ HTTP_Try_Fetch(void *i, void*ud)
         return LIST_EACH_OK;
     }
     status->size = 0;
+    status->status = TRANSFER_FAIL_DISPATCHER;
     if (!HTTP_BuildURL(&url, status->protocol, address, status->port, status->filename,
                        __func__)) {
         status->status = TRANSFER_FAIL_LOCAL;
