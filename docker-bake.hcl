@@ -32,21 +32,11 @@ variable "VERSION" {
     default = "0.0.0"
 }
 
-variable "OPENTELEMETRY_CPP_VERSION" {
-    default = "1.26.0"
-}
-
-variable "OPENTELEMETRY_CPP_SHA256" {
-    default = "8a878777a18a013e0ee6604629d1b5f29b162354c14489ad1dccd370f14ac372"
-}
-
 target "api" {
     dockerfile = "Dockerfile"
     args = {
-        BASE_IMAGE               = "${BASE_IMAGE}"
-        VERSION                  = "${VERSION}"
-        OPENTELEMETRY_CPP_VERSION = "${OPENTELEMETRY_CPP_VERSION}"
-        OPENTELEMETRY_CPP_SHA256  = "${OPENTELEMETRY_CPP_SHA256}"
+        BASE_IMAGE = "${BASE_IMAGE}"
+        VERSION    = "${VERSION}"
     }
     tags = [
         "${REPO}razorback-api:${VERSION}",

@@ -1,0 +1,13 @@
+ca-certificates
+libuuid1
+libcurl4
+libssl3
+libconfig9
+libssh-4
+libjson-c5
+libmagic1
+librabbitmq4
+libgrpc++1.51
+libprotobuf32
+zlib1g
+
