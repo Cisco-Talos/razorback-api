@@ -89,17 +89,26 @@ if test "x$prefix" != "xNONE"; then
 fi
 
 PKG_CHECK_MODULES([OPENTELEMETRY_CPP],
-                  [opentelemetry_trace opentelemetry_exporter_otlp_http opentelemetry_exporter_otlp_http_log opentelemetry_exporter_otlp_http_metric],
+                  [opentelemetry_common
+                   opentelemetry_resources
+                   opentelemetry_trace
+                   opentelemetry_metrics
+                   opentelemetry_logs
+                   opentelemetry_otlp_recordable
+                   opentelemetry_exporter_otlp_http_client
+                   opentelemetry_exporter_otlp_http
+                   opentelemetry_exporter_otlp_http_log
+                   opentelemetry_exporter_otlp_http_metric],
                   [have_opentelemetry_cpp=yes],
                   [have_opentelemetry_cpp=no])
 AS_IF([test "x$have_opentelemetry_cpp" != "xyes"], [
-    AC_MSG_ERROR([opentelemetry-cpp is required; install opentelemetry_trace, opentelemetry_exporter_otlp_http, opentelemetry_exporter_otlp_http_log, and opentelemetry_exporter_otlp_http_metric])
+    AC_MSG_ERROR([opentelemetry-cpp OTLP HTTP support is required; install the SDK, OTLP HTTP exporters, and their pkg-config metadata])
 ])
 
 PKG_CHECK_MODULES([PROTOBUF], [protobuf], [], [
     AC_MSG_ERROR([protobuf is required to link opentelemetry-cpp OTLP exporters])
 ])
-OPENTELEMETRY_CPP_LIBS="$OPENTELEMETRY_CPP_LIBS -lopentelemetry_proto -lopentelemetry_http_client_curl $PROTOBUF_LIBS"
+OPENTELEMETRY_CPP_LIBS="-Wl,--no-as-needed $OPENTELEMETRY_CPP_LIBS -lopentelemetry_proto -lopentelemetry_http_client_curl $PROTOBUF_LIBS -Wl,--as-needed"
 
 AC_PATH_PROG([JV], [jv], [])
 AM_CONDITIONAL([HAVE_JV], [test -n "$JV"])

@@ -102,7 +102,7 @@ telemetry_otel.cc
 #librazorback_api_la_CFLAGS = -DBUILDING_SO -I$(top_srcdir)/libssh/include -I$(top_srcdir)/include
 #librazorback_api_la_LDFLAGS = -version-info @APIVERSION@ @XCCFLAGS@ ../libssh/src/libssh.la
 librazorback_api_la_CFLAGS = -DBUILDING_SO -I$(top_srcdir)/include
-librazorback_api_la_LDFLAGS = -version-info @APIVERSION@ @XCCFLAGS@ 
+librazorback_api_la_LDFLAGS = -version-info @APIVERSION@ @XCCFLAGS@ -Wl,--disable-new-dtags -Wl,-rpath,'$$ORIGIN'
 librazorback_api_la_LIBADD = @OPENTELEMETRY_CPP_LIBS@
 librazorback_api_la_CPPFLAGS = $(AM_CPPFLAGS) @OPENTELEMETRY_CPP_CFLAGS@
 
