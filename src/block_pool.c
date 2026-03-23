@@ -116,7 +116,7 @@ BlockPool_GetSize(void) {
 
 SO_PUBLIC size_t
 BlockPool_GetItemCount(void) {
-    return List_Length(sg_bpList);
+    return (sg_bpList == NULL) ? 0U : List_Length(sg_bpList);
 }
 
 SO_PUBLIC bool

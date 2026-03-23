@@ -236,7 +236,7 @@ ConnectedEntityList_Update (struct Message *message) {
 
 SO_PUBLIC uint32_t
 ConnectedEntityList_GetCount (void) {
-    return List_Length(sg_pEntityList);
+    return (sg_pEntityList == NULL) ? 0U : List_Length(sg_pEntityList);
 }
 
 struct DispatcherCount {
