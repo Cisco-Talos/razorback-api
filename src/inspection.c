@@ -120,15 +120,22 @@ Inspection_Report_Worker_Init(struct RazorbackContext *p_pContext, bool success)
 }
 
 bool
-Inspection_Launch(struct RazorbackContext *p_pContext, uint32_t initThreads, uint32_t maxThreads)
+Inspection_Launch(struct RazorbackContext *p_pContext)
 {
     uint32_t workerCount;
     uint32_t workerLimit;
     uint32_t i;
     bool workerInitFailed;
 
-    workerCount = ((initThreads == 0) ? Config_getInspThreadsInit() : initThreads);
-    workerLimit = ((maxThreads == 0) ? Config_getInspThreadsMax() : maxThreads);
+    workerCount = Config_getInspThreadsInit();
+    workerLimit = Config_getInspThreadsMax();
+
+    if (workerCount == 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Refusing to launch inspection without at least one worker",
+                __func__);
+        return false;
+    }
 
     if ((p_pContext->inspector.inspectionQueue =
              InspectorQueue_Initialize(p_pContext->uuidApplicationType,

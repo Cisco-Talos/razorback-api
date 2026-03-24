@@ -154,8 +154,6 @@ SO_PUBLIC extern bool Razorback_Init_Context(struct RazorbackContext *context);
  * @param dataTypeCount the number of data types.
  * @param dataTypeList the list of data types.
  * @param inspectionHooks the inspection call backs.
- * @param initialThreads Number of threads launched initially.
- * @param maxThreads Maximum number of threads that can be launched.
  * @return An initialized inspection context on success, NULL on failure.
  */
 SO_PUBLIC extern struct RazorbackContext * Razorback_Init_Inspection_Context(
@@ -163,9 +161,7 @@ SO_PUBLIC extern struct RazorbackContext * Razorback_Init_Inspection_Context(
     uuid_t applicationType,
     uint32_t dataTypeCount,
     uuid_t *dataTypeList,
-    struct RazorbackInspectionHooks *inspectionHooks,
-    uint32_t initialThreads,
-    uint32_t maxThreads
+    struct RazorbackInspectionHooks *inspectionHooks
 );
 
 /**

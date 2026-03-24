@@ -132,8 +132,7 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
                                    uuid_t applicationType,
                                    uint32_t dataTypeCount,
                                    uuid_t * dataTypeList,
-                                   struct RazorbackInspectionHooks *inspectionHooks,
-                                   uint32_t initialThreads, uint32_t maxThreads
+                                   struct RazorbackInspectionHooks *inspectionHooks
                                    ) {
     struct RazorbackContext *context;
     uuid_t uuidInspector;
@@ -178,7 +177,7 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
         return NULL;
     }
 
-    if (!Inspection_Launch (context, initialThreads, maxThreads)) {
+    if (!Inspection_Launch(context)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to launch inspection threads", __func__);
         Razorback_Remove_Context(context);
         return NULL;
