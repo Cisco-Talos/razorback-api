@@ -156,13 +156,16 @@
     <ClCompile Include="src\messages\judgment.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\messages\log.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="src\messages\output_event.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="src\messages\output_log.c">
+    <ClCompile Include="src\messages\output_inspection.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\telemetry_otel.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="src\transfer\http.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\transfer\file.c">

@@ -252,9 +252,8 @@
     <ClCompile Include="src\messages\core.c" />
     <ClCompile Include="src\messages\inspection.c" />
     <ClCompile Include="src\messages\judgment.c" />
-    <ClCompile Include="src\messages\log.c" />
     <ClCompile Include="src\messages\output_event.c" />
-    <ClCompile Include="src\messages\output_log.c" />
+    <ClCompile Include="src\messages\output_inspection.c" />
     <ClCompile Include="src\metadata.c" />
     <ClCompile Include="src\ntvl.c" />
     <ClCompile Include="src\nugget.c" />
@@ -265,11 +264,13 @@
     <ClCompile Include="src\socket.c" />
     <ClCompile Include="src\string_list.c" />
     <ClCompile Include="src\submission.c" />
+    <ClCompile Include="src\telemetry_otel.cc" />
     <ClCompile Include="src\thread.c" />
     <ClCompile Include="src\thread_pool.c" />
     <ClCompile Include="src\timer.c" />
     <ClCompile Include="src\transfer\core.c" />
     <ClCompile Include="src\transfer\file.c" />
+    <ClCompile Include="src\transfer\http.c" />
     <ClCompile Include="src\transfer\ssh.c" />
     <ClCompile Include="src\uuids.c" />
     <ClCompile Include="win32\bobins.c" />
