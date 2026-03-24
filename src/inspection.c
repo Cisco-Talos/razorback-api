@@ -51,6 +51,7 @@ static void Inspection_Emergency_Shutdown_Thread(Thread_t *p_pThread);
 void Inspection_Shutdown(struct RazorbackContext *p_pContext);
 static void Inspection_Destroy_Message(void *item);
 static bool Inspection_Is_Shutdown_Started(const struct RazorbackContext *p_pContext);
+static bool Inspection_Is_Paused(const struct RazorbackContext *p_pContext);
 static void Inspection_Start_Shutdown(struct RazorbackContext *p_pContext);
 static bool Inspection_Complete_Message(struct RazorbackContext *p_pContext,
                                         struct Message *message);
@@ -63,6 +64,7 @@ static void Inspection_Request_Emergency_Shutdown(struct RazorbackContext *p_pCo
 static const char *Inspection_Result_Label(uint8_t result);
 
 #define INSPECTION_PENDING_POP_TIMEOUT_MS 1000U
+#define INSPECTION_PAUSE_SLEEP_MS 100U
 #define INSPECTION_RECEIVER_POLL_TIMEOUT_MS 1000U
 #define INSPECTION_SHUTDOWN_REJECT_SLEEP_MS 100U
 #define INSPECTION_SHUTDOWN_DRAIN_SLEEP_MS 50U
@@ -90,6 +92,15 @@ Inspection_Is_Shutdown_Started(const struct RazorbackContext *p_pContext)
         return true;
 
     return atomic_load(&p_pContext->inspector.shutdownStarted);
+}
+
+static bool
+Inspection_Is_Paused(const struct RazorbackContext *p_pContext)
+{
+    if (p_pContext == NULL)
+        return false;
+
+    return atomic_load(&p_pContext->paused);
 }
 
 static void
@@ -511,7 +522,6 @@ Inspection_Process_Message(Thread_t *p_pThread,
     bool processSuccess = false;
     bool runSuccess = false;
     bool destroyOriginalBlock = false;
-    bool pauseLocked = false;
     const char *processError = NULL;
     const char *runError = NULL;
     const char *resultReason = "error";
@@ -649,8 +659,6 @@ Inspection_Process_Message(Thread_t *p_pThread,
         goto cleanup;
     }
 
-    Mutex_Lock(sg_mPauseLock);
-    pauseLocked = true;
     judgment = Judgment_Create(l_pEventId, l_pClonedBlock->pId);
     if (judgment == NULL) {
         processError = "failed to create judgment";
@@ -687,8 +695,6 @@ Inspection_Process_Message(Thread_t *p_pThread,
 cleanup:
     if (l_mjsMessage != NULL)
         l_mjsMessage->destroy(l_mjsMessage);
-    if (pauseLocked)
-        Mutex_Unlock(sg_mPauseLock);
     if (judgment != NULL)
         Judgment_Destroy(judgment);
     if (l_pClonedBlock != NULL) {
@@ -740,6 +746,13 @@ Inspection_Process_Thread(Thread_t *p_pThread)
     Inspection_Report_Worker_Init(l_pContext, true);
 
     while (!Thread_IsStopped(p_pThread)) {
+        if (Inspection_Is_Paused(l_pContext) &&
+            !Inspection_Is_Shutdown_Started(l_pContext))
+        {
+            Thread_Sleep(INSPECTION_PAUSE_SLEEP_MS);
+            continue;
+        }
+
         message = List_Pop_Ex(l_pContext->inspector.pendingMessages,
                               INSPECTION_PENDING_POP_TIMEOUT_MS);
         if (message == NULL) {

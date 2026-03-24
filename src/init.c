@@ -19,6 +19,8 @@
 #include "config.h"
 
 #include "init.h"
+#include "block_pool_private.h"
+#include "submission_private.h"
 #include "telemetry.h"
 #include <curl/curl.h>
 #include <razorback/log.h>
@@ -73,6 +75,15 @@ RZB_Init_API ()
         initcache();
         initUuids();
         initApi();
+        if (!BlockPool_Init()) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize block pool", __func__);
+            exit(1);
+        }
+        if (!Submission_Initialize()) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission globals", __func__);
+            exit(1);
+        }
+        atexit(Submission_Shutdown_Global);
         Message_Init();
         if (!Transfer_Init()) {
             exit(1);

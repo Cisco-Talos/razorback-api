@@ -112,6 +112,7 @@ struct RazorbackContext
     Semaphore_t *regSem;                                    ///< Registration semaphore
     bool regOk;                                             ///< Registration status
     void *userData;                                         ///< Context User Data
+    atomic_bool paused;                                     ///< Whether work for this context is paused by C&C
 
     /** Inspector specific data.
      */
@@ -133,7 +134,7 @@ struct RazorbackContext
         Semaphore_t *workerInitSem;              ///< Barrier for initial worker startup
         uint32_t workerInitPending;              ///< Initial workers still reporting startup
         bool workerInitFailed;                   ///< Whether any worker failed initThread
-        struct ThreadPool *threadPool;           ///< Inspection worker thread pool
+        ThreadPool_t *threadPool;                ///< Inspection worker thread pool
         struct Queue *judgmentQueue;             ///< Judgment queue structure
 
     } inspector;
@@ -144,6 +145,13 @@ struct RazorbackContext
     {
         List_t *threads;  ///< Output Thread List
     } output;
+
+    /** Submission specific data.
+     */
+    struct Submission
+    {
+        ThreadPool_t *responseThreadPool;  ///< Per-context global-cache response thread pool
+    } submission;
 
     /** Dispatcher specific data.
      */

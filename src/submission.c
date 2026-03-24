@@ -39,9 +39,11 @@
 #include "telemetry.h"
 #include <string.h>
 
-struct ThreadPool *requestThreadPool= NULL;
-struct ThreadPool *responseThreadPool= NULL;
-struct ThreadPool *submissionThreadPool = NULL;
+#define SUBMISSION_QUEUE_POP_TIMEOUT_MS 100
+#define SUBMISSION_CONTEXT_DRAIN_WAIT_MS 10
+
+static ThreadPool_t *requestThreadPool = NULL;
+static ThreadPool_t *submissionThreadPool = NULL;
 
 void Submission_GlobalCache_RequestThread(Thread_t *p_pThread);
 void Submission_GlobalCache_ResponseThread(Thread_t *p_pThread);
@@ -52,9 +54,6 @@ static List_t *requestQueue = NULL;
 static List_t *submitQueue = NULL;
 static List_t *requestTiming = NULL;
 static Mutex_t *requestTimingLock = NULL;
-
-static struct RazorbackContext *sg_pContext = NULL;
-static bool sg_bInitDone=false;
 
 struct CacheLookupTiming
 {
@@ -67,6 +66,7 @@ struct CacheResult
     uint32_t iSfFlags;
     uint32_t iEntFlags;
     struct BlockId *pId;
+    struct RazorbackContext *context;
     uint32_t matchedCount;
 };
 
@@ -76,6 +76,7 @@ static void Submission_CacheLookupTiming_Destroy(void *item);
 static void Submission_RecordCacheLookupStart(struct BlockPoolItem *item);
 static void Submission_RecordCacheLookupWait(struct BlockPoolItem *item);
 static const char *Submission_Reason_Label(uint32_t reason);
+static void Submission_DestroySharedResources(void);
 
 static int
 Submission_CacheLookupTiming_KeyCmp(void *a, const void *key)
@@ -169,20 +170,44 @@ Submission_Reason_Label(uint32_t reason)
     }
 }
 
-bool
-Submission_Init(struct RazorbackContext *p_pContext)
+static void
+Submission_DestroySharedResources(void)
 {
-
-    if (sg_bInitDone)
-        return true;
-
-    sg_pContext = p_pContext;
-    if (!BlockPool_Init(p_pContext))
-    {
-        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed initialize block pool", __func__);
-        return false;
+    if (requestThreadPool != NULL) {
+        ThreadPool_Destroy(requestThreadPool);
+        requestThreadPool = NULL;
     }
 
+    if (submissionThreadPool != NULL) {
+        ThreadPool_Destroy(submissionThreadPool);
+        submissionThreadPool = NULL;
+    }
+
+    if (requestTimingLock != NULL) {
+        Mutex_Destroy(requestTimingLock);
+        requestTimingLock = NULL;
+    }
+
+    if (requestTiming != NULL) {
+        List_Destroy(requestTiming);
+        requestTiming = NULL;
+    }
+
+    if (submitQueue != NULL) {
+        List_Destroy(submitQueue);
+        submitQueue = NULL;
+    }
+
+    if (requestQueue != NULL) {
+        List_Destroy(requestQueue);
+        requestQueue = NULL;
+    }
+
+}
+
+bool
+Submission_Initialize(void)
+{
     requestQueue = List_Create(LIST_MODE_QUEUE,
             NULL, // Cmp
             NULL, // KeyCmp
@@ -210,31 +235,83 @@ Submission_Init(struct RazorbackContext *p_pContext)
     {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission queues",
                 __func__);
+        Submission_DestroySharedResources();
         return false;
     }
 
     requestThreadPool = ThreadPool_Create(
             Config_getSubGcReqThreadsInit(),
             Config_getSubGcReqThreadsMax(),
-            p_pContext,
+            NULL,
             "GC Request Thread (%d)",
             Submission_GlobalCache_RequestThread);
+    if (requestThreadPool == NULL)
+    {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create global cache request thread pool",
+                __func__);
+        Submission_DestroySharedResources();
+        return false;
+    }
 
-    responseThreadPool = ThreadPool_Create(
+    submissionThreadPool = ThreadPool_Create(
+            Config_getSubTransferThreadsInit(),
+            Config_getSubTransferThreadsMax(),
+            NULL,
+            "Submission Transfer Thread (%d)",
+            Submission_SubmitThread);
+    if (submissionThreadPool == NULL)
+    {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create submission transfer thread pool",
+                __func__);
+        Submission_DestroySharedResources();
+        return false;
+    }
+    return true;
+}
+
+void
+Submission_Shutdown_Global(void)
+{
+    /* Shared submission workers are process-wide and now live for the API lifetime. */
+    Submission_DestroySharedResources();
+}
+
+void
+Submission_Shutdown(struct RazorbackContext *p_pContext)
+{
+    if (p_pContext == NULL || p_pContext->submission.responseThreadPool == NULL)
+        return;
+
+    while (BlockPool_GetContextItemCount(p_pContext) > 0)
+        Thread_Sleep(SUBMISSION_CONTEXT_DRAIN_WAIT_MS);
+
+    ThreadPool_Destroy(p_pContext->submission.responseThreadPool);
+    p_pContext->submission.responseThreadPool = NULL;
+
+    ResponseQueue_Terminate(p_pContext->uuidNuggetId);
+}
+
+bool
+Submission_Init(struct RazorbackContext *p_pContext)
+{
+    if (p_pContext == NULL)
+        return false;
+
+    if (p_pContext->submission.responseThreadPool != NULL)
+        return true;
+
+    p_pContext->submission.responseThreadPool = ThreadPool_Create(
             Config_getSubGcRespThreadsInit(),
             Config_getSubGcRespThreadsMax(),
             p_pContext,
             "GC Response Thread (%d)",
             Submission_GlobalCache_ResponseThread);
-
-    submissionThreadPool = ThreadPool_Create(
-            Config_getSubTransferThreadsInit(),
-            Config_getSubTransferThreadsMax(),
-            p_pContext,
-            "Submission Transfer Thread (%d)",
-            Submission_SubmitThread);
-
-    sg_bInitDone = true;
+    if (p_pContext->submission.responseThreadPool == NULL)
+    {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create global cache response thread pool",
+                __func__);
+        return false;
+    }
 
     return true;
 }
@@ -321,6 +398,7 @@ void
 Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
 {
     struct BlockPoolItem *item = NULL;
+    struct RazorbackContext *itemContext = NULL;
     struct Queue *queue = NULL;
     struct Message *message = NULL;
     struct TelemetrySpan *itemSpan = NULL;
@@ -333,14 +411,20 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
     if ((queue = Queue_Create(REQUEST_QUEUE, false, QUEUE_FLAG_SEND)) == NULL)
         return;
 
-    while (!Thread_IsStopped(p_pThread))
+    while (true)
     {
-        item = List_Pop(requestQueue);
+        item = List_Pop_Ex(requestQueue, SUBMISSION_QUEUE_POP_TIMEOUT_MS);
         if (item == NULL)
         {
-            rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to dequeue item", __func__);
+            if (Thread_IsStopped(p_pThread) &&
+                List_Length(requestQueue) == 0)
+                break;
             continue;
         }
+
+        itemContext = item->context;
+        Thread_ChangeContext(p_pThread, itemContext);
+
         BlockPool_Item_Lock(item);
         itemSpan = Telemetry_StartSpan("request global cache", &item->telemetryContext);
         BlockPool_AddCommonTelemetryAttributes(item, itemSpan);
@@ -357,7 +441,7 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
         BlockPool_SetStatus(item, BLOCK_POOL_STATUS_CHECKING_GLOBAL_CACHE);
 
         if (( message = MessageCacheReq_Initialize(
-                        sg_pContext->uuidNuggetId, item->pEvent->pBlock->pId)) == NULL)
+                        item->pEvent->pId->uuidNuggetId, item->pEvent->pBlock->pId)) == NULL)
         {
             rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to initialize cache request", __func__);
             itemError = "failed to initialize cache request";
@@ -378,6 +462,8 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
         message->destroy(message);
         Telemetry_EndSpan(itemSpan, itemSuccess, itemError);
     }
+
+    Queue_Terminate(queue);
 }
 
 int
@@ -394,6 +480,9 @@ Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void * use
 
     if (BlockPool_GetStatus(p_pItem) == BLOCK_POOL_STATUS_CHECKING_GLOBAL_CACHE)
     {
+        if (l_pRes->context == NULL || p_pItem->context != l_pRes->context)
+            return LIST_EACH_OK;
+
         if (BlockId_IsEqual(p_pItem->pEvent->pBlock->pId, l_pRes->pId))
         {
             l_pRes->matchedCount++;
@@ -436,6 +525,7 @@ Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void * use
 void
 Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
 {
+    struct RazorbackContext *context = Thread_GetContext(p_pThread);
     struct Message *message;
     struct MessageCacheResp *l_mcrMessage;
     struct CacheResult *l_pRes;
@@ -444,7 +534,10 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
     bool processSuccess;
     const char *processError;
     // TODO: Not what we think it is!!
-    if ((queue = ResponseQueue_Initialize(sg_pContext->uuidNuggetId, QUEUE_FLAG_RECV)) == NULL)
+    if (context == NULL)
+        return;
+
+    if ((queue = ResponseQueue_Initialize(context->uuidNuggetId, QUEUE_FLAG_RECV)) == NULL)
         return;
 
     if ((l_pRes = calloc(1, sizeof(struct CacheResult))) == NULL)
@@ -452,10 +545,13 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
         rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to allocate thread args", __func__);
         return;
     }
-    while (!Thread_IsStopped(p_pThread))
+    while (true)
     {
-        if ((message = Queue_Get(queue)) == NULL)
+        if ((message = Queue_Get_Ex(queue, true, SUBMISSION_QUEUE_POP_TIMEOUT_MS)) == NULL) {
+            if (Thread_IsStopped(p_pThread))
+                break;
             continue;
+        }
         processSpan = Telemetry_StartMessageProcessSpan(queue, message);
         processSuccess = false;
         processError = NULL;
@@ -473,6 +569,7 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
         l_pRes->pId = l_mcrMessage->pId;
         l_pRes->iSfFlags = l_mcrMessage->iSfFlags;
         l_pRes->iEntFlags = l_mcrMessage->iEntFlags;
+        l_pRes->context = context;
         l_pRes->matchedCount = 0;
         rzb_log(LOG_DEBUG,LOG_C_CORE, "%s: Got flags SF: 0x%08x, ENT: 0x%08x", __func__, l_pRes->iSfFlags, l_pRes->iEntFlags);
         BlockPool_ForEachItem(Submission_GlobalCache_ResponseHandler, l_pRes);
@@ -485,14 +582,13 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
     }
 
     free(l_pRes);
-    // TODO: BAD
-    ResponseQueue_Terminate(sg_pContext->uuidNuggetId);
 }
 
 void
 Submission_SubmitThread(Thread_t *p_pThread)
 {
     struct Message *message;
+    struct RazorbackContext *itemContext = NULL;
     uint8_t storedLocality = 0;
     struct ConnectedEntity *dispatcher = NULL;
     enum TransferStatus transfered = TRANSFER_FAIL_LOCAL;
@@ -514,16 +610,21 @@ Submission_SubmitThread(Thread_t *p_pThread)
     if ((queue = Queue_Create(INPUT_QUEUE, false, QUEUE_FLAG_SEND)) == NULL)
         return;
 
-    while (!Thread_IsStopped(p_pThread))
+    while (true)
     {
         transfered = TRANSFER_FAIL_LOCAL;
         transferTries = 0;
-        item = List_Pop(submitQueue);
+        item = List_Pop_Ex(submitQueue, SUBMISSION_QUEUE_POP_TIMEOUT_MS);
         if (item == NULL)
         {
-            rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to dequeue item", __func__);
+            if (Thread_IsStopped(p_pThread) &&
+                List_Length(submitQueue) == 0)
+                break;
             continue;
         }
+
+        itemContext = item->context;
+        Thread_ChangeContext(p_pThread, itemContext);
 
         BlockPool_Item_Lock(item);
         submitStartedAt = Telemetry_GetMonotonicTimeSeconds();

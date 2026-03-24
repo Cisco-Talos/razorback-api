@@ -46,7 +46,6 @@ static bool sg_bQueueInitialized = false;
 static Thread_t *sg_tThread;
 static struct Timer * sg_helloTimer;
 
-Mutex_t * sg_mPauseLock = NULL;
 Mutex_t * processLock = NULL;
 
 static struct Queue *sg_writeQueue;
@@ -117,12 +116,9 @@ CommandAndControl_Start (struct RazorbackContext *p_pContext) {
     if (p_pContext->pCommandHooks == NULL)
         p_pContext->pCommandHooks = &sg_DefaultHooks;
 
-
     if ((p_pContext->iFlags & CONTEXT_FLAG_STAND_ALONE) ==
         CONTEXT_FLAG_STAND_ALONE) {
         if (!sg_bQueueInitialized) {
-            if ((sg_mPauseLock = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL)
-                return false;
             if ((processLock = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL)
                 return false;
 
@@ -213,11 +209,12 @@ CommandAndControl_Thread (Thread_t *p_pThread) {
             continue;
         }
 
-        // Lock out other threads from the stomp connections
+        /* Serialize C&C dispatch against shutdown and timer-driven broadcasts. */
         CommandAndControl_Pause();
         if (Message_Get_Nuggets(message, source, dest) == false) {
             rzb_log(LOG_ERR, LOG_C_CNC, "%s: Dropped command, failed to parse source/dest UUID", __func__);
             message->destroy(message);
+            CommandAndControl_Unpause();
             continue;
         }
 
@@ -784,12 +781,19 @@ Default_processConfErrMessage (struct Message *message) {
 
 static bool
 Default_processPauseMessage (struct Message *message) {
+    struct RazorbackContext *l_pContext;
+
     ASSERT(message != NULL);
     if (message == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Message is NULL", __func__);
         return false;
     }
     rzb_log (LOG_DEBUG, LOG_C_CNC, "%s: C&C Default Hook: Pause", __func__);
+    if ((l_pContext = Thread_GetContext(sg_tThread)) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CNC, "%s: Received pause message for unknown context", __func__);
+        return false;
+    }
+    atomic_store(&l_pContext->paused, true);
     return true;
 }
 
@@ -821,6 +825,8 @@ Default_processGoMessage (struct Message *message) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Recieved go message for unknown context", __func__);
         return false;
     }
+
+    atomic_store(&l_pContext->paused, false);
 
     // Wait up the registering thread.
     l_pContext->regOk = true;

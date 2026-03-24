@@ -93,6 +93,8 @@ Razorback_Init_Context (struct RazorbackContext *context) {
         return false;
     }
 
+    context->submission.responseThreadPool = NULL;
+    atomic_init(&context->paused, false);
     context->locality = Config_getLocalityId();
 
     // Init the registration semaphore.
@@ -111,8 +113,6 @@ Razorback_Init_Context (struct RazorbackContext *context) {
 
     UUID_Get_UUID (NUGGET_TYPE_COLLECTION, UUID_TYPE_NUGGET_TYPE, l_pUuid);
     if (uuid_compare (context->uuidNuggetType, l_pUuid) == 0) {
-        // XXX: This has interesting side effects -> this is not the context we
-        // expect later in execution.
         if (!Submission_Init (context)) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission api", __func__);
             Razorback_Remove_Context(context);
@@ -182,7 +182,7 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
         Razorback_Remove_Context(context);
         return NULL;
     }
-    // XXX: This has interesting side effects -> this is not the context we expect later in execution.
+
     if (!Submission_Init (context)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission api", __func__);
         Razorback_Remove_Context(context);
@@ -268,14 +268,14 @@ Kill_Output_Thread(void *ut, void *ud) {
 
 SO_PUBLIC void
 Razorback_Shutdown_Context (struct RazorbackContext *context) {
-    CommandAndControl_Pause();
     CommandAndControl_SendBye(context);
 
-    Inspection_Shutdown(context);
-
+    CommandAndControl_Pause();
     List_Remove(sg_ContextList, context);
-
     CommandAndControl_Unpause();
+
+    Inspection_Shutdown(context);
+    Submission_Shutdown(context);
     if ((context->iFlags & CONTEXT_FLAG_STAND_ALONE) ==
         CONTEXT_FLAG_STAND_ALONE) {
        CommandAndControl_Shutdown();
@@ -350,9 +350,7 @@ Razorback_Render_Verdict (struct Judgment *judgment) {
         return false;
     }
 
-    Mutex_Lock (sg_mPauseLock);
     Queue_Put (context->inspector.judgmentQueue, message);
-    Mutex_Unlock (sg_mPauseLock);
     ((struct MessageJudgmentSubmission *)message->message)->pJudgment = NULL;
     message->destroy(message);
 

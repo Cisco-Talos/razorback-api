@@ -28,6 +28,16 @@
 
 #define THREAD_POOL_KILL_WAIT_SLEEP_MS 10
 
+struct ThreadPool
+{
+    size_t limit;
+    atomic_int nextId;
+    struct RazorbackContext *context;
+    void (*mainFunction) (Thread_t *);
+    const char *namePattern;
+    List_t *list;
+};
+
 
 static int
 TP_KeyCmp(void *a, const void *id)
@@ -66,7 +76,7 @@ static void
 ThreadPool_Main(Thread_t *thread)
 {
     struct ThreadPoolItem *worker = Thread_GetUserData(thread);
-    struct ThreadPool *pool = worker->pool;
+    ThreadPool_t *pool = worker->pool;
     Thread_SetUserData(thread,NULL);
 
     pool->mainFunction(thread);
@@ -74,15 +84,15 @@ ThreadPool_Main(Thread_t *thread)
     List_Remove(pool->list, worker);
 }
 
-SO_PUBLIC struct ThreadPool *
+SO_PUBLIC ThreadPool_t *
 ThreadPool_Create(int initialThreads,
         int maxThreads,
         struct RazorbackContext *context,
         const char *namePattern,
         void (*mainFunction) (Thread_t *))
 {
-    struct ThreadPool *pool;
-    if ((pool = (struct ThreadPool *)calloc(1,sizeof(struct ThreadPool))) == NULL)
+    ThreadPool_t *pool;
+    if ((pool = (ThreadPool_t *)calloc(1,sizeof(ThreadPool_t))) == NULL)
         return NULL;
     if ((pool->list = List_Create( LIST_MODE_GENERIC,
                     TP_Cmp,
@@ -113,7 +123,7 @@ ThreadPool_Create(int initialThreads,
 
 
 SO_PUBLIC bool
-ThreadPool_LaunchWorker(struct ThreadPool *pool)
+ThreadPool_LaunchWorker(ThreadPool_t *pool)
 {
     struct ThreadPoolItem *item;
     char* name;
@@ -147,7 +157,7 @@ ThreadPool_LaunchWorker(struct ThreadPool *pool)
 }
 
 SO_PUBLIC bool
-ThreadPool_LaunchWorkers(struct ThreadPool *pool, int count)
+ThreadPool_LaunchWorkers(ThreadPool_t *pool, int count)
 {
     int i=0;
     for (i = 0; i < count; i++)
@@ -161,7 +171,7 @@ ThreadPool_LaunchWorkers(struct ThreadPool *pool, int count)
 }
 
 SO_PUBLIC bool
-ThreadPool_KillWorker(struct ThreadPool *pool, int id)
+ThreadPool_KillWorker(ThreadPool_t *pool, int id)
 {
     struct ThreadPoolItem *worker;
     worker = (struct ThreadPoolItem *)List_Find(pool->list, &id);
@@ -185,7 +195,7 @@ ThreadPool_Kill(void *vItem, void *userData)
 
 
 SO_PUBLIC bool
-ThreadPool_KillWorkers(struct ThreadPool *pool)
+ThreadPool_KillWorkers(ThreadPool_t *pool)
 {
     size_t count;
 
@@ -201,7 +211,7 @@ ThreadPool_KillWorkers(struct ThreadPool *pool)
 }
 
 SO_PUBLIC void
-ThreadPool_Destroy(struct ThreadPool *pool)
+ThreadPool_Destroy(ThreadPool_t *pool)
 {
     if (pool == NULL)
         return;
@@ -218,7 +228,7 @@ ThreadPool_Destroy(struct ThreadPool *pool)
 }
 
 SO_PUBLIC size_t
-ThreadPool_GetAliveCount(struct ThreadPool *pool)
+ThreadPool_GetAliveCount(ThreadPool_t *pool)
 {
     if (pool == NULL || pool->list == NULL)
         return 0;

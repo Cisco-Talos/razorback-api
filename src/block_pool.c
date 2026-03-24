@@ -38,17 +38,15 @@
 #include <string.h>
 
 static void BlockPool_Delete(void *a);
+static int BlockPool_CountContextItem(struct BlockPoolItem *p_pItem, void *userData);
 
 
 static List_t * sg_bpList;
-static bool sg_bInitDone=false;
 static size_t sg_size;
 static Mutex_t *sg_sizeMutex;
 bool
-BlockPool_Init(struct RazorbackContext *context)
+BlockPool_Init(void)
 {
-    if (sg_bInitDone)
-        return true;
     sg_bpList = List_Create(LIST_MODE_GENERIC,
                             NULL, // Cmp
                             NULL, // KeyCmp
@@ -62,7 +60,6 @@ BlockPool_Init(struct RazorbackContext *context)
     if (sg_bpList == NULL || sg_sizeMutex == NULL)
         return false;
 
-    sg_bInitDone = true;
     return true;
 }
 
@@ -100,6 +97,7 @@ BlockPool_CreateItem(struct RazorbackContext *context)
     }
 
     item->iStatus = BLOCK_POOL_STATUS_COLLECTING;
+    item->context = context;
 
     uuid_copy(item->pEvent->pId->uuidNuggetId, context->uuidNuggetId);
     uuid_copy(item->pEvent->uuidApplicationType, context->uuidApplicationType);
@@ -421,6 +419,41 @@ BlockPool_ForEachItem(int (*function) (struct BlockPoolItem *, void *), void *us
     }
 
     List_ForEach(sg_bpList, (int (*)(void *, void *))function, userData);
+}
+
+struct BlockPoolContextCount
+{
+    const struct RazorbackContext *context;
+    size_t count;
+};
+
+static int
+BlockPool_CountContextItem(struct BlockPoolItem *p_pItem, void *userData)
+{
+    struct BlockPoolContextCount *data = userData;
+
+    if (p_pItem == NULL || data == NULL)
+        return LIST_EACH_ERROR;
+
+    if (p_pItem->context == data->context)
+        data->count++;
+
+    return LIST_EACH_OK;
+}
+
+size_t
+BlockPool_GetContextItemCount(const struct RazorbackContext *p_pContext)
+{
+    struct BlockPoolContextCount data;
+
+    if (sg_bpList == NULL || p_pContext == NULL)
+        return 0;
+
+    data.context = p_pContext;
+    data.count = 0;
+
+    BlockPool_ForEachItem(BlockPool_CountContextItem, &data);
+    return data.count;
 }
 
 void
