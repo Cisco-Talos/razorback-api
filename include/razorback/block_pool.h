@@ -40,6 +40,7 @@ extern "C" {
 #define BLOCK_POOL_STATUS_SUBMIT_DATA           0x00000010 ///< Submit block
 #define BLOCK_POOL_STATUS_PAGED                 0x00000011 ///< Block is currently paging out
 #define BLOCK_POOL_STATUS_DESTROY               0x00000012 ///< Destroy this item
+#define BLOCK_POOL_STATUS_ERROR                 0x00000020 ///< Terminal submission error
 
 #define BLOCK_POOL_FLAG_MASK                    0xFF000000 ///< Mask for Flags bits
 #define BLOCK_POOL_FLAG_MAY_REUSE               0x01000000 ///< This item should not be fully removed from the pool

@@ -41,6 +41,7 @@
 
 #define SUBMISSION_QUEUE_POP_TIMEOUT_MS 100
 #define SUBMISSION_CONTEXT_DRAIN_WAIT_MS 10
+#define SUBMISSION_CONTEXT_DRAIN_TIMEOUT_MS 30000U
 
 static bool sg_subInitDone = false;
 static Mutex_t *sg_subInitLock = NULL;
@@ -75,11 +76,13 @@ struct CacheResult
 static int Submission_CacheLookupTiming_KeyCmp(void *a, const void *key);
 static int Submission_CacheLookupTiming_Cmp(void *a, void *b);
 static void Submission_CacheLookupTiming_Destroy(void *item);
+static void Submission_ClearCacheLookupTiming(struct BlockPoolItem *item);
 static void Submission_RecordCacheLookupStart(struct BlockPoolItem *item);
 static void Submission_RecordCacheLookupWait(struct BlockPoolItem *item);
 static const char *Submission_Reason_Label(uint32_t reason);
 static void Submission_DestroySharedResources(void);
 static bool Submission_Initialize_Once(void);
+static size_t Submission_AbandonStuckContextCacheLookups(struct RazorbackContext *p_pContext);
 
 static int
 Submission_CacheLookupTiming_KeyCmp(void *a, const void *key)
@@ -109,6 +112,21 @@ static void
 Submission_CacheLookupTiming_Destroy(void *item)
 {
     free(item);
+}
+
+static void
+Submission_ClearCacheLookupTiming(struct BlockPoolItem *item)
+{
+    struct CacheLookupTiming *entry;
+
+    if (item == NULL || requestTiming == NULL || requestTimingLock == NULL)
+        return;
+
+    Mutex_Lock(requestTimingLock);
+    entry = List_Find(requestTiming, item);
+    if (entry != NULL)
+        List_Remove(requestTiming, entry);
+    Mutex_Unlock(requestTimingLock);
 }
 
 static void
@@ -328,8 +346,24 @@ Submission_Shutdown_Global(void)
 void
 Submission_Shutdown(struct RazorbackContext *p_pContext)
 {
+    double drainDeadline;
+    size_t cleanedCount;
+
     if (p_pContext == NULL || p_pContext->submission.responseThreadPool == NULL)
         return;
+
+    drainDeadline = Telemetry_GetMonotonicTimeSeconds() +
+        ((double)SUBMISSION_CONTEXT_DRAIN_TIMEOUT_MS / 1000.0);
+    while (BlockPool_GetContextItemCount(p_pContext) > 0 &&
+           Telemetry_GetMonotonicTimeSeconds() < drainDeadline)
+        Thread_Sleep(SUBMISSION_CONTEXT_DRAIN_WAIT_MS);
+
+    cleanedCount = Submission_AbandonStuckContextCacheLookups(p_pContext);
+    if (cleanedCount > 0) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Abandoned %zu stuck cache-lookup items during context shutdown",
+                __func__, cleanedCount);
+    }
 
     while (BlockPool_GetContextItemCount(p_pContext) > 0)
         Thread_Sleep(SUBMISSION_CONTEXT_DRAIN_WAIT_MS);
@@ -410,6 +444,7 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
     {
         rzb_log(LOG_INFO,LOG_C_CORE, "%s: Submission with null data type dropped.", __func__);
         Telemetry_RecordBlockSubmitDecision("invalid_datatype");
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_ERROR);
         if (p_pItem->submittedCallback != NULL)
             p_pItem->submittedCallback(p_pItem);
 
@@ -501,14 +536,28 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
         {
             rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to initialize cache request", __func__);
             itemError = "failed to initialize cache request";
+            Submission_ClearCacheLookupTiming(item);
+            BlockPool_SetStatus(item, BLOCK_POOL_STATUS_ERROR);
             Telemetry_EndSpan(itemSpan, false, itemError);
+            if (item->submittedCallback != NULL)
+                item->submittedCallback(item);
             BlockPool_Item_Unlock(item);
+            BlockPool_DestroyItem(item);
             continue;
         }
         if (!Queue_Put(queue, message))
         {
             rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to send cache request", __func__);
             itemError = "failed to send cache request";
+            Submission_ClearCacheLookupTiming(item);
+            BlockPool_SetStatus(item, BLOCK_POOL_STATUS_ERROR);
+            message->destroy(message);
+            Telemetry_EndSpan(itemSpan, false, itemError);
+            if (item->submittedCallback != NULL)
+                item->submittedCallback(item);
+            BlockPool_Item_Unlock(item);
+            BlockPool_DestroyItem(item);
+            continue;
         }
         else
         {
@@ -520,6 +569,68 @@ Submission_GlobalCache_RequestThread(Thread_t *p_pThread)
     }
 
     Queue_Terminate(queue);
+}
+
+struct SubmissionStuckLookupContext
+{
+    const struct RazorbackContext *context;
+    struct BlockPoolItem *item;
+};
+
+static int
+Submission_FindStuckCacheLookup(struct BlockPoolItem *p_pItem, void *userData)
+{
+    struct SubmissionStuckLookupContext *data = userData;
+
+    if (p_pItem == NULL || data == NULL)
+        return LIST_EACH_ERROR;
+
+    if (p_pItem->context != data->context)
+        return LIST_EACH_OK;
+
+    if (BlockPool_GetStatus(p_pItem) != BLOCK_POOL_STATUS_CHECKING_GLOBAL_CACHE)
+        return LIST_EACH_OK;
+
+    data->item = p_pItem;
+    return LIST_EACH_END;
+}
+
+static size_t
+Submission_AbandonStuckContextCacheLookups(struct RazorbackContext *p_pContext)
+{
+    struct SubmissionStuckLookupContext data;
+    struct BlockPoolItem *item;
+    size_t count = 0;
+
+    if (p_pContext == NULL)
+        return 0;
+
+    for (;;) {
+        data.context = p_pContext;
+        data.item = NULL;
+        BlockPool_ForEachItem(Submission_FindStuckCacheLookup, &data);
+        item = data.item;
+        if (item == NULL)
+            break;
+
+        BlockPool_Item_Lock(item);
+        if (item->context != p_pContext ||
+            BlockPool_GetStatus(item) != BLOCK_POOL_STATUS_CHECKING_GLOBAL_CACHE)
+        {
+            BlockPool_Item_Unlock(item);
+            continue;
+        }
+        Submission_ClearCacheLookupTiming(item);
+        BlockPool_SetStatus(item, BLOCK_POOL_STATUS_ERROR);
+        BlockPool_Item_Unlock(item);
+
+        if (item->submittedCallback != NULL)
+            item->submittedCallback(item);
+        BlockPool_DestroyItem(item);
+        count++;
+    }
+
+    return count;
 }
 
 int
@@ -739,6 +850,7 @@ Submission_SubmitThread(Thread_t *p_pThread)
                 itemError = "failed to transfer block";
                 reasonLabel = Submission_Reason_Label(SUBMISSION_REASON_REQUESTED);
                 submitOutcome = "store_failed";
+                BlockPool_SetStatus(item, BLOCK_POOL_STATUS_ERROR);
                 if (item->submittedCallback != NULL)
                     item->submittedCallback(item);
                 Telemetry_EndSpan(itemSpan, false, itemError);
@@ -760,6 +872,7 @@ Submission_SubmitThread(Thread_t *p_pThread)
         {
             rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to create message", __func__);
             itemError = "failed to create block submission message";
+            BlockPool_SetStatus(item, BLOCK_POOL_STATUS_ERROR);
             if (item->submittedCallback != NULL)
                 item->submittedCallback(item);
             Telemetry_EndSpan(itemSpan, false, itemError);
@@ -776,11 +889,13 @@ Submission_SubmitThread(Thread_t *p_pThread)
             rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to put message", __func__);
             itemError = "failed to send block submission";
             submitOutcome = "send_failed";
+            BlockPool_SetStatus(item, BLOCK_POOL_STATUS_ERROR);
         }
         else
         {
             itemSuccess = true;
             submitOutcome = "sent";
+            BlockPool_SetStatus(item, BLOCK_POOL_STATUS_FINALIZED);
         }
 
         // Set the event to null so we don't destroy it.
@@ -793,7 +908,6 @@ Submission_SubmitThread(Thread_t *p_pThread)
 
         if ((item->iStatus & BLOCK_POOL_FLAG_MAY_REUSE) == BLOCK_POOL_FLAG_MAY_REUSE)
         {
-            BlockPool_SetStatus(item, BLOCK_POOL_STATUS_FINALIZED);
             BlockPool_SetFlags(item, 0);
             BlockPool_DestroyItemDataList(item->pDataHead);
             item->pDataHead = NULL;
