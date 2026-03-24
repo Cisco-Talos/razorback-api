@@ -1037,6 +1037,16 @@ Queue_Reject_Message(struct Queue *queue, struct Message *message, bool requeue)
 }
 
 SO_PUBLIC bool
+Queue_Settle_Message(struct Queue *queue, struct Message *message,
+                     bool ackMessage, bool requeueMessage)
+{
+    if (ackMessage)
+        return Queue_Ack_Message(queue, message);
+
+    return Queue_Reject_Message(queue, message, requeueMessage);
+}
+
+SO_PUBLIC bool
 Queue_Put (struct Queue * queue,  struct Message * message)
 {
     return Queue_Put_Dest(queue, message, queue->sName);

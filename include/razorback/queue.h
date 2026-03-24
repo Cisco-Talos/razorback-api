@@ -159,6 +159,21 @@ SO_PUBLIC extern bool Queue_Reject_Message(
 );
 
 /**
+ * Settle a message previously received with deferred ack enabled.
+ * @param queue the queue.
+ * @param message the received message.
+ * @param ackMessage true to ack the delivery, false to reject it.
+ * @param requeueMessage when rejecting, true to request broker redelivery.
+ * @return true on success, false on failure.
+ */
+SO_PUBLIC extern bool Queue_Settle_Message(
+    struct Queue *queue,
+    struct Message *message,
+    bool ackMessage,
+    bool requeueMessage
+);
+
+/**
  * Sends a message to the queue.
  * @param queue the queue.
  * @param message the message to send.
