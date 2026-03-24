@@ -235,3 +235,37 @@ ThreadPool_GetAliveCount(ThreadPool_t *pool)
 
     return List_Length(pool->list);
 }
+
+struct ThreadPoolForEachContext
+{
+    int (*function)(Thread_t *thread, void *userData);
+    void *userData;
+};
+
+static int
+ThreadPool_ForEach_Entry(void *item, void *userData)
+{
+    struct ThreadPoolItem *worker = item;
+    struct ThreadPoolForEachContext *ctx = userData;
+
+    if (worker == NULL || ctx == NULL || ctx->function == NULL)
+        return LIST_EACH_ERROR;
+
+    return ctx->function(worker->thread, ctx->userData);
+}
+
+SO_PUBLIC int
+ThreadPool_ForEach(ThreadPool_t *pool,
+                   int (*function)(Thread_t *thread, void *userData),
+                   void *userData)
+{
+    struct ThreadPoolForEachContext ctx;
+
+    if (pool == NULL || pool->list == NULL || function == NULL)
+        return LIST_EACH_ERROR;
+
+    ctx.function = function;
+    ctx.userData = userData;
+
+    return List_ForEach(pool->list, ThreadPool_ForEach_Entry, &ctx);
+}

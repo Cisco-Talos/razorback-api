@@ -103,6 +103,19 @@ SO_PUBLIC extern void ThreadPool_Destroy(ThreadPool_t *pool);
  */
 SO_PUBLIC extern size_t ThreadPool_GetAliveCount(ThreadPool_t *pool);
 
+/**
+ * Visit each live worker thread in the pool.
+ * @param pool The ThreadPool to inspect.
+ * @param function Callback invoked for each live worker thread.
+ * @param userData Caller-provided callback state.
+ * @return LIST_EACH_OK on success, or the callback return value that stopped iteration.
+ */
+SO_PUBLIC extern int ThreadPool_ForEach(
+    ThreadPool_t *pool,
+    int (*function)(Thread_t *thread, void *userData),
+    void *userData
+);
+
 #ifdef __cplusplus
 }
 #endif
