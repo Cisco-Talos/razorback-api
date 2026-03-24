@@ -24,6 +24,7 @@
 #include <razorback/uuids.h>
 #include <razorback/log.h>
 #include <razorback/list.h>
+#include <razorback/lock.h>
 #include <razorback/thread.h>
 #include <razorback/thread_pool.h>
 #include <razorback/event.h>
@@ -51,6 +52,9 @@ static void Inspection_Destroy_Message(void *item);
 static bool Inspection_Complete_Message(struct RazorbackContext *p_pContext,
                                         struct Message *message);
 static void Inspection_Drain_Completed(struct RazorbackContext *p_pContext);
+static void Inspection_Destroy_Worker_Init_State(struct RazorbackContext *p_pContext);
+static void Inspection_Report_Worker_Init(struct RazorbackContext *p_pContext,
+                                          bool success);
 static const char *Inspection_Result_Label(uint8_t result);
 
 static const char *
@@ -69,9 +73,63 @@ Inspection_Result_Label(uint8_t result)
     }
 }
 
+static void
+Inspection_Destroy_Worker_Init_State(struct RazorbackContext *p_pContext)
+{
+    Semaphore_t *workerInitSem;
+    Mutex_t *workerInitLock;
+
+    if (p_pContext == NULL)
+        return;
+
+    workerInitSem = p_pContext->inspector.workerInitSem;
+    workerInitLock = p_pContext->inspector.workerInitLock;
+    p_pContext->inspector.workerInitSem = NULL;
+    p_pContext->inspector.workerInitLock = NULL;
+    p_pContext->inspector.workerInitPending = 0;
+    p_pContext->inspector.workerInitFailed = false;
+
+    if (workerInitSem != NULL)
+        Semaphore_Destroy(workerInitSem);
+    if (workerInitLock != NULL)
+        Mutex_Destroy(workerInitLock);
+}
+
+static void
+Inspection_Report_Worker_Init(struct RazorbackContext *p_pContext, bool success)
+{
+    Semaphore_t *workerInitSem = NULL;
+
+    if (p_pContext == NULL ||
+        p_pContext->inspector.workerInitLock == NULL ||
+        p_pContext->inspector.workerInitSem == NULL) {
+        return;
+    }
+
+    Mutex_Lock(p_pContext->inspector.workerInitLock);
+    if (p_pContext->inspector.workerInitPending > 0) {
+        p_pContext->inspector.workerInitPending--;
+        if (!success)
+            p_pContext->inspector.workerInitFailed = true;
+        workerInitSem = p_pContext->inspector.workerInitSem;
+    }
+    Mutex_Unlock(p_pContext->inspector.workerInitLock);
+
+    if (workerInitSem != NULL)
+        Semaphore_Post(workerInitSem);
+}
+
 bool
 Inspection_Launch(struct RazorbackContext *p_pContext, uint32_t initThreads, uint32_t maxThreads)
 {
+    uint32_t workerCount;
+    uint32_t workerLimit;
+    uint32_t i;
+    bool workerInitFailed;
+
+    workerCount = ((initThreads == 0) ? Config_getInspThreadsInit() : initThreads);
+    workerLimit = ((maxThreads == 0) ? Config_getInspThreadsMax() : maxThreads);
+
     if ((p_pContext->inspector.inspectionQueue =
              InspectorQueue_Initialize(p_pContext->uuidApplicationType,
                                        QUEUE_FLAG_RECV)) == NULL) {
@@ -112,15 +170,55 @@ Inspection_Launch(struct RazorbackContext *p_pContext, uint32_t initThreads, uin
         return false;
     }
 
+    p_pContext->inspector.workerInitLock = Mutex_Create(MUTEX_MODE_NORMAL);
+    if (p_pContext->inspector.workerInitLock == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create inspection worker init lock",
+                __func__);
+        Inspection_Shutdown(p_pContext);
+        return false;
+    }
+
+    p_pContext->inspector.workerInitSem = Semaphore_Create(false, 0);
+    if (p_pContext->inspector.workerInitSem == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create inspection worker init semaphore",
+                __func__);
+        Inspection_Shutdown(p_pContext);
+        return false;
+    }
+    p_pContext->inspector.workerInitPending = workerCount;
+    p_pContext->inspector.workerInitFailed = false;
+
     p_pContext->inspector.threadPool = ThreadPool_Create(
-        ((initThreads == 0) ? Config_getInspThreadsInit() : initThreads),
-        ((maxThreads == 0) ? Config_getInspThreadsMax() : maxThreads),
+        workerCount,
+        workerLimit,
         p_pContext,
         "Inspection Worker %i",
         Inspection_Process_Thread
     );
     if (p_pContext->inspector.threadPool == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to launch inspection workers", __func__);
+        Inspection_Shutdown(p_pContext);
+        return false;
+    }
+
+    for (i = 0; i < workerCount; ++i) {
+        if (!Semaphore_Wait(p_pContext->inspector.workerInitSem)) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed waiting for inspection worker init",
+                    __func__);
+            Inspection_Shutdown(p_pContext);
+            return false;
+        }
+    }
+
+    Mutex_Lock(p_pContext->inspector.workerInitLock);
+    workerInitFailed = p_pContext->inspector.workerInitFailed;
+    Mutex_Unlock(p_pContext->inspector.workerInitLock);
+    Inspection_Destroy_Worker_Init_State(p_pContext);
+
+    if (workerInitFailed) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Failed to launch inspection workers due to worker init failure",
+                __func__);
         Inspection_Shutdown(p_pContext);
         return false;
     }
@@ -485,9 +583,13 @@ Inspection_Process_Thread(Thread_t *p_pThread)
     if (l_pContext->inspector.hooks->initThread != NULL) {
         if (!l_pContext->inspector.hooks->initThread(&threadData)) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to init thread", __func__);
+            Inspection_Report_Worker_Init(l_pContext, false);
+            if (l_pContext->inspector.receiverThread != NULL)
+                Thread_Stop(l_pContext->inspector.receiverThread);
             return;
         }
     }
+    Inspection_Report_Worker_Init(l_pContext, true);
 
     while (!Thread_IsStopped(p_pThread)) {
         message = List_Pop(l_pContext->inspector.pendingMessages);
@@ -529,6 +631,8 @@ Inspection_Shutdown(struct RazorbackContext *p_pContext)
         ThreadPool_KillWorkers(p_pContext->inspector.threadPool);
         p_pContext->inspector.threadPool = NULL;
     }
+
+    Inspection_Destroy_Worker_Init_State(p_pContext);
 
     if (p_pContext->inspector.pendingMessages != NULL) {
         List_Destroy(p_pContext->inspector.pendingMessages);

@@ -55,7 +55,8 @@ static void
 TP_Destroy(void *a)
 {
     struct ThreadPoolItem *worker = (struct ThreadPoolItem *)a;
-    Thread_Destroy(worker->thread);
+    if (worker->thread != NULL)
+        Thread_Destroy(worker->thread);
     free(a);
 }
 
@@ -99,7 +100,13 @@ ThreadPool_Create(int initialThreads,
     pool->mainFunction = mainFunction;
     pool->namePattern = namePattern;
 
-    ThreadPool_LaunchWorkers(pool, initialThreads);
+    if (!ThreadPool_LaunchWorkers(pool, initialThreads))
+    {
+        ThreadPool_KillWorkers(pool);
+        List_Destroy(pool->list);
+        free(pool);
+        return NULL;
+    }
 
     return pool;
 }
@@ -131,6 +138,11 @@ ThreadPool_LaunchWorker(struct ThreadPool *pool)
     }
 
     item->thread = Thread_Launch(ThreadPool_Main, item, name, pool->context);
+    if (item->thread == NULL) {
+        List_Remove(pool->list, item);
+        free(name);
+        return false;
+    }
     return true;
 }
 

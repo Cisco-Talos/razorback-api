@@ -112,6 +112,10 @@ struct RazorbackContext
         Thread_t *receiverThread;                ///< Broker receive and ack thread
         List_t *pendingMessages;                 ///< Internal inspection work queue
         List_t *completedMessages;               ///< Completed messages awaiting ack
+        Mutex_t *workerInitLock;                 ///< Protects initial worker startup state
+        Semaphore_t *workerInitSem;              ///< Barrier for initial worker startup
+        uint32_t workerInitPending;              ///< Initial workers still reporting startup
+        bool workerInitFailed;                   ///< Whether any worker failed initThread
         struct ThreadPool *threadPool;           ///< Inspection worker thread pool
         struct Queue *judgmentQueue;             ///< Judgment queue structure
 
