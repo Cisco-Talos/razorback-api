@@ -1076,7 +1076,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     bool ret = false;
     const char *sendError = NULL;
     size_t i;
-    amqp_basic_properties_t props;
+    amqp_basic_properties_t props = {0};
 
     ASSERT (queue != NULL);
     ASSERT (message != NULL);
@@ -1140,7 +1140,6 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     } else {
         exchange = amqp_empty_bytes;
     }
-    memset(&props, 0, sizeof(props));
     props._flags = AMQP_BASIC_CONTENT_TYPE_FLAG | AMQP_BASIC_DELIVERY_MODE_FLAG | AMQP_BASIC_HEADERS_FLAG;
     props.content_type = amqp_cstring_bytes("application/json");
     props.delivery_mode = 2; /* persistent delivery mode */
