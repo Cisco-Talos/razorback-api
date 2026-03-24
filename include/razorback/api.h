@@ -110,8 +110,12 @@ struct RazorbackContext
         uuid_t *dataTypeList;                    ///< Inspection Data Type UUID Array
         struct Queue *inspectionQueue;           ///< Shared inspector broker queue
         Thread_t *receiverThread;                ///< Broker receive and ack thread
+        Thread_t *emergencyThread;               ///< Fatal inspection shutdown thread
         List_t *pendingMessages;                 ///< Internal inspection work queue
         List_t *completedMessages;               ///< Completed messages awaiting ack
+        Mutex_t *emergencyLock;                  ///< Protects fatal shutdown state
+        Semaphore_t *emergencySem;               ///< Triggers fatal shutdown thread
+        bool emergencyShutdownRequested;         ///< Whether fatal shutdown was requested
         Mutex_t *workerInitLock;                 ///< Protects initial worker startup state
         Semaphore_t *workerInitSem;              ///< Barrier for initial worker startup
         uint32_t workerInitPending;              ///< Initial workers still reporting startup
