@@ -53,11 +53,28 @@ Ubuntu focal:
 * jv - JSON validator (Required for testing, not runtime)
     `go install github.com/santhosh-tekuri/jsonschema/cmd/jv@latest`
 
+## Library Initialization
+
+Applications using the Razorback API must call `RZB_Init_API()` exactly once
+before calling any other Razorback API entry point. Razorback no longer
+performs this initialization automatically from a shared-library constructor or
+Windows DLL attach hook.
+
+```c
+#include <razorback/api.h>
+
+int main(void)
+{
+    RZB_Init_API();
+    /* ... */
+}
+```
+
 ## Telemetry
 
 Razorback is instrumented with OpenTelemetry and requires `opentelemetry-cpp`
-with OTLP HTTP exporter support at build time. The API library initializes
-telemetry during `RZB_Init_API()` and creates spans for:
+with OTLP HTTP exporter support at build time. When the application calls
+`RZB_Init_API()`, Razorback initializes telemetry and creates spans for:
 
 * queue sends
 * queue receives

@@ -51,6 +51,14 @@ extern "C" {
 #define DECL_ALERT_CHILD_FUNC(a) bool a (struct MessageAlertChild *message)
 #define DECL_OUTPUT_EVENT_FUNC(a) bool a (struct MessageOutputEvent *message)
 
+/**
+ * Initialize process-wide Razorback library state.
+ * This must be called exactly once by the library user before any other
+ * Razorback API function is used. It is not invoked automatically by the
+ * shared library loader.
+ * @return No return value.
+ */
+SO_PUBLIC extern void RZB_Init_API(void);
 
 /** Inspection Nugget Hooks
  */

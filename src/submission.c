@@ -42,6 +42,8 @@
 #define SUBMISSION_QUEUE_POP_TIMEOUT_MS 100
 #define SUBMISSION_CONTEXT_DRAIN_WAIT_MS 10
 
+static bool sg_subInitDone = false;
+static Mutex_t *sg_subInitLock = NULL;
 static ThreadPool_t *requestThreadPool = NULL;
 static ThreadPool_t *submissionThreadPool = NULL;
 
@@ -77,6 +79,7 @@ static void Submission_RecordCacheLookupStart(struct BlockPoolItem *item);
 static void Submission_RecordCacheLookupWait(struct BlockPoolItem *item);
 static const char *Submission_Reason_Label(uint32_t reason);
 static void Submission_DestroySharedResources(void);
+static bool Submission_Initialize_Once(void);
 
 static int
 Submission_CacheLookupTiming_KeyCmp(void *a, const void *key)
@@ -208,6 +211,37 @@ Submission_DestroySharedResources(void)
 bool
 Submission_Initialize(void)
 {
+    sg_subInitDone = false;
+    if (sg_subInitLock != NULL)
+        return true;
+
+    sg_subInitLock = Mutex_Create(MUTEX_MODE_NORMAL);
+    if (sg_subInitLock == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Failed to create submission initialization lock",
+                __func__);
+        return false;
+    }
+
+    return true;
+}
+
+static bool
+Submission_Initialize_Once(void)
+{
+    if (sg_subInitLock == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Submission initialization lock is unavailable",
+                __func__);
+        return false;
+    }
+
+    Mutex_Lock(sg_subInitLock);
+    if (sg_subInitDone) {
+        Mutex_Unlock(sg_subInitLock);
+        return true;
+    }
+
     requestQueue = List_Create(LIST_MODE_QUEUE,
             NULL, // Cmp
             NULL, // KeyCmp
@@ -236,6 +270,7 @@ Submission_Initialize(void)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission queues",
                 __func__);
         Submission_DestroySharedResources();
+        Mutex_Unlock(sg_subInitLock);
         return false;
     }
 
@@ -250,6 +285,7 @@ Submission_Initialize(void)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create global cache request thread pool",
                 __func__);
         Submission_DestroySharedResources();
+        Mutex_Unlock(sg_subInitLock);
         return false;
     }
 
@@ -264,16 +300,29 @@ Submission_Initialize(void)
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create submission transfer thread pool",
                 __func__);
         Submission_DestroySharedResources();
+        Mutex_Unlock(sg_subInitLock);
         return false;
     }
+    sg_subInitDone = true;
+    Mutex_Unlock(sg_subInitLock);
     return true;
 }
 
 void
 Submission_Shutdown_Global(void)
 {
-    /* Shared submission workers are process-wide and now live for the API lifetime. */
-    Submission_DestroySharedResources();
+    if (sg_subInitLock == NULL)
+        return;
+
+    Mutex_Lock(sg_subInitLock);
+    if (sg_subInitDone) {
+        Submission_DestroySharedResources();
+        sg_subInitDone = false;
+    }
+    Mutex_Unlock(sg_subInitLock);
+
+    Mutex_Destroy(sg_subInitLock);
+    sg_subInitLock = NULL;
 }
 
 void
@@ -299,6 +348,13 @@ Submission_Init(struct RazorbackContext *p_pContext)
 
     if (p_pContext->submission.responseThreadPool != NULL)
         return true;
+
+    if (!Submission_Initialize_Once()) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Failed to initialize shared submission services",
+                __func__);
+        return false;
+    }
 
     p_pContext->submission.responseThreadPool = ThreadPool_Create(
             Config_getSubGcRespThreadsInit(),
