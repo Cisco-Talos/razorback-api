@@ -30,6 +30,23 @@ m4_include([common_m4/build_tools.m4])
 AC_PROG_CXX
 LT_LANG([C++])
 
+AC_LANG_PUSH([C++])
+saved_CXXFLAGS="$CXXFLAGS"
+CXX23_CXXFLAGS="-std=c++23"
+CXXFLAGS="$saved_CXXFLAGS $CXX23_CXXFLAGS"
+AC_CACHE_CHECK([whether $CXX supports C++23],
+               [rb_cv_cxx23],
+               [AC_COMPILE_IFELSE(
+                    [AC_LANG_PROGRAM([[#include <stdatomic.h>]],
+                                     [[atomic_bool enabled = false;
+                                       return atomic_load(&enabled);]])],
+                    [rb_cv_cxx23=yes],
+                    [rb_cv_cxx23=no])])
+AS_IF([test "x$rb_cv_cxx23" != "xyes"], [
+    AC_MSG_ERROR([a C++23-capable compiler is required])
+])
+AC_LANG_POP([C++])
+
 # Pull in the platform specific build/configure environment options.
 m4_include([common_m4/platform_flags.m4])
 

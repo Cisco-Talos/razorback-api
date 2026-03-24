@@ -26,6 +26,8 @@
 #include "bobins.h"
 #endif
 
+#define THREAD_POOL_KILL_WAIT_SLEEP_MS 10
+
 
 static int
 TP_KeyCmp(void *a, const void *id)
@@ -102,9 +104,7 @@ ThreadPool_Create(int initialThreads,
 
     if (!ThreadPool_LaunchWorkers(pool, initialThreads))
     {
-        ThreadPool_KillWorkers(pool);
-        List_Destroy(pool->list);
-        free(pool);
+        ThreadPool_Destroy(pool);
         return NULL;
     }
 
@@ -177,8 +177,10 @@ static int
 ThreadPool_Kill(void *vItem, void *userData)
 {
     struct ThreadPoolItem *item = (struct ThreadPoolItem *)vItem;
+    (void)userData;
+
     Thread_Interrupt(item->thread);
-    return LIST_EACH_REMOVE;
+    return LIST_EACH_OK;
 }
 
 
@@ -186,10 +188,40 @@ SO_PUBLIC bool
 ThreadPool_KillWorkers(struct ThreadPool *pool)
 {
     size_t count;
+
+    if (pool == NULL || pool->list == NULL)
+        return false;
+
     List_ForEach(pool->list, ThreadPool_Kill, NULL);
 
     for (count = List_Length(pool->list); count > 0; count = List_Length(pool->list))
-        Thread_Yield();
+        Thread_Sleep(THREAD_POOL_KILL_WAIT_SLEEP_MS);
 
     return true;
+}
+
+SO_PUBLIC void
+ThreadPool_Destroy(struct ThreadPool *pool)
+{
+    if (pool == NULL)
+        return;
+
+    if (pool->list != NULL) {
+        if (List_Length(pool->list) > 0)
+            ThreadPool_KillWorkers(pool);
+
+        List_Destroy(pool->list);
+        pool->list = NULL;
+    }
+
+    free(pool);
+}
+
+SO_PUBLIC size_t
+ThreadPool_GetAliveCount(struct ThreadPool *pool)
+{
+    if (pool == NULL || pool->list == NULL)
+        return 0;
+
+    return List_Length(pool->list);
 }

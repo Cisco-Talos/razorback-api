@@ -103,8 +103,21 @@ SO_PUBLIC extern bool ThreadPool_KillWorker(struct ThreadPool *pool, int id);
  */
 SO_PUBLIC extern bool ThreadPool_KillWorkers(struct ThreadPool *pool);
 
+/**
+ * Destroy a thread pool and release its resources.
+ * @param pool The ThreadPool to destroy.
+ * @return No return value.
+ */
+SO_PUBLIC extern void ThreadPool_Destroy(struct ThreadPool *pool);
+
+/**
+ * Get the number of live workers in the pool.
+ * @param pool The ThreadPool to inspect.
+ * @return The number of live workers.
+ */
+SO_PUBLIC extern size_t ThreadPool_GetAliveCount(struct ThreadPool *pool);
+
 #ifdef __cplusplus
 }
 #endif
 #endif // RAZORBACK_THREAD_POOL_H
-

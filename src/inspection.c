@@ -50,6 +50,8 @@ static void Inspection_Process_Message(Thread_t *p_pThread,
 static void Inspection_Emergency_Shutdown_Thread(Thread_t *p_pThread);
 void Inspection_Shutdown(struct RazorbackContext *p_pContext);
 static void Inspection_Destroy_Message(void *item);
+static bool Inspection_Is_Shutdown_Started(const struct RazorbackContext *p_pContext);
+static void Inspection_Start_Shutdown(struct RazorbackContext *p_pContext);
 static bool Inspection_Complete_Message(struct RazorbackContext *p_pContext,
                                         struct Message *message);
 static void Inspection_Drain_Completed(struct RazorbackContext *p_pContext);
@@ -59,6 +61,11 @@ static void Inspection_Report_Worker_Init(struct RazorbackContext *p_pContext,
 static void Inspection_Request_Emergency_Shutdown(struct RazorbackContext *p_pContext,
                                                   const char *reason);
 static const char *Inspection_Result_Label(uint8_t result);
+
+#define INSPECTION_PENDING_POP_TIMEOUT_MS 1000U
+#define INSPECTION_RECEIVER_POLL_TIMEOUT_MS 1000U
+#define INSPECTION_SHUTDOWN_REJECT_SLEEP_MS 100U
+#define INSPECTION_SHUTDOWN_DRAIN_SLEEP_MS 50U
 
 static const char *
 Inspection_Result_Label(uint8_t result)
@@ -74,6 +81,24 @@ Inspection_Result_Label(uint8_t result)
     default:
         return "error";
     }
+}
+
+static bool
+Inspection_Is_Shutdown_Started(const struct RazorbackContext *p_pContext)
+{
+    if (p_pContext == NULL)
+        return true;
+
+    return atomic_load(&p_pContext->inspector.shutdownStarted);
+}
+
+static void
+Inspection_Start_Shutdown(struct RazorbackContext *p_pContext)
+{
+    if (p_pContext == NULL)
+        return;
+
+    atomic_store(&p_pContext->inspector.shutdownStarted, true);
 }
 
 static void
@@ -139,6 +164,8 @@ Inspection_Request_Emergency_Shutdown(struct RazorbackContext *p_pContext,
         return;
     }
 
+    Inspection_Start_Shutdown(p_pContext);
+
     Mutex_Lock(p_pContext->inspector.emergencyLock);
     if (!p_pContext->inspector.emergencyShutdownRequested) {
         p_pContext->inspector.emergencyShutdownRequested = true;
@@ -196,6 +223,8 @@ Inspection_Launch(struct RazorbackContext *p_pContext)
                 __func__);
         return false;
     }
+
+    atomic_init(&p_pContext->inspector.shutdownStarted, false);
 
     if ((p_pContext->inspector.inspectionQueue =
              InspectorQueue_Initialize(p_pContext->uuidApplicationType,
@@ -402,7 +431,8 @@ Inspection_Receiver_Thread(Thread_t *p_pThread)
     while (!Thread_IsStopped(p_pThread)) {
         Inspection_Drain_Completed(l_pContext);
 
-        if ((message = Queue_Get_Ex(l_pQueue, false, 1000)) == NULL) {
+        if ((message = Queue_Get_Ex(l_pQueue, false,
+                                    INSPECTION_RECEIVER_POLL_TIMEOUT_MS)) == NULL) {
             if (errno == EAGAIN || errno == EINTR)
                 continue;
             rzb_log(LOG_ERR, LOG_C_CORE,
@@ -415,18 +445,33 @@ Inspection_Receiver_Thread(Thread_t *p_pThread)
         receiveSuccess = false;
         receiveError = NULL;
 
+        if (Inspection_Is_Shutdown_Started(l_pContext)) {
+            Queue_Reject_Message(l_pQueue, message, true);
+            Telemetry_RecordShutdownRequeuedInspection();
+            Telemetry_EndSpan(receiveSpan, false, "inspection shutdown in progress");
+            Inspection_Destroy_Message(message);
+            Thread_Sleep(INSPECTION_SHUTDOWN_REJECT_SLEEP_MS);
+            continue;
+        }
+
         if (!Telemetry_UpdateContext(&message->telemetryContext)) {
             rzb_log(LOG_ERR, LOG_C_CORE,
                     "%s: Failed to capture telemetry context for deferred inspection message",
                     __func__);
         }
 
-        if (Thread_IsStopped(p_pThread)) {
+        if (Thread_IsStopped(p_pThread) || Inspection_Is_Shutdown_Started(l_pContext)) {
             Queue_Reject_Message(l_pQueue, message, true);
             Telemetry_RecordShutdownRequeuedInspection();
-            Telemetry_EndSpan(receiveSpan, false, "inspection receiver stopping");
+            Telemetry_EndSpan(receiveSpan, false,
+                              Thread_IsStopped(p_pThread)
+                                  ? "inspection receiver stopping"
+                                  : "inspection shutdown in progress");
             Inspection_Destroy_Message(message);
-            break;
+            if (Thread_IsStopped(p_pThread))
+                break;
+            Thread_Sleep(INSPECTION_SHUTDOWN_REJECT_SLEEP_MS);
+            continue;
         }
 
         if (!List_Push(l_pContext->inspector.pendingMessages, message)) {
@@ -687,18 +732,24 @@ Inspection_Process_Thread(Thread_t *p_pThread)
         if (!l_pContext->inspector.hooks->initThread(&threadData)) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to init thread", __func__);
             Inspection_Report_Worker_Init(l_pContext, false);
-            if (l_pContext->inspector.receiverThread != NULL)
-                Thread_Stop(l_pContext->inspector.receiverThread);
+            Inspection_Request_Emergency_Shutdown(l_pContext,
+                                                  "failed to initialize inspection worker thread");
             return;
         }
     }
     Inspection_Report_Worker_Init(l_pContext, true);
 
     while (!Thread_IsStopped(p_pThread)) {
-        message = List_Pop(l_pContext->inspector.pendingMessages);
+        message = List_Pop_Ex(l_pContext->inspector.pendingMessages,
+                              INSPECTION_PENDING_POP_TIMEOUT_MS);
         if (message == NULL) {
             if (Thread_IsStopped(p_pThread))
                 break;
+            if (Inspection_Is_Shutdown_Started(l_pContext) &&
+                List_Length(l_pContext->inspector.pendingMessages) == 0)
+            {
+                break;
+            }
             continue;
         }
 
@@ -728,9 +779,22 @@ Inspection_Shutdown(struct RazorbackContext *p_pContext)
     if (p_pContext == NULL)
         return;
 
+    Inspection_Start_Shutdown(p_pContext);
+
     currentThread = Thread_GetCurrent();
     currentIsEmergencyThread = (currentThread != NULL &&
                                 currentThread == p_pContext->inspector.emergencyThread);
+
+    if (p_pContext->inspector.threadPool != NULL) {
+        while (ThreadPool_GetAliveCount(p_pContext->inspector.threadPool) > 0)
+            Thread_Sleep(INSPECTION_SHUTDOWN_DRAIN_SLEEP_MS);
+    }
+
+    if (p_pContext->inspector.receiverThread != NULL &&
+        p_pContext->inspector.completedMessages != NULL) {
+        while (List_Length(p_pContext->inspector.completedMessages) > 0)
+            Thread_Sleep(INSPECTION_SHUTDOWN_DRAIN_SLEEP_MS);
+    }
 
     if (p_pContext->inspector.receiverThread != NULL) {
         Thread_StopAndJoin(p_pContext->inspector.receiverThread);
@@ -739,7 +803,7 @@ Inspection_Shutdown(struct RazorbackContext *p_pContext)
     }
 
     if (p_pContext->inspector.threadPool != NULL) {
-        ThreadPool_KillWorkers(p_pContext->inspector.threadPool);
+        ThreadPool_Destroy(p_pContext->inspector.threadPool);
         p_pContext->inspector.threadPool = NULL;
     }
 

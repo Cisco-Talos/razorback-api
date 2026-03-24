@@ -21,6 +21,18 @@
  */
 #ifndef RAZORBACK_API_H
 #define RAZORBACK_API_H
+
+#if defined(__cplusplus)
+#if defined(_MSVC_LANG)
+#if _MSVC_LANG < 202100L
+#error "razorback/api.h requires C++23 or later"
+#endif
+#elif __cplusplus < 202100L
+#error "razorback/api.h requires C++23 or later"
+#endif
+#endif
+
+#include <stdatomic.h>
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 #include <razorback/queue.h>
@@ -113,9 +125,10 @@ struct RazorbackContext
         Thread_t *emergencyThread;               ///< Fatal inspection shutdown thread
         List_t *pendingMessages;                 ///< Internal inspection work queue
         List_t *completedMessages;               ///< Completed messages awaiting ack
-        Mutex_t *emergencyLock;                  ///< Protects fatal shutdown state
+        Mutex_t *emergencyLock;                  ///< Protects fatal inspection shutdown state
         Semaphore_t *emergencySem;               ///< Triggers fatal shutdown thread
         bool emergencyShutdownRequested;         ///< Whether fatal shutdown was requested
+        atomic_bool shutdownStarted;             ///< Whether shutdown has stopped accepting new inspection work
         Mutex_t *workerInitLock;                 ///< Protects initial worker startup state
         Semaphore_t *workerInitSem;              ///< Barrier for initial worker startup
         uint32_t workerInitPending;              ///< Initial workers still reporting startup

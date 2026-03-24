@@ -143,6 +143,13 @@ SO_PUBLIC extern void Thread_InterruptAndJoin(Thread_t *thread);
 SO_PUBLIC extern void Thread_Yield(void);
 
 /**
+ * Sleep the current thread.
+ * @param milliseconds Sleep duration in milliseconds.
+ * @return No return value.
+ */
+SO_PUBLIC extern void Thread_Sleep(uint32_t milliseconds);
+
+/**
  * Get the number of tracked threads.
  * @return the number of currently running threads.
  */
