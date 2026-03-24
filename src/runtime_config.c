@@ -513,6 +513,7 @@ validateGlobalThreadLimit(conf_int_t value)
      * - Submission response workers
      * - Submission transfer workers and their send-queue heartbeat timers
      * - Inspection judgment queue heartbeat timer
+     * - Inspection emergency shutdown thread
      * - Inspection receiver thread
      * - Inspection workers
      */
@@ -520,7 +521,7 @@ validateGlobalThreadLimit(conf_int_t value)
     requestRequired = (int64_t)sg_subGcReqThreadsInit * 2;
     responseRequired = (int64_t)sg_subGcRespThreadsInit;
     transferRequired = (int64_t)sg_subTransferThreadsInit * 2;
-    inspectionRequired = 2 + (int64_t)sg_inspThreadsInit;
+    inspectionRequired = 3 + (int64_t)sg_inspThreadsInit;
     minimumRequired = baseRequired +
         requestRequired +
         responseRequired +
@@ -534,7 +535,7 @@ validateGlobalThreadLimit(conf_int_t value)
             "Global.MaxThreads must be at least %lld (configured value: %d)",
             (long long)minimumRequired, value);
     rzb_log(LOG_ERR, LOG_C_CONFIG,
-            "Global.MaxThreads calculation: %lld base (C&C thread + command queue timer + entity prune timer + hello timer) + %lld request (%d workers + %d queue timers) + %lld response (%d workers) + %lld transfer (%d workers + %d queue timers) + %lld inspection (%d judgment timer + %d receiver + %d workers)",
+            "Global.MaxThreads calculation: %lld base (C&C thread + command queue timer + entity prune timer + hello timer) + %lld request (%d workers + %d queue timers) + %lld response (%d workers) + %lld transfer (%d workers + %d queue timers) + %lld inspection (%d judgment timer + %d emergency thread + %d receiver + %d workers)",
             (long long)baseRequired,
             (long long)requestRequired,
             sg_subGcReqThreadsInit,
@@ -547,6 +548,7 @@ validateGlobalThreadLimit(conf_int_t value)
             (long long)inspectionRequired,
             1,
             1,
+            1,
             sg_inspThreadsInit);
     return false;
 }
@@ -557,11 +559,11 @@ validateThreadPoolMaxCount(const char *initialKey,
                            const char *maxKey,
                            conf_int_t maxValue)
 {
-    if (maxValue > initialValue)
+    if (maxValue >= initialValue)
         return true;
 
     rzb_log(LOG_ERR, LOG_C_CONFIG,
-            "%s must be greater than %s (configured values: %d <= %d)",
+            "%s must be greater than or equal to %s (configured values: %d < %d)",
             maxKey, initialKey, maxValue, initialValue);
     return false;
 }
