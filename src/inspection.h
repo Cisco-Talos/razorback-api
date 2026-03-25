@@ -21,6 +21,7 @@
 #include <razorback/types.h>
 #include <razorback/messages.h>
 
-extern bool Inspection_Launch (struct RazorbackContext *p_pContext, uint32_t initThreads, uint32_t maxThreads);
+extern bool Inspection_Launch(struct RazorbackContext *p_pContext);
+extern void Inspection_Shutdown(struct RazorbackContext *p_pContext);
 
 #endif

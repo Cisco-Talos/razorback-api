@@ -34,9 +34,12 @@ struct Message
     uint32_t type;                          ///< Message type
     size_t length;                          ///< Message length
     uint32_t version;                       ///< Message version
+    uint64_t brokerDeliveryTag;             ///< Broker delivery tag for deferred ack handling
+    TelemetryContextCarrier_t *telemetryContext; ///< Cross-thread telemetry context for deferred processing
     List_t *headers;                        ///< Message headers list
     void *message;                          ///< Message structure
     uint8_t *serialized;                    ///< Serialized message string
+    bool brokerAckPending;                  ///< True when the broker delivery still needs to be acked or rejected
     bool (*serialize)(struct Message *);    ///< Pointer to message serialization function
     bool (*deserialize)(struct Message *);  ///< Pointer to message deserialization function
     void (*destroy)(struct Message *);      ///< Pointer to message destructor
@@ -164,16 +167,6 @@ struct MessageJudgmentSubmission
     struct Judgment *pJudgment;  ///< Judgment data
 };
 
-/** Log Submission Message
- */
-struct MessageLogSubmission
-{
-    uuid_t uuidNuggetId;       ///< who wrote it
-    uint8_t iPriority;         ///< Meh, Dodgy, YF, YRF
-    struct EventId *pEventId;  ///< The event id.
-    uint8_t *sMessage;         ///< The message.
-};
-
 /** Inspection Submission Message
  */
 struct MessageInspectionSubmission
@@ -233,18 +226,6 @@ struct MessageOutputEvent
 {
     struct Nugget *nugget;  ///< Generating nugget
     struct Event *event;    ///< Event data
-};
-
-/** Log Output
- */
-struct MessageOutputLog
-{
-    struct Nugget *nugget;  ///< Generating nugget
-    char *message;          ///< Log message
-    uint8_t priority;       ///< Priority
-    struct Event *event;    ///< Event data (optional: NULL if not present)
-    uint64_t seconds;       ///< Time stamp (Seconds)
-    uint64_t nanosecs;      ///< Time stamp (Nano Seconds)
 };
 
 /** Inspection Output

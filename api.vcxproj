@@ -97,6 +97,7 @@
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp23</LanguageStandard>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>ENABLE_ASSERT;ENABLE_UNIMPLEMENTED_ASSERT;WITH_SERVER;LIBSSH_STATIC;BUILDING_SO;WIN32;_DEBUG;_WINDOWS;_USRDLL;API_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)\win32;$(SolutionDir)\include;$(SolutionDir)\src;$(SolutionDir)\libssh\include;C:\OpenSSL-Win32\include;C:\zlib-Win32\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -113,6 +114,7 @@
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
+      <LanguageStandard>stdcpp23</LanguageStandard>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>LIBSSH_STATIC;BUILDING_SO;WIN32;_DEBUG;_WINDOWS;_USRDLL;API_EXPORTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>$(SolutionDir)\win32;$(SolutionDir)\include;$(SolutionDir)\src;$(SolutionDir)\libssh\include;C:\OpenSSL-Win64\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -129,6 +131,7 @@
       <WarningLevel>Level3</WarningLevel>
       <PrecompiledHeader>
       </PrecompiledHeader>
+      <LanguageStandard>stdcpp23</LanguageStandard>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -149,6 +152,7 @@
       <WarningLevel>Level3</WarningLevel>
       <PrecompiledHeader>
       </PrecompiledHeader>
+      <LanguageStandard>stdcpp23</LanguageStandard>
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
@@ -252,9 +256,8 @@
     <ClCompile Include="src\messages\core.c" />
     <ClCompile Include="src\messages\inspection.c" />
     <ClCompile Include="src\messages\judgment.c" />
-    <ClCompile Include="src\messages\log.c" />
     <ClCompile Include="src\messages\output_event.c" />
-    <ClCompile Include="src\messages\output_log.c" />
+    <ClCompile Include="src\messages\output_inspection.c" />
     <ClCompile Include="src\metadata.c" />
     <ClCompile Include="src\ntvl.c" />
     <ClCompile Include="src\nugget.c" />
@@ -265,11 +268,13 @@
     <ClCompile Include="src\socket.c" />
     <ClCompile Include="src\string_list.c" />
     <ClCompile Include="src\submission.c" />
+    <ClCompile Include="src\telemetry_otel.cc" />
     <ClCompile Include="src\thread.c" />
     <ClCompile Include="src\thread_pool.c" />
     <ClCompile Include="src\timer.c" />
     <ClCompile Include="src\transfer\core.c" />
     <ClCompile Include="src\transfer\file.c" />
+    <ClCompile Include="src\transfer\http.c" />
     <ClCompile Include="src\transfer\ssh.c" />
     <ClCompile Include="src\uuids.c" />
     <ClCompile Include="win32\bobins.c" />
@@ -306,6 +311,7 @@
     <ClInclude Include="include\razorback\socket.h" />
     <ClInclude Include="include\razorback\string_list.h" />
     <ClInclude Include="include\razorback\submission.h" />
+    <ClInclude Include="include\razorback\telemetry.h" />
     <ClInclude Include="include\razorback\thread.h" />
     <ClInclude Include="include\razorback\thread_pool.h" />
     <ClInclude Include="include\razorback\timer.h" />

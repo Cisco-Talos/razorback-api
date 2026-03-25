@@ -19,8 +19,13 @@
 #include "config.h"
 
 #include "init.h"
+#include "block_pool_private.h"
+#include "submission_private.h"
+#include "telemetry.h"
 #include <curl/curl.h>
+#include <razorback/log.h>
 #include <razorback/visibility.h>
+#include <stdlib.h>
 
 
 static bool initCurl() {
@@ -38,43 +43,50 @@ static bool initCurl() {
 static WORD wVersionRequested;
 static WSADATA wsaData;
 
-BOOL WINAPI DllMain(
-  __in  HINSTANCE hinstDLL,
-  __in  DWORD fdwReason,
-  __in  LPVOID lpvReserved
-)
+static bool initWinsock(void)
 {
-    switch( fdwReason )
-    {
-    case DLL_PROCESS_ATTACH:
-        wVersionRequested = MAKEWORD(2, 2);
-        WSAStartup(wVersionRequested, &wsaData);
-        setlocale( LC_ALL, "C" );
-#else
-SO_PUBLIC void __attribute__ ((constructor))
-RZB_Init_API ()
-{
-#endif
-        Crypto_Initialize();
-        initCurl();
-        if (!readApiConfig()) {
-            exit(1);
-        }
-        configureLogging();
-        Magic_Init();
-        initcache();
-        initUuids();
-        initApi();
-        Message_Init();
-        if (!Transfer_Init()) {
-            exit(1);
-        }
-#ifdef _MSC_VER
-        break;
-    default:
-        break;
+    wVersionRequested = MAKEWORD(2, 2);
+    if (WSAStartup(wVersionRequested, &wsaData) != 0) {
+        fprintf(stderr, "Failed to initialize WinSock\n");
+        exit(1);
     }
+    setlocale(LC_ALL, "C");
     return true;
-#endif
 }
+#endif
 
+SO_PUBLIC void
+RZB_Init_API(void)
+{
+#ifdef _MSC_VER
+    initWinsock();
+#endif
+    Crypto_Initialize();
+    initCurl();
+    if (!readApiConfig()) {
+        exit(1);
+    }
+    configureLogging();
+    if (!Telemetry_Initialize()) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: OpenTelemetry initialization failed, continuing without telemetry",
+                __func__);
+    }
+    atexit(Telemetry_Shutdown);
+    Magic_Init();
+    initcache();
+    initUuids();
+    initApi();
+    if (!BlockPool_Init()) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize block pool", __func__);
+        exit(1);
+    }
+    if (!Submission_Initialize()) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission state", __func__);
+        exit(1);
+    }
+    atexit(Submission_Shutdown_Global);
+    Message_Init();
+    if (!Transfer_Init()) {
+        exit(1);
+    }
+}

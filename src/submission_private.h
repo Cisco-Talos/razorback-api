@@ -18,10 +18,17 @@
 
 #ifndef RAZORBACK_SUBMISSION_PRIVATE_H
 #define RAZORBACK_SUBMISSION_PRIVATE_H
+
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+extern bool Submission_Initialize(void);
+extern void Submission_Shutdown_Global(void);
 extern bool Submission_Init(struct RazorbackContext *p_pContext);
+extern void Submission_Shutdown(struct RazorbackContext *p_pContext);
+extern size_t Submission_GetSubmitQueueDepth(void);
 #ifdef __cplusplus
 }
 #endif

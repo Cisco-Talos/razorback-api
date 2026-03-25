@@ -237,7 +237,7 @@ List_Do_Pop(List_t *list) {
 }
 
 SO_PUBLIC void *
-List_Pop(List_t *list) {
+List_Pop_Ex(List_t *list, uint32_t timeoutMilliseconds) {
     struct ListNode *node = NULL;
     void * ret = NULL;
     ASSERT(list != NULL);
@@ -247,7 +247,8 @@ List_Pop(List_t *list) {
     }
 
     if (list->sem != NULL) {
-        Semaphore_Wait(list->sem);
+        if (!Semaphore_TimedWait(list->sem, timeoutMilliseconds))
+            return NULL;
     }
 
     RWLock_WriteLock(list->lock);
@@ -260,6 +261,11 @@ List_Pop(List_t *list) {
     }
 
     return ret;
+}
+
+SO_PUBLIC void *
+List_Pop(List_t *list) {
+    return List_Pop_Ex(list, 0);
 }
 
 

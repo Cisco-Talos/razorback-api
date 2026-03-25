@@ -21,6 +21,18 @@
  */
 #ifndef RAZORBACK_API_H
 #define RAZORBACK_API_H
+
+#if defined(__cplusplus)
+#if defined(_MSVC_LANG)
+#if _MSVC_LANG < 202100L
+#error "razorback/api.h requires C++23 or later"
+#endif
+#elif __cplusplus < 202100L
+#error "razorback/api.h requires C++23 or later"
+#endif
+#endif
+
+#include <stdatomic.h>
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 #include <razorback/queue.h>
@@ -38,8 +50,15 @@ extern "C" {
 #define DECL_ALERT_PRIMARY_FUNC(a) bool a (struct MessageAlertPrimary *message)
 #define DECL_ALERT_CHILD_FUNC(a) bool a (struct MessageAlertChild *message)
 #define DECL_OUTPUT_EVENT_FUNC(a) bool a (struct MessageOutputEvent *message)
-#define DECL_OUTPUT_LOG_FUNC(a) bool a (struct MessageOutputLog *message)
 
+/**
+ * Initialize process-wide Razorback library state.
+ * This must be called exactly once by the library user before any other
+ * Razorback API function is used. It is not invoked automatically by the
+ * shared library loader.
+ * @return No return value.
+ */
+SO_PUBLIC extern void RZB_Init_API(void);
 
 /** Inspection Nugget Hooks
  */
@@ -61,7 +80,6 @@ struct RazorbackOutputHooks
     bool (*handleAlertPrimary)(struct MessageAlertPrimary *log);  ///< FP to handle primary alerts
     bool (*handleAlertChild)(struct MessageAlertChild *log);      ///< FP to handle child alerts
     bool (*handleEvent)(struct MessageOutputEvent *log);          ///< FP to handle events
-    bool (*handleLog)(struct MessageOutputLog *log);              ///< FP to handle log messages
 };
 
 /** Command and control hooks
@@ -102,6 +120,7 @@ struct RazorbackContext
     Semaphore_t *regSem;                                    ///< Registration semaphore
     bool regOk;                                             ///< Registration status
     void *userData;                                         ///< Context User Data
+    atomic_bool paused;                                     ///< Whether work for this context is paused by C&C
 
     /** Inspector specific data.
      */
@@ -110,7 +129,20 @@ struct RazorbackContext
         struct RazorbackInspectionHooks *hooks;  ///< Inspection Hooks
         uint32_t dataTypeCount;                  ///< Inspection Data Type Count
         uuid_t *dataTypeList;                    ///< Inspection Data Type UUID Array
-        struct ThreadPool *threadPool;           ///< Inspection Thread Pool
+        struct Queue *inspectionQueue;           ///< Shared inspector broker queue
+        Thread_t *receiverThread;                ///< Broker receive and ack thread
+        Thread_t *emergencyThread;               ///< Fatal inspection shutdown thread
+        List_t *pendingMessages;                 ///< Internal inspection work queue
+        List_t *completedMessages;               ///< Completed messages awaiting ack
+        Mutex_t *emergencyLock;                  ///< Protects fatal inspection shutdown state
+        Semaphore_t *emergencySem;               ///< Triggers fatal shutdown thread
+        bool emergencyShutdownRequested;         ///< Whether fatal shutdown was requested
+        atomic_bool shutdownStarted;             ///< Whether shutdown has stopped accepting new inspection work
+        Mutex_t *workerInitLock;                 ///< Protects initial worker startup state
+        Semaphore_t *workerInitSem;              ///< Barrier for initial worker startup
+        uint32_t workerInitPending;              ///< Initial workers still reporting startup
+        bool workerInitFailed;                   ///< Whether any worker failed initThread
+        ThreadPool_t *threadPool;                ///< Inspection worker thread pool
         struct Queue *judgmentQueue;             ///< Judgment queue structure
 
     } inspector;
@@ -121,6 +153,13 @@ struct RazorbackContext
     {
         List_t *threads;  ///< Output Thread List
     } output;
+
+    /** Submission specific data.
+     */
+    struct Submission
+    {
+        ThreadPool_t *responseThreadPool;  ///< Per-context global-cache response thread pool
+    } submission;
 
     /** Dispatcher specific data.
      */
@@ -148,8 +187,6 @@ SO_PUBLIC extern bool Razorback_Init_Context(struct RazorbackContext *context);
  * @param dataTypeCount the number of data types.
  * @param dataTypeList the list of data types.
  * @param inspectionHooks the inspection call backs.
- * @param initialThreads Number of threads launched initially.
- * @param maxThreads Maximum number of threads that can be launched.
  * @return An initialized inspection context on success, NULL on failure.
  */
 SO_PUBLIC extern struct RazorbackContext * Razorback_Init_Inspection_Context(
@@ -157,9 +194,7 @@ SO_PUBLIC extern struct RazorbackContext * Razorback_Init_Inspection_Context(
     uuid_t applicationType,
     uint32_t dataTypeCount,
     uuid_t *dataTypeList,
-    struct RazorbackInspectionHooks *inspectionHooks,
-    uint32_t initialThreads,
-    uint32_t maxThreads
+    struct RazorbackInspectionHooks *inspectionHooks
 );
 
 /**

@@ -46,6 +46,7 @@
 #include "runtime_config.h"
 #include "connected_entity_private.h"
 #include "inspection.h"
+#include "telemetry.h"
 
 static void Razorback_Output_Thread (Thread_t *thread);
 static int Context_KeyCmp(void *a, const void *b);
@@ -75,7 +76,10 @@ void Razorback_Destroy_Context(struct RazorbackContext *context) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Context is NULL", __func__);
         return;
     }
-    Semaphore_Destroy(context->regSem);
+    if (context->inspector.dataTypeList != NULL)
+        free(context->inspector.dataTypeList);
+    if (context->regSem != NULL)
+        Semaphore_Destroy(context->regSem);
     free(context);
 }
 
@@ -89,6 +93,8 @@ Razorback_Init_Context (struct RazorbackContext *context) {
         return false;
     }
 
+    context->submission.responseThreadPool = NULL;
+    atomic_init(&context->paused, false);
     context->locality = Config_getLocalityId();
 
     // Init the registration semaphore.
@@ -107,8 +113,6 @@ Razorback_Init_Context (struct RazorbackContext *context) {
 
     UUID_Get_UUID (NUGGET_TYPE_COLLECTION, UUID_TYPE_NUGGET_TYPE, l_pUuid);
     if (uuid_compare (context->uuidNuggetType, l_pUuid) == 0) {
-        // XXX: This has interesting side effects -> this is not the context we
-        // expect later in execution.
         if (!Submission_Init (context)) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission api", __func__);
             Razorback_Remove_Context(context);
@@ -128,8 +132,7 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
                                    uuid_t applicationType,
                                    uint32_t dataTypeCount,
                                    uuid_t * dataTypeList,
-                                   struct RazorbackInspectionHooks *inspectionHooks,
-                                   uint32_t initialThreads, uint32_t maxThreads
+                                   struct RazorbackInspectionHooks *inspectionHooks
                                    ) {
     struct RazorbackContext *context;
     uuid_t uuidInspector;
@@ -171,19 +174,19 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
     if ((context->inspector.judgmentQueue = Queue_Create(JUDGMENT_QUEUE, false, QUEUE_FLAG_SEND)) == NULL) {
         rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to create judgment queue", __func__);
         Razorback_Remove_Context(context);
-        return false;
+        return NULL;
     }
 
-    if (!Inspection_Launch (context, initialThreads, maxThreads)) {
+    if (!Inspection_Launch(context)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to launch inspection threads", __func__);
         Razorback_Remove_Context(context);
-        return false;
+        return NULL;
     }
-    // XXX: This has interesting side effects -> this is not the context we expect later in execution.
+
     if (!Submission_Init (context)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize submission api", __func__);
         Razorback_Remove_Context(context);
-        return false;
+        return NULL;
     }
 
     return context;
@@ -265,16 +268,14 @@ Kill_Output_Thread(void *ut, void *ud) {
 
 SO_PUBLIC void
 Razorback_Shutdown_Context (struct RazorbackContext *context) {
-    CommandAndControl_Pause();
     CommandAndControl_SendBye(context);
 
-    if (context->inspector.threadPool != NULL) {
-        ThreadPool_KillWorkers(context->inspector.threadPool);
-    }
-
+    CommandAndControl_Pause();
     List_Remove(sg_ContextList, context);
-
     CommandAndControl_Unpause();
+
+    Inspection_Shutdown(context);
+    Submission_Shutdown(context);
     if ((context->iFlags & CONTEXT_FLAG_STAND_ALONE) ==
         CONTEXT_FLAG_STAND_ALONE) {
        CommandAndControl_Shutdown();
@@ -282,6 +283,7 @@ Razorback_Shutdown_Context (struct RazorbackContext *context) {
 
     if (context->inspector.judgmentQueue != NULL) {
         Queue_Terminate(context->inspector.judgmentQueue);
+        context->inspector.judgmentQueue = NULL;
     }
 
     if (context->output.threads != NULL) {
@@ -348,9 +350,7 @@ Razorback_Render_Verdict (struct Judgment *judgment) {
         return false;
     }
 
-    Mutex_Lock (sg_mPauseLock);
     Queue_Put (context->inspector.judgmentQueue, message);
-    Mutex_Unlock (sg_mPauseLock);
     ((struct MessageJudgmentSubmission *)message->message)->pJudgment = NULL;
     message->destroy(message);
 
@@ -398,7 +398,10 @@ Razorback_Output_Thread (Thread_t *thread)
 {
     struct Message *message;
     struct RazorbackOutputHooks *hooks;
+    struct TelemetrySpan *processSpan;
     char *name;
+    bool processSuccess;
+    const char *processError;
 
     ASSERT(thread != NULL);
     if (thread == NULL) {
@@ -432,12 +435,6 @@ Razorback_Output_Thread (Thread_t *thread)
                 return;
             }
             break;
-        case MESSAGE_TYPE_OUTPUT_LOG:
-            if (asprintf(&name, "Log.%s", hooks->pattern) == -1) {
-                rzb_log (LOG_ERR, LOG_C_CORE, "%s: Failed to allocate queue name", __func__);
-                return;
-            }
-            break;
         default:
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unsupported output message type %u", __func__, hooks->messageType);
             return;
@@ -466,10 +463,15 @@ Razorback_Output_Thread (Thread_t *thread)
         }
 
         if (message->type != hooks->messageType) {
+            processSpan = Telemetry_StartMessageProcessSpan(hooks->queue, message);
+            Telemetry_EndSpan(processSpan, false, "unexpected output message type");
             message->destroy(message);
             continue;
         }
 
+        processSpan = Telemetry_StartMessageProcessSpan(hooks->queue, message);
+        processSuccess = true;
+        processError = NULL;
         switch (message->type) {
             case MESSAGE_TYPE_ALERT_PRIMARY:
                 hooks->handleAlertPrimary((struct MessageAlertPrimary*)message->message);
@@ -480,10 +482,14 @@ Razorback_Output_Thread (Thread_t *thread)
             case MESSAGE_TYPE_OUTPUT_EVENT:
                 hooks->handleEvent((struct MessageOutputEvent *)message->message);
                 break;
-            case MESSAGE_TYPE_OUTPUT_LOG:
-                hooks->handleLog((struct MessageOutputLog *)message->message);
+            default:
+                rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unsupported output message type %u",
+                        __func__, message->type);
+                processSuccess = false;
+                processError = "unsupported output message type";
                 break;
         }
+        Telemetry_EndSpan(processSpan, processSuccess, processError);
         message->destroy(message);
     }
     Queue_Terminate(hooks->queue);

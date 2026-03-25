@@ -17,46 +17,37 @@
 ARG BASE_IMAGE="debian:12-slim"
 FROM ${BASE_IMAGE} AS builder
 ENV DEBIAN_FRONTEND=noninteractive
-    RUN mkdir /src /razorback && apt-get update && apt-get install -y \
-        git \
-        build-essential \
-        cmake \
-        automake \
-        autoconf \
-        libtool \
-        pkg-config \
-        uuid-dev \
-        libcurl4-openssl-dev \
-        libssl-dev \
-        libconfig-dev \
-        libssh-dev \
-        libjson-c-dev \
-        libmagic-dev \
-        librabbitmq-dev
 
+COPY tools/build/debian12 /tmp/tools/build/debian12
+RUN mkdir /src /razorback \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends $(cat /tmp/tools/build/debian12/build-deps.txt) \
+    && apt-get autoremove -y \
+    && apt-get clean -y \
+    && rm -rf /var/lib/apt/lists/* /tmp/tools
 
+COPY tools/build/install-opentelemetry-cpp.sh /tmp/tools/build/install-opentelemetry-cpp.sh
+RUN /tmp/tools/build/install-opentelemetry-cpp.sh /razorback
 
-    WORKDIR /src
-    COPY . /src/api
+COPY . /src/api
 
-    WORKDIR /src/api
-    RUN ./autojunk.sh && ./configure --prefix=/razorback --enable-debug --enable-assert  && make && make install
+WORKDIR /src/api
+RUN ./autojunk.sh && PKG_CONFIG_PATH=/razorback/lib/pkgconfig:/razorback/lib64/pkgconfig ./configure --prefix=/razorback --enable-debug --enable-assert && make && make install
 
 FROM ${BASE_IMAGE}
-    ENV DEBIAN_FRONTEND=noninteractive
-    RUN groupadd -g 10000 razorback && useradd -d /razorback -s /bin/false -u 10000 -g 10000 razorback
+ENV DEBIAN_FRONTEND=noninteractive
 
-    RUN apt-get update && apt-get install -y \
-        libuuid1 \
-        libcurl4 \
-        libssl3 \
-        libconfig9 \
-        libssh-4 \
-        libjson-c5 \
-        libmagic1 \
-        librabbitmq4 \
-        && apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
+COPY tools/build/debian12 /tmp/tools/build/debian12
+RUN groupadd -g 10000 razorback && useradd -d /razorback -s /bin/false -u 10000 -g 10000 razorback
 
-    COPY --from=builder /razorback /razorback
-    RUN cp /razorback/etc/razorback/magic.sample /razorback/etc/razorback/magic
-    WORKDIR /razorback
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends $(cat /tmp/tools/build/debian12/run-deps.txt) \
+    && apt-get autoremove -y \
+    && apt-get clean -y \
+    && rm -rf /var/lib/apt/lists/* /tmp/tools
+
+COPY --from=builder /razorback /razorback
+RUN cp /razorback/etc/razorback/magic.sample /razorback/etc/razorback/magic \
+    && printf '/razorback/lib\n' > /etc/ld.so.conf.d/razorback.conf \
+    && ldconfig
+WORKDIR /razorback

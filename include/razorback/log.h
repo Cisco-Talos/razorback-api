@@ -93,16 +93,6 @@ typedef enum
 SO_PUBLIC extern void rzb_log(unsigned level, uint64_t component, const char *fmt, ...);
 
 /**
- * Log a message associated with a remote event.
- * @param level Level value.
- * @param eventId Event identifier associated with the log message.
- * @param fmt Format string.
- * @param ... Additional arguments for the format string.
- * @return No return value.
- */
-SO_PUBLIC extern void rzb_log_remote(uint8_t level, struct EventId *eventId, const char *fmt, ...);
-
-/**
  * Log a standard error.
  * @param component The component the error is associated with.
  * @param message the log message associated with the error.

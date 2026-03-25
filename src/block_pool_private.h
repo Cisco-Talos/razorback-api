@@ -25,10 +25,13 @@ extern "C" {
 #define BLOCK_POOL_KEEP 0
 #define BLOCK_POOL_DESTROY 2
 
-bool BlockPool_Init(struct RazorbackContext *p_pContext);
+bool BlockPool_Init(void);
 void BlockPool_ForEachItem(int (*function) (struct BlockPoolItem *, void *), void *userData);
+size_t BlockPool_GetContextItemCount(const struct RazorbackContext *p_pContext);
 void BlockPool_Item_Lock(void *a);
 void BlockPool_Item_Unlock(void *a);
+void BlockPool_AddCommonTelemetryAttributes(const struct BlockPoolItem *p_pItem,
+                                            TelemetrySpan_t *span);
 
 void BlockPool_SetStatus(struct BlockPoolItem *p_pItem, uint32_t p_iStatus);
 uint32_t BlockPool_GetStatus(struct BlockPoolItem *p_pItem);

@@ -84,8 +84,19 @@ SO_PUBLIC extern bool List_Push(List_t *list, void *item);
 /**
  * Remove the next item from a List.
  * @param list The List to remove the item from.
+ * @param timeoutMilliseconds Timeout in milliseconds. A value of 0 waits indefinitely.
  * @return A pointer to the removed item on success, NULL on failure.
- * @note For a list in queue or stack mode, this function will block until an item is available. In gerneral mode NULL will be returned if there is item to remove.
+ * @note For a list in queue or stack mode, this function waits until an item is available
+ *       or the timeout expires. In general mode NULL will be returned if there is no item to remove.
+ */
+SO_PUBLIC extern void * List_Pop_Ex(List_t *list, uint32_t timeoutMilliseconds);
+
+/**
+ * Remove the next item from a List.
+ * @param list The List to remove the item from.
+ * @return A pointer to the removed item on success, NULL on failure.
+ * @note For a list in queue or stack mode, this function will block until an item is available.
+ *       In general mode NULL will be returned if there is no item to remove.
  */
 SO_PUBLIC extern void * List_Pop(List_t *list);
 

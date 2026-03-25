@@ -46,6 +46,7 @@ razorback/response_queue.h \
 razorback/socket.h \
 razorback/string_list.h \
 razorback/submission.h \
+razorback/telemetry.h \
 razorback/thread.h \
 razorback/thread_pool.h \
 razorback/timer.h \

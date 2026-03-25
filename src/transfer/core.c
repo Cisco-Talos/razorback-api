@@ -19,11 +19,14 @@
 #include "config.h"
 #include <razorback/types.h>
 #include <razorback/api.h>
+#include <razorback/block_pool.h>
 #include <razorback/debug.h>
 #include <razorback/log.h>
 #include <razorback/hash.h>
+#include <razorback/telemetry.h>
 #include <razorback/thread.h>
 #include <razorback/list.h>
+#include "../telemetry.h"
 #include "transfer/core.h"
 #include "runtime_config.h"
 #ifdef _MSC_VER
@@ -41,6 +44,43 @@ List_t *sg_transportList = NULL;
 static int Transport_Cmp(void *a, void *b);
 static int Transport_KeyCmp(void *a, const void *key);
 static bool sg_bTraditionalMode = true;
+
+static void
+Transfer_AddFileAttribute(TelemetrySpan_t *span,
+                          const char *file_name)
+{
+    if (span == NULL || file_name == NULL || file_name[0] == '\0')
+        return;
+
+    Telemetry_AddStringAttribute(span, "rzb.file.name", file_name);
+}
+
+static void
+Transfer_AddItemFileAttribute(TelemetrySpan_t *span,
+                              const struct BlockPoolItem *item)
+{
+    const struct BlockPoolData *data_item;
+
+    if (span == NULL || item == NULL)
+        return;
+
+    if (item->pEvent != NULL && item->pEvent->pBlock != NULL &&
+        item->pEvent->pBlock->data.fileName != NULL) {
+        Transfer_AddFileAttribute(span, item->pEvent->pBlock->data.fileName);
+        return;
+    }
+
+    data_item = item->pDataHead;
+    while (data_item != NULL) {
+        if ((data_item->iFlags & BLOCK_POOL_DATA_FLAG_FILE) != 0 &&
+            data_item->data.fileName != NULL &&
+            data_item->data.fileName[0] != '\0') {
+            Transfer_AddFileAttribute(span, data_item->data.fileName);
+            return;
+        }
+        data_item = data_item->pNext;
+    }
+}
 
 char *
 Transfer_generateFilename (struct Block *block)
@@ -161,22 +201,60 @@ enum TransferStatus
 Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
 {
     struct TransportDescriptor *trans = NULL;
+    TelemetrySpan_t *transferSpan = NULL;
     int i;
+    int attempt_count = 0;
     enum TransferStatus status;
+    const char *transferError = NULL;
+    const char *protocol = "none";
+    double transferStartedAt = Telemetry_GetMonotonicTimeSeconds();
+
+    transferSpan = Telemetry_StartSpan("store block", NULL);
+    if (item != NULL && item->pEvent != NULL)
+        Telemetry_AddBlockAttributes(transferSpan, item->pEvent->pBlock);
+    Transfer_AddItemFileAttribute(transferSpan, item);
+
+    if (dispatcher == NULL || dispatcher->dispatcher == NULL) {
+        transferError = "missing dispatcher for store";
+        Telemetry_RecordTransferStoreDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                              "failure",
+                                              protocol);
+        Telemetry_RecordTransferFailure("store", protocol);
+        Telemetry_EndSpan(transferSpan, false, transferError);
+        return TRANSFER_FAIL_LOCAL;
+    }
 
     if ((trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol)) == NULL) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "Failed to find transport descriptor for protocol: %u", dispatcher->dispatcher->protocol);
+        transferError = "failed to find transport descriptor for store";
+        Telemetry_RecordTransferStoreDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                              "failure",
+                                              protocol);
+        Telemetry_RecordTransferFailure("store", protocol);
+        Telemetry_EndSpan(transferSpan, false, transferError);
         return TRANSFER_FAIL_LOCAL;
     }
+    protocol = trans->name;
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Transport: %s", __func__, trans->name);
 
     for (i =0; i < RETRIES; i++)
     {
+        attempt_count++;
         status = trans->store(item, dispatcher);
         if (status == TRANSFER_OK)
             break;
     }
+    Telemetry_AddIntAttribute(transferSpan, "rzb.transfer.attempts",
+                              (int64_t)attempt_count);
+    if (status != TRANSFER_OK)
+        transferError = "failed to store block";
+    Telemetry_RecordTransferStoreDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                          (status == TRANSFER_OK) ? "success" : "failure",
+                                          protocol);
+    if (status != TRANSFER_OK)
+        Telemetry_RecordTransferFailure("store", protocol);
+    Telemetry_EndSpan(transferSpan, status == TRANSFER_OK, transferError);
     return status;
 }
 
@@ -184,13 +262,37 @@ enum TransferStatus
 Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
 {
     struct TransportDescriptor *trans = NULL;
+    TelemetrySpan_t *transferSpan = NULL;
     int i;
     enum TransferStatus status;
+    const char *transferError = NULL;
+    const char *protocol = "none";
+    double transferStartedAt = Telemetry_GetMonotonicTimeSeconds();
+
+    transferSpan = Telemetry_StartSpan("fetch block", NULL);
+    Telemetry_AddBlockAttributes(transferSpan, block);
+
+    if (dispatcher == NULL || dispatcher->dispatcher == NULL) {
+        transferError = "missing dispatcher for fetch";
+        Telemetry_RecordTransferFetchDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                              "failure",
+                                              protocol);
+        Telemetry_RecordTransferFailure("fetch", protocol);
+        Telemetry_EndSpan(transferSpan, false, transferError);
+        return TRANSFER_FAIL_LOCAL;
+    }
 
     if ((trans = List_Find(sg_transportList, &dispatcher->dispatcher->protocol)) == NULL) {
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Failed to find transport descriptor", __func__);
+        transferError = "failed to find transport descriptor for fetch";
+        Telemetry_RecordTransferFetchDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                              "failure",
+                                              protocol);
+        Telemetry_RecordTransferFailure("fetch", protocol);
+        Telemetry_EndSpan(transferSpan, false, transferError);
         return TRANSFER_FAIL_LOCAL;
     }
+    protocol = trans->name;
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Transport: %s", __func__, trans->name);
 
@@ -202,6 +304,16 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
             break;
         rzb_log(LOG_ERR,LOG_C_TRANSFER, "%s: Retrying transfer", __func__);
     }
+    if (status == TRANSFER_OK)
+        Transfer_AddFileAttribute(transferSpan, block->data.fileName);
+    if (status != TRANSFER_OK)
+        transferError = "failed to fetch block";
+    Telemetry_RecordTransferFetchDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
+                                          (status == TRANSFER_OK) ? "success" : "failure",
+                                          protocol);
+    if (status != TRANSFER_OK)
+        Telemetry_RecordTransferFailure("fetch", protocol);
+    Telemetry_EndSpan(transferSpan, status == TRANSFER_OK, transferError);
     return status;
 }
 

@@ -30,6 +30,7 @@
 #include "block_pool_private.h"
 #include "fantasia.h"
 #include "runtime_config.h"
+#include "telemetry.h"
 #ifdef _MSC_VER
 #else //_MSC_VER
 #include <sys/mman.h>
@@ -37,17 +38,15 @@
 #include <string.h>
 
 static void BlockPool_Delete(void *a);
+static int BlockPool_CountContextItem(struct BlockPoolItem *p_pItem, void *userData);
 
 
 static List_t * sg_bpList;
-static bool sg_bInitDone=false;
 static size_t sg_size;
 static Mutex_t *sg_sizeMutex;
 bool
-BlockPool_Init(struct RazorbackContext *context)
+BlockPool_Init(void)
 {
-    if (sg_bInitDone)
-        return true;
     sg_bpList = List_Create(LIST_MODE_GENERIC,
                             NULL, // Cmp
                             NULL, // KeyCmp
@@ -61,7 +60,6 @@ BlockPool_Init(struct RazorbackContext *context)
     if (sg_bpList == NULL || sg_sizeMutex == NULL)
         return false;
 
-    sg_bInitDone = true;
     return true;
 }
 
@@ -99,9 +97,11 @@ BlockPool_CreateItem(struct RazorbackContext *context)
     }
 
     item->iStatus = BLOCK_POOL_STATUS_COLLECTING;
+    item->context = context;
 
     uuid_copy(item->pEvent->pId->uuidNuggetId, context->uuidNuggetId);
     uuid_copy(item->pEvent->uuidApplicationType, context->uuidApplicationType);
+    Telemetry_UpdateContext(&item->telemetryContext);
 
     List_Push(sg_bpList, item);
     return item;
@@ -114,7 +114,7 @@ BlockPool_GetSize(void) {
 
 SO_PUBLIC size_t
 BlockPool_GetItemCount(void) {
-    return List_Length(sg_bpList);
+    return (sg_bpList == NULL) ? 0U : List_Length(sg_bpList);
 }
 
 SO_PUBLIC bool
@@ -324,6 +324,24 @@ BlockPool_GetHash (struct BlockPoolItem *p_pItem) {
 }
 
 void
+BlockPool_AddCommonTelemetryAttributes(const struct BlockPoolItem *p_pItem,
+                                       TelemetrySpan_t *span)
+{
+    ASSERT(p_pItem != NULL);
+    if (p_pItem == NULL || span == NULL) {
+        return;
+    }
+
+    Telemetry_AddIntAttribute(span, "rzb.block_pool.item_status",
+                              (int64_t)p_pItem->iStatus);
+    Telemetry_AddBoolAttribute(span, "rzb.block_pool.has_data",
+                               p_pItem->pDataHead != NULL);
+
+    if (p_pItem->pEvent != NULL && p_pItem->pEvent->pBlock != NULL)
+        Telemetry_AddBlockAttributes(span, p_pItem->pEvent->pBlock);
+}
+
+void
 BlockPool_DestroyItemDataList(struct BlockPoolData *p_pData) {
     struct BlockPoolData *l_pData = p_pData;
     struct BlockPoolData *l_pDataNext;
@@ -373,6 +391,7 @@ BlockPool_DestroyItemData(struct BlockPoolItem *p_pItem) {
         Event_Destroy(p_pItem->pEvent);
     }
 
+    Telemetry_ClearContext(&p_pItem->telemetryContext);
     BlockPool_DestroyItemDataList(p_pItem->pDataHead);
     Mutex_Destroy(p_pItem->mutex);
     free(p_pItem);
@@ -400,6 +419,41 @@ BlockPool_ForEachItem(int (*function) (struct BlockPoolItem *, void *), void *us
     }
 
     List_ForEach(sg_bpList, (int (*)(void *, void *))function, userData);
+}
+
+struct BlockPoolContextCount
+{
+    const struct RazorbackContext *context;
+    size_t count;
+};
+
+static int
+BlockPool_CountContextItem(struct BlockPoolItem *p_pItem, void *userData)
+{
+    struct BlockPoolContextCount *data = userData;
+
+    if (p_pItem == NULL || data == NULL)
+        return LIST_EACH_ERROR;
+
+    if (p_pItem->context == data->context)
+        data->count++;
+
+    return LIST_EACH_OK;
+}
+
+size_t
+BlockPool_GetContextItemCount(const struct RazorbackContext *p_pContext)
+{
+    struct BlockPoolContextCount data;
+
+    if (sg_bpList == NULL || p_pContext == NULL)
+        return 0;
+
+    data.context = p_pContext;
+    data.count = 0;
+
+    BlockPool_ForEachItem(BlockPool_CountContextItem, &data);
+    return data.count;
 }
 
 void

@@ -32,7 +32,6 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-struct ThreadPool;
 /**
  * Thread pool item
  */
@@ -40,20 +39,7 @@ struct ThreadPoolItem
 {
     Thread_t *thread;         ///< The worker thread.
     int id;                   ///< The worker ID
-    struct ThreadPool *pool;  ///< The pool the worker belongs to.
-};
-
-/**
- * Thread pool container.
- */
-struct ThreadPool
-{
-    size_t limit;                       ///< Maximum number of threads
-    atomic_int nextId;                  ///< Id of the next thread
-    struct RazorbackContext *context;   ///< Context to spawn threads in
-    void (*mainFunction) (Thread_t *);  ///< Main function for spawned threads
-    const char *namePattern;            ///< Name pattern for threads
-    List_t *list;                       ///< Worker list.
+    ThreadPool_t *pool;                 ///< The pool the worker belongs to.
 };
 
 /**
@@ -65,7 +51,7 @@ struct ThreadPool
  * @param mainFunction The main routine for the threads.
  * @return A new ThreadPool or NULL on error.
  */
-SO_PUBLIC extern struct ThreadPool * ThreadPool_Create(
+SO_PUBLIC extern ThreadPool_t * ThreadPool_Create(
     int initialThreads,
     int maxThreads,
     struct RazorbackContext *context,
@@ -78,7 +64,7 @@ SO_PUBLIC extern struct ThreadPool * ThreadPool_Create(
  * @param pool The ThreadPool to spawn a worker in.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern bool ThreadPool_LaunchWorker(struct ThreadPool *pool);
+SO_PUBLIC extern bool ThreadPool_LaunchWorker(ThreadPool_t *pool);
 
 /**
  * Launch several workers.
@@ -86,7 +72,7 @@ SO_PUBLIC extern bool ThreadPool_LaunchWorker(struct ThreadPool *pool);
  * @param count The number of workers to spawn.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern bool ThreadPool_LaunchWorkers(struct ThreadPool *pool, int count);
+SO_PUBLIC extern bool ThreadPool_LaunchWorkers(ThreadPool_t *pool, int count);
 
 /**
  * Kill a worker.
@@ -94,17 +80,43 @@ SO_PUBLIC extern bool ThreadPool_LaunchWorkers(struct ThreadPool *pool, int coun
  * @param id The workers id.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern bool ThreadPool_KillWorker(struct ThreadPool *pool, int id);
+SO_PUBLIC extern bool ThreadPool_KillWorker(ThreadPool_t *pool, int id);
 
 /**
  * Kill all workers.
  * @param pool The ThreadPool to kill the workers in.
  * @return true on success, false on error.
  */
-SO_PUBLIC extern bool ThreadPool_KillWorkers(struct ThreadPool *pool);
+SO_PUBLIC extern bool ThreadPool_KillWorkers(ThreadPool_t *pool);
+
+/**
+ * Destroy a thread pool and release its resources.
+ * @param pool The ThreadPool to destroy.
+ * @return No return value.
+ */
+SO_PUBLIC extern void ThreadPool_Destroy(ThreadPool_t *pool);
+
+/**
+ * Get the number of live workers in the pool.
+ * @param pool The ThreadPool to inspect.
+ * @return The number of live workers.
+ */
+SO_PUBLIC extern size_t ThreadPool_GetAliveCount(ThreadPool_t *pool);
+
+/**
+ * Visit each live worker thread in the pool.
+ * @param pool The ThreadPool to inspect.
+ * @param function Callback invoked for each live worker thread.
+ * @param userData Caller-provided callback state.
+ * @return LIST_EACH_OK on success, or the callback return value that stopped iteration.
+ */
+SO_PUBLIC extern int ThreadPool_ForEach(
+    ThreadPool_t *pool,
+    int (*function)(Thread_t *thread, void *userData),
+    void *userData
+);
 
 #ifdef __cplusplus
 }
 #endif
 #endif // RAZORBACK_THREAD_POOL_H
-

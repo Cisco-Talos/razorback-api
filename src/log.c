@@ -30,17 +30,14 @@
 
 #include <razorback/debug.h>
 #include <razorback/log.h>
-#include <razorback/queue.h>
-#include <razorback/thread.h>
-#include <razorback/messages.h>
 #include "runtime_config.h"
 
 
 #include "init.h"
+#include "telemetry.h"
 
 #define LOG_CONF_FILE "logging.conf"
 
-static struct Queue *sg_logQueue = NULL;
 static char level_strings[][9] = {
     "Emerg",
     "Alert",
@@ -75,10 +72,6 @@ configureLogging (void)
         }
     }
 
-    if (( sg_logQueue = Queue_Create(LOG_QUEUE, false, QUEUE_FLAG_SEND)) == NULL)
-    {
-        return false;
-    }
     return true;
 }
 
@@ -92,6 +85,8 @@ SO_PUBLIC void
 rzb_log (unsigned level, uint64_t compontent, const char *fmt, ...)
 {
     char *msg = NULL;
+    bool emitTelemetry = false;
+    bool formatted = false;
 
     if ((level == LOG_DEBUG) && (sg_logMask & compontent) == 0) {
         return;
@@ -105,11 +100,16 @@ rzb_log (unsigned level, uint64_t compontent, const char *fmt, ...)
     }
 
     va_start (argp, fmt);
+    emitTelemetry = Telemetry_IsLogEnabled();
 
-    if (log_dest != RZB_LOG_DEST_SYSLOG)
+    if (log_dest != RZB_LOG_DEST_SYSLOG || emitTelemetry)
     {
-        if (vasprintf (&msg, fmt, argp) == -1)
-            return;
+        va_list formatArgs;
+
+        va_copy(formatArgs, argp);
+        if (vasprintf (&msg, fmt, formatArgs) != -1)
+            formatted = true;
+        va_end(formatArgs);
     }
 
     switch (log_dest)
@@ -118,52 +118,25 @@ rzb_log (unsigned level, uint64_t compontent, const char *fmt, ...)
 #ifdef _MSC_VER
         UNIMPLEMENTED();
 #else
-        vsyslog (level, fmt, argp);
+        if (formatted)
+            syslog (level, "%s", msg);
+        else
+            vsyslog (level, fmt, argp);
 #endif
         break;
     case RZB_LOG_DEST_FILE:
         break;
     case RZB_LOG_DEST_ERR:
     default:
-        fprintf (stderr, "%s: %s\n", level_strings[level], msg);
+        if (formatted)
+            fprintf (stderr, "%s: %s\n", level_strings[level], msg);
         break;
     }
+    if (emitTelemetry && formatted)
+        Telemetry_LogMessage(level, compontent, msg);
     va_end (argp);
     if (msg != NULL)
         free (msg);
-}
-
-SO_PUBLIC void
-rzb_log_remote (uint8_t level, struct EventId *eventId, const char *fmt, ...)
-{
-    struct Message *message;
-    char *msg = NULL;
-    struct RazorbackContext *l_pContext;
-    va_list argp;
-
-    if (level > (unsigned) Config_getLogLevel())
-    {
-        return;
-    }
-
-    va_start (argp, fmt);
-
-    if (vasprintf (&msg, fmt, argp) == -1)
-        return;
-    va_end (argp);
-
-    l_pContext = Thread_GetCurrentContext ();
-
-    if ((message = MessageLog_Initialize(l_pContext->uuidNuggetId,
-            level, msg, eventId)) == NULL)
-    {
-        free (msg);
-        return;
-    }
-
-    Queue_Put(sg_logQueue, message);
-    message->destroy(message);
-    free (msg);
 }
 
 SO_PUBLIC int
@@ -184,5 +157,3 @@ rzb_debug_logging ()
     Config_setLogLevel(LOG_DEBUG);
     Config_setLogDest(RZB_LOG_DEST_ERR);
 }
-
-

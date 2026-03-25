@@ -582,10 +582,7 @@ START_TEST(test_message_submission_body_schemas)
     struct BlockId *block_id;
     struct Event *event;
     struct Judgment *judgment;
-    struct EventId *log_event_id;
     uint8_t localities[] = { 1U, 7U, 9U };
-    char *log_text;
-    uuid_t log_nugget_id;
 
     ensure_message_handlers_ready();
 
@@ -628,17 +625,6 @@ START_TEST(test_message_submission_body_schemas)
     Event_Destroy(event);
     destroy_message(message);
 
-    log_text = clone_string("sample log message");
-    parse_uuid_or_fail("11111111-1111-1111-1111-111111111111", log_nugget_id);
-    log_event_id = create_event_id("22222222-2222-2222-2222-222222222222",
-                                   11U, 22U);
-    message = MessageLog_Initialize(log_nugget_id, 6U, log_text, log_event_id);
-    ck_assert_ptr_ne(message, NULL);
-    body = serialize_and_parse_body(message);
-    json_buffer_assert_matches_schema("message-log.schema.json", body);
-    json_object_put(body);
-    destroy_message(message);
-    free(log_text);
 }
 END_TEST
 
@@ -652,8 +638,6 @@ START_TEST(test_message_output_body_schemas)
     struct BlockId *inspection_block_id;
     struct Nugget *nugget;
     struct Judgment *judgment;
-    struct MessageLogSubmission log = { 0 };
-
     ensure_message_handlers_ready();
 
     event = create_event();
@@ -687,20 +671,6 @@ START_TEST(test_message_output_body_schemas)
     ck_assert_ptr_ne(message, NULL);
     body = serialize_and_parse_body(message);
     json_buffer_assert_matches_schema("message-output-event.schema.json", body);
-    json_object_put(body);
-    destroy_message(message);
-
-    log.iPriority = 9U;
-    log.pEventId = create_event_id("33333333-3333-3333-3333-333333333333",
-                                   100U, 200U);
-    log.sMessage = (uint8_t *)clone_string("output log");
-    nugget = create_nugget();
-    message = MessageOutputLog_Initialize(&log, nugget);
-    ck_assert_ptr_ne(message, NULL);
-    ((struct MessageOutputLog *)message->message)->seconds = 100U;
-    ((struct MessageOutputLog *)message->message)->nanosecs = 200U;
-    body = serialize_and_parse_body(message);
-    json_buffer_assert_matches_schema("message-output-log.schema.json", body);
     json_object_put(body);
     destroy_message(message);
 

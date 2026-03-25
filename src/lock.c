@@ -21,11 +21,13 @@
 #include <razorback/debug.h>
 #include <razorback/lock.h>
 #include <razorback/log.h>
+#include <errno.h>
 
 #ifdef _MSC_VER
 #else //_MSC_VER
 #include <pthread.h>
 #include <semaphore.h>
+#include <time.h>
 #endif //_MSC_VER
 
 
@@ -343,19 +345,65 @@ Semaphore_Post(Semaphore_t *sem) {
 }
 
 SO_PUBLIC bool
-Semaphore_TimedWait(Semaphore_t *sem) {
+Semaphore_TimedWait(Semaphore_t *sem, uint32_t timeoutMilliseconds) {
     ASSERT(sem != NULL);
     if (sem == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem is NULL", __func__);
         return false;
     }
-    UNIMPLEMENTED();
 #ifdef _MSC_VER
-    UNIMPLEMENTED();
-#else //_MSC_VER
-    if (sem_wait(&sem->sem) != 0) {
-        rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem_wait failed", __func__);
+    if (timeoutMilliseconds == 0) {
+        WaitForSingleObject(sem->sem, INFINITE);
+        return true;
+    }
+
+    switch (WaitForSingleObject(sem->sem, timeoutMilliseconds))
+    {
+    case WAIT_OBJECT_0:
+        return true;
+    case WAIT_TIMEOUT:
+        errno = EAGAIN;
         return false;
+    default:
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: WaitForSingleObject failed", __func__);
+        return false;
+    }
+#else //_MSC_VER
+    if (timeoutMilliseconds == 0) {
+        while (sem_wait(&sem->sem) != 0) {
+            if (errno == EINTR)
+                continue;
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem_wait failed", __func__);
+            return false;
+        }
+        return true;
+    }
+
+    {
+        struct timespec deadline;
+
+        if (clock_gettime(CLOCK_REALTIME, &deadline) != 0) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: clock_gettime failed", __func__);
+            return false;
+        }
+
+        deadline.tv_sec += timeoutMilliseconds / 1000;
+        deadline.tv_nsec += (long)(timeoutMilliseconds % 1000) * 1000000L;
+        if (deadline.tv_nsec >= 1000000000L) {
+            deadline.tv_sec += 1;
+            deadline.tv_nsec -= 1000000000L;
+        }
+
+        while (sem_timedwait(&sem->sem, &deadline) != 0) {
+            if (errno == EINTR)
+                continue;
+            if (errno == ETIMEDOUT) {
+                errno = EAGAIN;
+                return false;
+            }
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: sem_timedwait failed", __func__);
+            return false;
+        }
     }
 #endif //_MSC_VER
     return true;

@@ -41,10 +41,8 @@ message-go.schema.json \
 message-hello.schema.json \
 message-inspection.schema.json \
 message-judgment.schema.json \
-message-log.schema.json \
 message-output-event.schema.json \
 message-output-inspection.schema.json \
-message-output-log.schema.json \
 message-pause.schema.json \
 message-paused.schema.json \
 message-reg-error.schema.json \

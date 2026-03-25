@@ -26,6 +26,18 @@
 #include "bobins.h"
 #endif
 
+#define THREAD_POOL_KILL_WAIT_SLEEP_MS 10
+
+struct ThreadPool
+{
+    size_t limit;
+    atomic_int nextId;
+    struct RazorbackContext *context;
+    void (*mainFunction) (Thread_t *);
+    const char *namePattern;
+    List_t *list;
+};
+
 
 static int
 TP_KeyCmp(void *a, const void *id)
@@ -55,7 +67,8 @@ static void
 TP_Destroy(void *a)
 {
     struct ThreadPoolItem *worker = (struct ThreadPoolItem *)a;
-    Thread_Destroy(worker->thread);
+    if (worker->thread != NULL)
+        Thread_Destroy(worker->thread);
     free(a);
 }
 
@@ -63,7 +76,7 @@ static void
 ThreadPool_Main(Thread_t *thread)
 {
     struct ThreadPoolItem *worker = Thread_GetUserData(thread);
-    struct ThreadPool *pool = worker->pool;
+    ThreadPool_t *pool = worker->pool;
     Thread_SetUserData(thread,NULL);
 
     pool->mainFunction(thread);
@@ -71,15 +84,15 @@ ThreadPool_Main(Thread_t *thread)
     List_Remove(pool->list, worker);
 }
 
-SO_PUBLIC struct ThreadPool *
+SO_PUBLIC ThreadPool_t *
 ThreadPool_Create(int initialThreads,
         int maxThreads,
         struct RazorbackContext *context,
         const char *namePattern,
         void (*mainFunction) (Thread_t *))
 {
-    struct ThreadPool *pool;
-    if ((pool = (struct ThreadPool *)calloc(1,sizeof(struct ThreadPool))) == NULL)
+    ThreadPool_t *pool;
+    if ((pool = (ThreadPool_t *)calloc(1,sizeof(ThreadPool_t))) == NULL)
         return NULL;
     if ((pool->list = List_Create( LIST_MODE_GENERIC,
                     TP_Cmp,
@@ -99,14 +112,18 @@ ThreadPool_Create(int initialThreads,
     pool->mainFunction = mainFunction;
     pool->namePattern = namePattern;
 
-    ThreadPool_LaunchWorkers(pool, initialThreads);
+    if (!ThreadPool_LaunchWorkers(pool, initialThreads))
+    {
+        ThreadPool_Destroy(pool);
+        return NULL;
+    }
 
     return pool;
 }
 
 
 SO_PUBLIC bool
-ThreadPool_LaunchWorker(struct ThreadPool *pool)
+ThreadPool_LaunchWorker(ThreadPool_t *pool)
 {
     struct ThreadPoolItem *item;
     char* name;
@@ -131,11 +148,16 @@ ThreadPool_LaunchWorker(struct ThreadPool *pool)
     }
 
     item->thread = Thread_Launch(ThreadPool_Main, item, name, pool->context);
+    if (item->thread == NULL) {
+        List_Remove(pool->list, item);
+        free(name);
+        return false;
+    }
     return true;
 }
 
 SO_PUBLIC bool
-ThreadPool_LaunchWorkers(struct ThreadPool *pool, int count)
+ThreadPool_LaunchWorkers(ThreadPool_t *pool, int count)
 {
     int i=0;
     for (i = 0; i < count; i++)
@@ -149,7 +171,7 @@ ThreadPool_LaunchWorkers(struct ThreadPool *pool, int count)
 }
 
 SO_PUBLIC bool
-ThreadPool_KillWorker(struct ThreadPool *pool, int id)
+ThreadPool_KillWorker(ThreadPool_t *pool, int id)
 {
     struct ThreadPoolItem *worker;
     worker = (struct ThreadPoolItem *)List_Find(pool->list, &id);
@@ -165,19 +187,85 @@ static int
 ThreadPool_Kill(void *vItem, void *userData)
 {
     struct ThreadPoolItem *item = (struct ThreadPoolItem *)vItem;
+    (void)userData;
+
     Thread_Interrupt(item->thread);
-    return LIST_EACH_REMOVE;
+    return LIST_EACH_OK;
 }
 
 
 SO_PUBLIC bool
-ThreadPool_KillWorkers(struct ThreadPool *pool)
+ThreadPool_KillWorkers(ThreadPool_t *pool)
 {
     size_t count;
+
+    if (pool == NULL || pool->list == NULL)
+        return false;
+
     List_ForEach(pool->list, ThreadPool_Kill, NULL);
 
     for (count = List_Length(pool->list); count > 0; count = List_Length(pool->list))
-        Thread_Yield();
+        Thread_Sleep(THREAD_POOL_KILL_WAIT_SLEEP_MS);
 
     return true;
+}
+
+SO_PUBLIC void
+ThreadPool_Destroy(ThreadPool_t *pool)
+{
+    if (pool == NULL)
+        return;
+
+    if (pool->list != NULL) {
+        if (List_Length(pool->list) > 0)
+            ThreadPool_KillWorkers(pool);
+
+        List_Destroy(pool->list);
+        pool->list = NULL;
+    }
+
+    free(pool);
+}
+
+SO_PUBLIC size_t
+ThreadPool_GetAliveCount(ThreadPool_t *pool)
+{
+    if (pool == NULL || pool->list == NULL)
+        return 0;
+
+    return List_Length(pool->list);
+}
+
+struct ThreadPoolForEachContext
+{
+    int (*function)(Thread_t *thread, void *userData);
+    void *userData;
+};
+
+static int
+ThreadPool_ForEach_Entry(void *item, void *userData)
+{
+    struct ThreadPoolItem *worker = item;
+    struct ThreadPoolForEachContext *ctx = userData;
+
+    if (worker == NULL || ctx == NULL || ctx->function == NULL)
+        return LIST_EACH_ERROR;
+
+    return ctx->function(worker->thread, ctx->userData);
+}
+
+SO_PUBLIC int
+ThreadPool_ForEach(ThreadPool_t *pool,
+                   int (*function)(Thread_t *thread, void *userData),
+                   void *userData)
+{
+    struct ThreadPoolForEachContext ctx;
+
+    if (pool == NULL || pool->list == NULL || function == NULL)
+        return LIST_EACH_ERROR;
+
+    ctx.function = function;
+    ctx.userData = userData;
+
+    return List_ForEach(pool->list, ThreadPool_ForEach_Entry, &ctx);
 }

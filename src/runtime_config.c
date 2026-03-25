@@ -313,6 +313,14 @@ static RZBConfCallBack hashCallback = {
 static bool parseLogDest (const char *, conf_int_t *);
 static bool parseLogLevel (const char *, conf_int_t *);
 static bool parseLogFacility (const char *, conf_int_t *);
+static bool validateHelloTime(conf_int_t value);
+static bool validateDeadTime(conf_int_t helloValue, conf_int_t deadValue);
+static bool validateGlobalThreadLimit(conf_int_t value);
+static bool validateThreadPoolInitialCount(const char *configKey, conf_int_t value);
+static bool validateThreadPoolMaxCount(const char *initialKey,
+                                       conf_int_t initialValue,
+                                       const char *maxKey,
+                                       conf_int_t maxValue);
 
 
 static RZBConfCallBack destCallBack = {
@@ -415,7 +423,149 @@ bool readApiConfig (void) {
         rzb_log(LOG_ERR, LOG_C_CONFIG, "Message Queue configuration is incomplete,");
         return false;
     }
+
+    if (!validateHelloTime(sg_iHelloTime) ||
+        !validateDeadTime(sg_iHelloTime, sg_iDeadTime) ||
+        !validateThreadPoolInitialCount("Inspection.Threads.Initial",
+                                        sg_inspThreadsInit) ||
+        !validateThreadPoolInitialCount("Submission.GlobalCache.Request.Threads.Initial",
+                                        sg_subGcReqThreadsInit) ||
+        !validateThreadPoolInitialCount("Submission.GlobalCache.Response.Threads.Initial",
+                                        sg_subGcRespThreadsInit) ||
+        !validateThreadPoolInitialCount("Submission.Transfer.Threads.Initial",
+                                        sg_subTransferThreadsInit) ||
+        !validateThreadPoolMaxCount("Inspection.Threads.Initial",
+                                    sg_inspThreadsInit,
+                                    "Inspection.Threads.Max",
+                                    sg_inspThreadsMax) ||
+        !validateThreadPoolMaxCount("Submission.GlobalCache.Request.Threads.Initial",
+                                    sg_subGcReqThreadsInit,
+                                    "Submission.GlobalCache.Request.Threads.Max",
+                                    sg_subGcReqThreadsMax) ||
+        !validateThreadPoolMaxCount("Submission.GlobalCache.Response.Threads.Initial",
+                                    sg_subGcRespThreadsInit,
+                                    "Submission.GlobalCache.Response.Threads.Max",
+                                    sg_subGcRespThreadsMax) ||
+        !validateThreadPoolMaxCount("Submission.Transfer.Threads.Initial",
+                                    sg_subTransferThreadsInit,
+                                    "Submission.Transfer.Threads.Max",
+                                    sg_subTransferThreadsMax) ||
+        !validateGlobalThreadLimit(sg_iThreadLimit)) {
+        return false;
+    }
     return true;
+}
+
+static bool
+validateHelloTime(conf_int_t value)
+{
+    if (value > 1)
+        return true;
+
+    rzb_log(LOG_ERR, LOG_C_CONFIG,
+            "Global.HelloTime must be greater than 1 (configured value: %d)",
+            value);
+    return false;
+}
+
+static bool
+validateDeadTime(conf_int_t helloValue, conf_int_t deadValue)
+{
+    if ((int64_t)deadValue > ((int64_t)helloValue * 3))
+        return true;
+
+    rzb_log(LOG_ERR, LOG_C_CONFIG,
+            "Global.DeadTime must be greater than 3 * Global.HelloTime (configured values: %d <= 3 * %d)",
+            deadValue, helloValue);
+    return false;
+}
+
+static bool
+validateThreadPoolInitialCount(const char *configKey, conf_int_t value)
+{
+    if (value > 0)
+        return true;
+
+    rzb_log(LOG_ERR, LOG_C_CONFIG,
+            "%s must be greater than zero (configured value: %d)",
+            configKey, value);
+    return false;
+}
+
+static bool
+validateGlobalThreadLimit(conf_int_t value)
+{
+    int64_t baseRequired;
+    int64_t requestRequired;
+    int64_t responseRequired;
+    int64_t transferRequired;
+    int64_t inspectionRequired;
+    int64_t minimumRequired;
+
+    /*
+     * Initial tracked-thread footprint for a master collection context plus
+     * an inspection child context:
+     * - Command and control thread
+     * - Command queue send heartbeat timer
+     * - Connected-entity prune timer
+     * - Hello timer
+     * - Submission request workers and their send-queue heartbeat timers
+     * - Submission response workers
+     * - Submission transfer workers and their send-queue heartbeat timers
+     * - Inspection judgment queue heartbeat timer
+     * - Inspection emergency shutdown thread
+     * - Inspection receiver thread
+     * - Inspection workers
+     */
+    baseRequired = 4;
+    requestRequired = (int64_t)sg_subGcReqThreadsInit * 2;
+    responseRequired = (int64_t)sg_subGcRespThreadsInit;
+    transferRequired = (int64_t)sg_subTransferThreadsInit * 2;
+    inspectionRequired = 3 + (int64_t)sg_inspThreadsInit;
+    minimumRequired = baseRequired +
+        requestRequired +
+        responseRequired +
+        transferRequired +
+        inspectionRequired;
+
+    if ((int64_t)value >= minimumRequired)
+        return true;
+
+    rzb_log(LOG_ERR, LOG_C_CONFIG,
+            "Global.MaxThreads must be at least %lld (configured value: %d)",
+            (long long)minimumRequired, value);
+    rzb_log(LOG_ERR, LOG_C_CONFIG,
+            "Global.MaxThreads calculation: %lld base (C&C thread + command queue timer + entity prune timer + hello timer) + %lld request (%d workers + %d queue timers) + %lld response (%d workers) + %lld transfer (%d workers + %d queue timers) + %lld inspection (%d judgment timer + %d emergency thread + %d receiver + %d workers)",
+            (long long)baseRequired,
+            (long long)requestRequired,
+            sg_subGcReqThreadsInit,
+            sg_subGcReqThreadsInit,
+            (long long)responseRequired,
+            sg_subGcRespThreadsInit,
+            (long long)transferRequired,
+            sg_subTransferThreadsInit,
+            sg_subTransferThreadsInit,
+            (long long)inspectionRequired,
+            1,
+            1,
+            1,
+            sg_inspThreadsInit);
+    return false;
+}
+
+static bool
+validateThreadPoolMaxCount(const char *initialKey,
+                           conf_int_t initialValue,
+                           const char *maxKey,
+                           conf_int_t maxValue)
+{
+    if (maxValue >= initialValue)
+        return true;
+
+    rzb_log(LOG_ERR, LOG_C_CONFIG,
+            "%s must be greater than or equal to %s (configured values: %d < %d)",
+            maxKey, initialKey, maxValue, initialValue);
+    return false;
 }
 
 

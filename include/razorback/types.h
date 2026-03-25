@@ -45,6 +45,12 @@ typedef struct _Semaphore Semaphore_t;
 
 typedef struct _List List_t;
 typedef struct _Thread Thread_t;
+typedef struct ThreadPool ThreadPool_t;
+
+typedef struct TelemetryContextCarrier TelemetryContextCarrier_t;
+typedef struct TelemetryMetric TelemetryMetric_t;
+typedef struct TelemetryObservation TelemetryObservation_t;
+typedef struct TelemetrySpan TelemetrySpan_t;
 
 
 #define UUID_STRING_LENGTH 37   ///< The size of a UUID String including the null
@@ -133,6 +139,8 @@ struct BlockPoolData
     struct BlockPoolData *pNext;  ///< Next item in the chain
 };
 
+struct RazorbackContext;
+
 /** Block Pool Item
  */
 struct BlockPoolItem
@@ -142,7 +150,9 @@ struct BlockPoolItem
     struct BlockPoolData *pDataHead;                     ///< Head Item
     struct BlockPoolData *pDataTail;                     ///< Tail Item
     void (*submittedCallback) (struct BlockPoolItem *);  ///< Post submission call back
+    struct RazorbackContext *context;                    ///< Owning API context
     struct Event *pEvent;                                ///< Event data for the submission.
+    TelemetryContextCarrier_t *telemetryContext;         ///< Trace context propagated across worker threads
     void *userData;                                      ///< User data attached to the item
 };
 

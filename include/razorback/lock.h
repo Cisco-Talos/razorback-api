@@ -120,9 +120,11 @@ SO_PUBLIC extern bool Semaphore_Wait(Semaphore_t *sem);
 /**
  * Wait on a semaphore with a timeout.
  * @param sem Semaphore to wait on.
- * @return true on success, false on failure.
+ * @param timeoutMilliseconds Timeout in milliseconds. A value of 0 waits indefinitely.
+ * @return true on success, false on timeout or failure.
  */
-SO_PUBLIC extern bool Semaphore_TimedWait(Semaphore_t *sem);
+SO_PUBLIC extern bool Semaphore_TimedWait(Semaphore_t *sem,
+                                          uint32_t timeoutMilliseconds);
 
 /**
  * Destroy a semaphore.

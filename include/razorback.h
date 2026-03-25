@@ -37,8 +37,8 @@
 #include <razorback/queue.h>
 #include <razorback/queue_list.h>
 #include <razorback/socket.h>
+#include <razorback/telemetry.h>
 #include <razorback/thread.h>
 #include <razorback/uuids.h>
 
 #endif //RAZORBACK_H
-

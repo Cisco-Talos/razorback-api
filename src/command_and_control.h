@@ -28,7 +28,6 @@ extern bool CommandAndControl_Start (struct RazorbackContext *p_pContext);
 extern void CommandAndControl_Shutdown(void);
 
 extern bool CommandAndControl_SendBye (struct RazorbackContext *context);
-extern Mutex_t * sg_mPauseLock;
 
 extern void CommandAndControl_Pause();
 extern void CommandAndControl_Unpause();

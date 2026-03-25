@@ -28,6 +28,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+
+#ifdef _MSC_VER
+#else //_MSC_VER
+#include <time.h>
+#endif
+
 #include "runtime_config.h"
 
 
@@ -453,6 +459,23 @@ Thread_Yield(void)
     SwitchToThread();
 #else
     sched_yield();
+#endif
+}
+
+SO_PUBLIC void
+Thread_Sleep(uint32_t milliseconds)
+{
+#ifdef _MSC_VER
+    Sleep(milliseconds);
+#else
+    struct timespec req;
+    struct timespec rem;
+
+    req.tv_sec = milliseconds / 1000;
+    req.tv_nsec = (long)(milliseconds % 1000) * 1000000L;
+
+    while (nanosleep(&req, &rem) == -1 && errno == EINTR)
+        req = rem;
 #endif
 }
 
