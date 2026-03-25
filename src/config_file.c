@@ -20,8 +20,10 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <strings.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <ctype.h>
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -83,6 +85,10 @@ bool parseBlock (config_t *, RZBConfKey_t *);
 bool parseRoutingType (const char *, conf_int_t *);
 
 #ifndef _MSC_VER
+static bool configKeyToEnvName(const char *key, char **envName);
+static const char *getEnvOverride(const char *key);
+static bool hasEnvOverride(RZBConfKey_t *block);
+static bool parseEnvValue(const char *value, RZBConfKey_t *block);
 
 SO_PUBLIC char *
 getConfigFile(const char *configDir, const char *configFile) {
@@ -102,6 +108,156 @@ getConfigFile(const char *configDir, const char *configFile) {
         return NULL;
     }
     return result;
+}
+
+static bool
+configKeyToEnvName(const char *key, char **envName)
+{
+    size_t len = 5;
+    size_t pos = 0;
+    char *name;
+    const char *cur;
+
+    ASSERT(key != NULL);
+    ASSERT(envName != NULL);
+    if (key == NULL || envName == NULL)
+        return false;
+
+    for (cur = key; *cur != '\0'; cur++) {
+        if (*cur == '.')
+            len += 2;
+        else
+            len += 1;
+    }
+
+    if ((name = calloc(len, sizeof(char))) == NULL)
+        return false;
+
+    memcpy(name, "RZB_", 4);
+    pos = 4;
+
+    for (cur = key; *cur != '\0'; cur++) {
+        if (*cur == '.') {
+            name[pos++] = '_';
+            name[pos++] = '_';
+        } else {
+            name[pos++] = *cur;
+        }
+    }
+    name[pos] = '\0';
+    *envName = name;
+    return true;
+}
+
+static const char *
+getEnvOverride(const char *key)
+{
+    char *envName = NULL;
+    const char *value = NULL;
+
+    if (key == NULL)
+        return NULL;
+
+    if (!configKeyToEnvName(key, &envName))
+        return NULL;
+
+    value = getenv(envName);
+    free(envName);
+    return value;
+}
+
+static bool
+hasEnvOverride(RZBConfKey_t *block)
+{
+    while (block != NULL && block->type != RZB_CONF_KEY_TYPE_END) {
+        if (block->key != NULL && getEnvOverride(block->key) != NULL)
+            return true;
+        block++;
+    }
+
+    return false;
+}
+
+static bool
+parseEnvValue(const char *value, RZBConfKey_t *block)
+{
+    conf_int_t parsedValue = 0;
+    char *end = NULL;
+    long integerValue;
+
+    ASSERT(value != NULL);
+    ASSERT(block != NULL);
+    if (value == NULL || block == NULL)
+        return false;
+
+    switch (block->type) {
+    case RZB_CONF_KEY_TYPE_INT:
+        errno = 0;
+        integerValue = strtol(value, &end, 0);
+        while (end != NULL && isspace((unsigned char)*end))
+            end++;
+        if (errno != 0 || end == value || (end != NULL && *end != '\0') ||
+            (conf_int_t)integerValue != integerValue)
+        {
+            rzb_log(LOG_ERR, LOG_C_CONFIG,
+                    "%s: Failed to parse int environment override for %s: %s",
+                    __func__, block->key, value);
+            return false;
+        }
+        *(conf_int_t *)block->dest = (conf_int_t)integerValue;
+        return true;
+
+    case RZB_CONF_KEY_TYPE_STRING:
+        *(char **)block->dest = (char *)value;
+        return true;
+
+    case RZB_CONF_KEY_TYPE_PARSED_STRING:
+        if (block->callback == NULL ||
+            !((RZBConfCallBack *)block->callback)->parseString(value, &parsedValue))
+        {
+            rzb_log(LOG_ERR, LOG_C_CONFIG,
+                    "%s: Failed to parse string environment override for %s: %s",
+                    __func__, block->key, value);
+            return false;
+        }
+        *(conf_int_t *)block->dest = parsedValue;
+        return true;
+
+    case RZB_CONF_KEY_TYPE_UUID:
+        if (uuid_parse(value, block->dest) == -1) {
+            rzb_log(LOG_ERR, LOG_C_CONFIG,
+                    "%s: Failed to parse UUID environment override for %s: %s",
+                    __func__, block->key, value);
+            return false;
+        }
+        return true;
+
+    case RZB_CONF_KEY_TYPE_BOOL:
+        if (strcasecmp(value, "true") == 0)
+            *(bool *)block->dest = true;
+        else if (strcasecmp(value, "false") == 0)
+            *(bool *)block->dest = false;
+        else {
+            rzb_log(LOG_ERR, LOG_C_CONFIG,
+                    "%s: Failed to parse bool environment override for %s: %s",
+                    __func__, block->key, value);
+            return false;
+        }
+        return true;
+
+    case RZB_CONF_KEY_TYPE_ARRAY:
+    case RZB_CONF_KEY_TYPE_LIST:
+        rzb_log(LOG_ERR, LOG_C_CONFIG,
+                "%s: Environment override not supported for complex key: %s",
+                __func__, block->key);
+        return false;
+
+    default:
+        rzb_log(LOG_ERR, LOG_C_CONFIG,
+                "%s: Unknown config attribute type for environment override: %s",
+                __func__, block->key);
+        return false;
+    }
 }
 
 #endif
@@ -228,6 +384,8 @@ readMyConfig(const char *configDir,
 
     char *configfile = getConfigFile(configDir, configFile);
     RZBConfigFile *file;
+    bool fileExists;
+    bool allowEnvOnly;
 
     if ((file = calloc(1, sizeof(RZBConfigFile))) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to allocate config storage", __func__);
@@ -236,13 +394,27 @@ readMyConfig(const char *configDir,
     }
 
     file->type = config_fmt;
-    if (!testFile(configfile)) {
+    config_init(&file->config);
+
+    fileExists = testFile(configfile);
+    allowEnvOnly = hasEnvOverride(config_fmt);
+    if (!fileExists && !allowEnvOnly) {
+        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: failed to find file: %s", __func__, configfile);
+        config_destroy(&file->config);
         free(configfile);
         free(file);
         return false;
     }
-    if (config_read_file(&file->config, configfile) != CONFIG_TRUE)
-        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: failed to read file: %s", __func__, config_error_text(&config));
+    if (fileExists) {
+        if (config_read_file(&file->config, configfile) != CONFIG_TRUE) {
+            rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: failed to read file: %s",
+                    __func__, config_error_text(&file->config));
+            config_destroy(&file->config);
+            free(configfile);
+            free(file);
+            return false;
+        }
+    }
 
     if (configList == NULL) {
         configList = file;
@@ -1124,6 +1296,7 @@ parseBlock (config_t * config, RZBConfKey_t * block) {
     conf_int_t t;
     config_setting_t *tt;
     const char *type;
+    const char *envValue;
 
     ASSERT(config != NULL);
     ASSERT(block != NULL);
@@ -1132,6 +1305,14 @@ parseBlock (config_t * config, RZBConfKey_t * block) {
         return false;
     }
     while (block->type != RZB_CONF_KEY_TYPE_END) {
+        envValue = getEnvOverride(block->key);
+        if (envValue != NULL) {
+            if (!parseEnvValue(envValue, block))
+                return false;
+            block++;
+            continue;
+        }
+
         tt = config_lookup(config, block->key);
         if (tt == NULL) {
             rzb_log(LOG_WARNING, LOG_C_CONFIG, "%s: Cant find key: %s", __func__, block->key);
@@ -1236,12 +1417,10 @@ testFile (const char *configfile) {
     fd = open (configfile, O_RDONLY);
 
     if (fd == -1) {
-        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to open (%s) in ", __func__, configfile);
         goto cleanup;
     }
 
     if (fstat(fd, &sb) == -1) {
-        rzb_log(LOG_ERR, LOG_C_CONFIG, "%s: Failed to stat (%s)", __func__, configfile);
         goto cleanup;
     }
 

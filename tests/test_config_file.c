@@ -232,6 +232,13 @@ cleanup_config_test_state(void)
     reset_config_state();
 }
 
+static void
+clear_env_override(const char *name)
+{
+    ck_assert_ptr_ne(name, NULL);
+    ck_assert_int_eq(unsetenv(name), 0);
+}
+
 START_TEST(test_get_config_file_joins_directory_and_filename)
 {
     char *path;
@@ -384,6 +391,83 @@ START_TEST(test_read_my_config_rejects_non_array_for_array_binding)
 }
 END_TEST
 
+START_TEST(test_read_my_config_environment_overrides_nested_scalar_values)
+{
+    struct TempConfigFile temp;
+    conf_int_t value = 0;
+    bool enabled = false;
+    char *string_value = NULL;
+    conf_int_t parsed = 0;
+    uuid_t parsed_uuid;
+    RZBConfKey_t config[] = {
+        {"Parent.Int", RZB_CONF_KEY_TYPE_INT, &value, NULL},
+        {"Parent.Bool", RZB_CONF_KEY_TYPE_BOOL, &enabled, NULL},
+        {"Parent.String", RZB_CONF_KEY_TYPE_STRING, &string_value, NULL},
+        {"Parent.Parsed", RZB_CONF_KEY_TYPE_PARSED_STRING, &parsed, &parseCallback},
+        {"Parent.UUID", RZB_CONF_KEY_TYPE_UUID, &parsed_uuid, NULL},
+        {NULL, RZB_CONF_KEY_TYPE_END, NULL, NULL}
+    };
+
+    reset_config_state();
+    uuid_clear(parsed_uuid);
+    temp = write_temp_config(
+        "Parent: {\n"
+        "  Int = 1;\n"
+        "  Bool = \"false\";\n"
+        "  String = \"FileValue\";\n"
+        "  Parsed = \"Option1\";\n"
+        "  UUID = \"4d014d0b-f6d4-4a52-96a5-01ad64f5088b\";\n"
+        "};\n");
+
+    ck_assert_int_eq(setenv("RZB_Parent__Int", "42", 1), 0);
+    ck_assert_int_eq(setenv("RZB_Parent__Bool", "true", 1), 0);
+    ck_assert_int_eq(setenv("RZB_Parent__String", "EnvValue", 1), 0);
+    ck_assert_int_eq(setenv("RZB_Parent__Parsed", "Option2", 1), 0);
+    ck_assert_int_eq(setenv("RZB_Parent__UUID", "3e7a02f4-efc4-46f6-9844-717836ebe05b", 1), 0);
+
+    ck_assert(readMyConfig(temp.dir, temp.name, config));
+
+    ck_assert_int_eq(value, 42);
+    ck_assert(enabled);
+    ck_assert_str_eq(string_value, "EnvValue");
+    ck_assert_int_eq(parsed, 2);
+    assert_uuid_text(parsed_uuid, "3e7a02f4-efc4-46f6-9844-717836ebe05b");
+
+    clear_env_override("RZB_Parent__Int");
+    clear_env_override("RZB_Parent__Bool");
+    clear_env_override("RZB_Parent__String");
+    clear_env_override("RZB_Parent__Parsed");
+    clear_env_override("RZB_Parent__UUID");
+    cleanup_config_test_state();
+    cleanup_temp_config(&temp);
+}
+END_TEST
+
+START_TEST(test_read_my_config_accepts_environment_only_nested_scalar_values)
+{
+    char dir_template[] = "/tmp/razorback-config-XXXXXX";
+    char *dir;
+    conf_int_t value = 0;
+    RZBConfKey_t config[] = {
+        {"Parent.Int", RZB_CONF_KEY_TYPE_INT, &value, NULL},
+        {NULL, RZB_CONF_KEY_TYPE_END, NULL, NULL}
+    };
+
+    reset_config_state();
+    dir = strdup(mkdtemp(dir_template));
+    ck_assert_ptr_ne(dir, NULL);
+
+    ck_assert_int_eq(setenv("RZB_Parent__Int", "99", 1), 0);
+    ck_assert(readMyConfig(dir, "missing.conf", config));
+    ck_assert_int_eq(value, 99);
+
+    clear_env_override("RZB_Parent__Int");
+    cleanup_config_test_state();
+    ck_assert_int_eq(rmdir(dir), 0);
+    free(dir);
+}
+END_TEST
+
 static Suite *
 config_file_suite(void)
 {
@@ -399,6 +483,8 @@ config_file_suite(void)
     tcase_add_test(testcase, test_read_my_config_rejects_invalid_uuid_value);
     tcase_add_test(testcase, test_read_my_config_rejects_invalid_parsed_string_value);
     tcase_add_test(testcase, test_read_my_config_rejects_non_array_for_array_binding);
+    tcase_add_test(testcase, test_read_my_config_environment_overrides_nested_scalar_values);
+    tcase_add_test(testcase, test_read_my_config_accepts_environment_only_nested_scalar_values);
 
     suite_add_tcase(suite, testcase);
     return suite;
