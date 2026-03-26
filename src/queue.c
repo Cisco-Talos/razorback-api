@@ -63,6 +63,7 @@ static bool Queue_Connect_ReadSocket(struct Queue *queue);
 static bool Queue_Connect_WriteSocket(struct Queue *queue);
 static const char *Queue_MessageFamily(uint32_t messageType);
 static const char *Queue_ExchangeKind(const struct Queue *queue);
+static struct RazorbackContext *Queue_TryGetCurrentContext(void);
 static char sg_messageTypeHeaderName[] = "rzb-msg-type";
 static char sg_messageVersionHeaderName[] = "rzb-msg-ver";
 
@@ -87,6 +88,21 @@ Queue_ExchangeKind(const struct Queue *queue)
         return "other";
 
     return queue->bTopic ? "topic" : "default";
+}
+
+static struct RazorbackContext *
+Queue_TryGetCurrentContext(void)
+{
+    Thread_t *thread;
+    struct RazorbackContext *context;
+
+    thread = Thread_GetCurrent();
+    if (thread == NULL)
+        return NULL;
+
+    context = Thread_GetContext(thread);
+    Thread_Destroy(thread);
+    return context;
 }
 
 /** Log an AMQP RPC reply and return true when it represents an error. */
@@ -607,7 +623,7 @@ Queue_Reconnect(struct Queue *queue, int p_iSide, const char *cause)
         return false;
 
     if ((p_iSide & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND) {
-        context = Thread_GetCurrentContext();
+        context = Queue_TryGetCurrentContext();
         Telemetry_RecordOutboundReconnect(cause, context);
     }
 
@@ -1133,7 +1149,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     if (dest == NULL)
         return false;
 
-    context = Thread_GetCurrentContext();
+    context = Queue_TryGetCurrentContext();
     messageFamily = Queue_MessageFamily(message->type);
     destination = (dest[0] != '\0') ? dest : "unknown";
     exchangeKind = Queue_ExchangeKind(queue);
