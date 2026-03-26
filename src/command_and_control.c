@@ -518,7 +518,9 @@ CommandAndControl_Register (struct RazorbackContext *p_pContext) {
 #endif
     }
     Telemetry_RecordDispatcherWait(Telemetry_GetMonotonicTimeSeconds() - waitStartedAt,
-                                   "available");
+                                   "available",
+                                   "startup",
+                                   p_pContext);
 
     if ((regReq = MessageRegistrationRequest_Initialize(
             dispatcher->uuidNuggetId,

@@ -23,6 +23,7 @@
 #include <razorback/messages.h>
 #include <razorback/list.h>
 #include <razorback/lock.h>
+#include <razorback/thread.h>
 #include <stdio.h>
 #include <string.h>
 #ifdef _MSC_VER
@@ -57,11 +58,36 @@ struct _AMQP_Socket {
     bool bChannelOpen;              ///< Is the channel open
 };
 
-static bool Queue_Reconnect(struct Queue *queue, int p_iSide);
+static bool Queue_Reconnect(struct Queue *queue, int p_iSide, const char *cause);
 static bool Queue_Connect_ReadSocket(struct Queue *queue);
 static bool Queue_Connect_WriteSocket(struct Queue *queue);
+static const char *Queue_MessageFamily(uint32_t messageType);
+static const char *Queue_ExchangeKind(const struct Queue *queue);
 static char sg_messageTypeHeaderName[] = "rzb-msg-type";
 static char sg_messageVersionHeaderName[] = "rzb-msg-ver";
+
+static const char *
+Queue_MessageFamily(uint32_t messageType)
+{
+    switch (messageType & 0xF0000000U) {
+    case MESSAGE_GROUP_C_AND_C:
+        return "cnc";
+    case MESSAGE_GROUP_CACHE:
+    case MESSAGE_GROUP_SUBMIT:
+        return "submission";
+    default:
+        return "other";
+    }
+}
+
+static const char *
+Queue_ExchangeKind(const struct Queue *queue)
+{
+    if (queue == NULL)
+        return "other";
+
+    return queue->bTopic ? "topic" : "default";
+}
 
 /** Log an AMQP RPC reply and return true when it represents an error. */
 static bool
@@ -225,7 +251,7 @@ Queue_Reject_Delivery(struct Queue *queue, uint64_t delivery_tag, bool requeue,
     if (amqpErr < 0) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: failed to reject delivery: %s",
                 context, amqp_error_string2(amqpErr));
-        Queue_Reconnect(queue, QUEUE_FLAG_RECV);
+        Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL);
         return false;
     }
 
@@ -256,7 +282,7 @@ Queue_Acknowledge_Delivery(struct Queue *queue, uint64_t delivery_tag,
     if (amqpErr < 0) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: failed to ack delivery: %s",
                 context, amqp_error_string2(amqpErr));
-        Queue_Reconnect(queue, QUEUE_FLAG_RECV);
+        Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL);
         return false;
     }
 
@@ -482,14 +508,14 @@ AMQP_Heartbeat(void *p_arg)
 
     if (queue->pWriteSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Write socket missing during heartbeat, reconnecting", __func__);
-        Queue_Reconnect(queue, QUEUE_FLAG_SEND);
+        Queue_Reconnect(queue, QUEUE_FLAG_SEND, "heartbeat");
         Mutex_Unlock(queue->mWriteMutex);
         return;
     }
 
     if (!AMQP_Service_Connection(queue->pWriteSocket, __func__)) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Heartbeat detected dead broker connection, reconnecting", __func__);
-        Queue_Reconnect(queue, QUEUE_FLAG_SEND);
+        Queue_Reconnect(queue, QUEUE_FLAG_SEND, "heartbeat");
     }
     Mutex_Unlock(queue->mWriteMutex);
 
@@ -573,13 +599,17 @@ Queue_Connect(struct Queue *queue)
 
 /** Reconnect only the requested AMQP side or sides of a queue. */
 static bool
-Queue_Reconnect(struct Queue *queue, int p_iSide)
+Queue_Reconnect(struct Queue *queue, int p_iSide, const char *cause)
 {
+    struct RazorbackContext *context = NULL;
+
     if (queue->bShuttingDown)
         return false;
 
-    if ((p_iSide & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND)
-        Telemetry_RecordOutboundReconnect();
+    if ((p_iSide & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND) {
+        context = Thread_GetCurrentContext();
+        Telemetry_RecordOutboundReconnect(cause, context);
+    }
 
     if ((p_iSide & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
         queue->pReadSocket != NULL)
@@ -779,7 +809,7 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
 
     if (queue->pReadSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Read socket unavailable, attempting reconnect", __func__);
-        if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV) || queue->pReadSocket == NULL) {
+        if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL) || queue->pReadSocket == NULL) {
             Mutex_Unlock(queue->mReadMutex);
             return NULL;
         }
@@ -802,7 +832,7 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
                 rzb_log(LOG_ERR, LOG_C_QUEUE,
                         "%s: Error servicing read connection after timeout, reconnecting read side",
                         __func__);
-                Queue_Reconnect(queue, QUEUE_FLAG_RECV);
+                Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL);
                 receiveError = "failed to service read connection";
                 errno = EIO;
             }
@@ -810,7 +840,7 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
         }
         AMQP_error(res, __func__);
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error consuming message, reconnecting read side", __func__);
-        Queue_Reconnect(queue, QUEUE_FLAG_RECV);
+        Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL);
         receiveError = "failed to consume message";
         goto cleanup;
     }
@@ -985,7 +1015,7 @@ Queue_Ack_Message(struct Queue *queue, struct Message *message)
 
     if (queue->pReadSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Read socket unavailable, attempting reconnect", __func__);
-        if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV) || queue->pReadSocket == NULL) {
+        if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL) || queue->pReadSocket == NULL) {
             Mutex_Unlock(queue->mReadMutex);
             return false;
         }
@@ -1022,7 +1052,7 @@ Queue_Reject_Message(struct Queue *queue, struct Message *message, bool requeue)
 
     if (queue->pReadSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Read socket unavailable, attempting reconnect", __func__);
-        if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV) || queue->pReadSocket == NULL) {
+        if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL) || queue->pReadSocket == NULL) {
             Mutex_Unlock(queue->mReadMutex);
             return false;
         }
@@ -1085,6 +1115,10 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     struct TelemetryInjectedHeaders injectedHeaders = { 0, NULL };
     bool ret = false;
     const char *sendError = NULL;
+    const char *messageFamily;
+    const char *destination;
+    const char *exchangeKind;
+    struct RazorbackContext *context;
     size_t i;
     amqp_basic_properties_t props = {0};
 
@@ -1099,6 +1133,11 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     if (dest == NULL)
         return false;
 
+    context = Thread_GetCurrentContext();
+    messageFamily = Queue_MessageFamily(message->type);
+    destination = (dest[0] != '\0') ? dest : "unknown";
+    exchangeKind = Queue_ExchangeKind(queue);
+
     Mutex_Lock (queue->mWriteMutex);
     if (queue->bShuttingDown) {
         rzb_log(LOG_DEBUG, LOG_C_QUEUE,
@@ -1109,9 +1148,11 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     }
     if (queue->pWriteSocket == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Write socket unavailable, attempting reconnect", __func__);
-        if (!Queue_Reconnect(queue, QUEUE_FLAG_SEND) || queue->pWriteSocket == NULL) {
+        if (!Queue_Reconnect(queue, QUEUE_FLAG_SEND, "publish_retry") ||
+            queue->pWriteSocket == NULL) {
             sendError = "write reconnect failed";
-            Telemetry_RecordOutboundMessage(message->type, "publish_error");
+            Telemetry_RecordOutboundMessage(message->type, "publish_error", messageFamily,
+                                           destination, exchangeKind, context);
             goto cleanup;
         }
     }
@@ -1123,7 +1164,8 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
         {
             rzb_log(LOG_ERR,LOG_C_STOMP, "%s: Failed to serialize message", __func__);
             sendError = "message serialization failed";
-            Telemetry_RecordOutboundMessage(message->type, "serialize_error");
+            Telemetry_RecordOutboundMessage(message->type, "serialize_error", messageFamily,
+                                           destination, exchangeKind, context);
             goto cleanup;
         }
     }
@@ -1186,11 +1228,13 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
                     "%s: Broker reported an outbound connection error, reconnecting",
                     __func__);
             sendError = "outbound broker connection error";
-            Telemetry_RecordOutboundMessage(message->type, "publish_error");
+            Telemetry_RecordOutboundMessage(message->type, "publish_error", messageFamily,
+                                           destination, exchangeKind, context);
             if (attempt == 0)
-                Telemetry_RecordOutboundPublishRetry(message->type);
+                Telemetry_RecordOutboundPublishRetry(message->type, messageFamily,
+                                                    destination, exchangeKind, context);
             if (attempt == 0 &&
-                Queue_Reconnect(queue, QUEUE_FLAG_SEND) &&
+                Queue_Reconnect(queue, QUEUE_FLAG_SEND, "publish_retry") &&
                 queue->pWriteSocket != NULL) {
                 continue;
             }
@@ -1206,18 +1250,21 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
         if (amqpErr == AMQP_STATUS_OK) {
             ret = true;
             sendError = NULL;
-            Telemetry_RecordOutboundMessage(message->type, "published");
+            Telemetry_RecordOutboundMessage(message->type, "published", messageFamily,
+                                           destination, exchangeKind, context);
             break;
         }
 
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to publish message: %s",
                 __func__, amqp_error_string2(amqpErr));
         sendError = amqp_error_string2(amqpErr);
-        Telemetry_RecordOutboundMessage(message->type, "publish_error");
+        Telemetry_RecordOutboundMessage(message->type, "publish_error", messageFamily,
+                                       destination, exchangeKind, context);
         if (attempt == 0)
-            Telemetry_RecordOutboundPublishRetry(message->type);
+            Telemetry_RecordOutboundPublishRetry(message->type, messageFamily,
+                                                destination, exchangeKind, context);
         if (attempt == 0 &&
-            Queue_Reconnect(queue, QUEUE_FLAG_SEND) &&
+            Queue_Reconnect(queue, QUEUE_FLAG_SEND, "publish_retry") &&
             queue->pWriteSocket != NULL) {
             continue;
         }

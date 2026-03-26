@@ -29,6 +29,7 @@ extern void Submission_Shutdown_Global(void);
 extern bool Submission_Init(struct RazorbackContext *p_pContext);
 extern void Submission_Shutdown(struct RazorbackContext *p_pContext);
 extern size_t Submission_GetSubmitQueueDepth(void);
+extern size_t Submission_GetContextSubmitQueueDepth(const struct RazorbackContext *p_pContext);
 #ifdef __cplusplus
 }
 #endif

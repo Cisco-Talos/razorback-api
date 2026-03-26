@@ -78,11 +78,12 @@ static int Submission_CacheLookupTiming_Cmp(void *a, void *b);
 static void Submission_CacheLookupTiming_Destroy(void *item);
 static void Submission_ClearCacheLookupTiming(struct BlockPoolItem *item);
 static void Submission_RecordCacheLookupStart(struct BlockPoolItem *item);
-static void Submission_RecordCacheLookupWait(struct BlockPoolItem *item);
+static void Submission_RecordCacheLookupWait(struct BlockPoolItem *item, const char *result);
 static const char *Submission_Reason_Label(uint32_t reason);
 static void Submission_DestroySharedResources(void);
 static bool Submission_Initialize_Once(void);
 static size_t Submission_AbandonStuckContextCacheLookups(struct RazorbackContext *p_pContext);
+static int Submission_CountContextSubmitQueueItem(void *item, void *userData);
 
 static int
 Submission_CacheLookupTiming_KeyCmp(void *a, const void *key)
@@ -156,7 +157,7 @@ Submission_RecordCacheLookupStart(struct BlockPoolItem *item)
 }
 
 static void
-Submission_RecordCacheLookupWait(struct BlockPoolItem *item)
+Submission_RecordCacheLookupWait(struct BlockPoolItem *item, const char *result)
 {
     struct CacheLookupTiming *entry;
     double duration;
@@ -175,7 +176,30 @@ Submission_RecordCacheLookupWait(struct BlockPoolItem *item)
     List_Remove(requestTiming, entry);
     Mutex_Unlock(requestTimingLock);
 
-    Telemetry_RecordCacheLookupWait(duration);
+    Telemetry_RecordCacheLookupWait(duration,
+                                    result,
+                                    item->context);
+}
+
+static const char *
+Submission_Origin_Label(const struct BlockPoolItem *item)
+{
+    if (item == NULL)
+        return "unknown";
+
+    if ((item->iStatus & BLOCK_POOL_FLAG_UPDATE) == BLOCK_POOL_FLAG_UPDATE)
+        return "update";
+
+    return "ingest";
+}
+
+static bool
+Submission_NeedsStore(const struct BlockPoolItem *item)
+{
+    if (item == NULL)
+        return false;
+
+    return (item->iStatus & (BLOCK_POOL_FLAG_EVENT_ONLY | BLOCK_POOL_FLAG_UPDATE)) == 0;
 }
 
 static const char *
@@ -412,6 +436,41 @@ Submission_GetSubmitQueueDepth(void)
     return (submitQueue == NULL) ? 0 : List_Length(submitQueue);
 }
 
+struct SubmissionContextSubmitQueueDepth
+{
+    const struct RazorbackContext *context;
+    size_t count;
+};
+
+static int
+Submission_CountContextSubmitQueueItem(void *item, void *userData)
+{
+    struct BlockPoolItem *poolItem = item;
+    struct SubmissionContextSubmitQueueDepth *depth = userData;
+
+    if (poolItem == NULL || depth == NULL)
+        return LIST_EACH_OK;
+
+    if (poolItem->context == depth->context)
+        depth->count++;
+
+    return LIST_EACH_OK;
+}
+
+size_t
+Submission_GetContextSubmitQueueDepth(const struct RazorbackContext *p_pContext)
+{
+    struct SubmissionContextSubmitQueueDepth depth;
+
+    if (p_pContext == NULL || submitQueue == NULL)
+        return 0;
+
+    depth.context = p_pContext;
+    depth.count = 0;
+    List_ForEach(submitQueue, Submission_CountContextSubmitQueueItem, &depth);
+    return depth.count;
+}
+
 SO_PUBLIC int
 Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_Flags, uint32_t *p_pEnt_Flags)
 {
@@ -443,7 +502,9 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
     if (uuid_is_null(p_pItem->pEvent->pBlock->pId->uuidDataType) == 1)
     {
         rzb_log(LOG_INFO,LOG_C_CORE, "%s: Submission with null data type dropped.", __func__);
-        Telemetry_RecordBlockSubmitDecision("invalid_datatype");
+        Telemetry_RecordBlockSubmitDecision("invalid_datatype",
+                                           Submission_Origin_Label(p_pItem),
+                                           p_pItem->context);
         BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_ERROR);
         if (p_pItem->submittedCallback != NULL)
             p_pItem->submittedCallback(p_pItem);
@@ -462,7 +523,9 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
     }
     if (result == R_FOUND) {
         rzb_log(LOG_INFO,LOG_C_CORE, "%s: Local Cache Hit - SF: 0x%08x, ENT: 0x%08x", __func__, sfflags, entflags);
-        Telemetry_RecordBlockSubmitDecision("event_only");
+        Telemetry_RecordBlockSubmitDecision("event_only",
+                                           Submission_Origin_Label(p_pItem),
+                                           p_pItem->context);
         BlockPool_DestroyItemDataList(p_pItem->pDataHead); // We don't need the data any more.
         p_pItem->pDataHead = NULL;
         p_pItem->pDataTail = NULL;
@@ -472,7 +535,9 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
     }
     else
     {
-        Telemetry_RecordBlockSubmitDecision("cache_miss");
+        Telemetry_RecordBlockSubmitDecision("cache_miss",
+                                           Submission_Origin_Label(p_pItem),
+                                           p_pItem->context);
         BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_CHECK_GLOBAL_CACHE);
         BlockPool_SetFlags(p_pItem, p_iFlags);
         List_Push(requestQueue, p_pItem);
@@ -674,14 +739,17 @@ Submission_GlobalCache_ResponseHandler(struct BlockPoolItem *p_pItem, void * use
             if ((l_pRes->iSfFlags & SF_FLAG_CANHAZ) != SF_FLAG_CANHAZ)
             {
                 BlockPool_SetFlags(p_pItem, p_pItem->iStatus | BLOCK_POOL_FLAG_EVENT_ONLY);
-                Telemetry_RecordCacheResponse("event_only");
+                Telemetry_RecordCacheResponse("event_only", "false", p_pItem->context);
             }
             else
             {
-                Telemetry_RecordCacheResponse("submit");
+                Telemetry_RecordCacheResponse("submit", "true", p_pItem->context);
             }
 
-            Submission_RecordCacheLookupWait(p_pItem);
+            Submission_RecordCacheLookupWait(
+                p_pItem,
+                ((l_pRes->iSfFlags & SF_FLAG_CANHAZ) != SF_FLAG_CANHAZ) ? "event_only"
+                                                                        : "submit");
             Telemetry_UpdateContext(&p_pItem->telemetryContext);
             List_Push(submitQueue, p_pItem);
         }
@@ -726,7 +794,7 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Unexpected cache response message type %u",
                     __func__, message->type);
             processError = "unexpected cache response message type";
-            Telemetry_RecordCacheResponse("invalid_type");
+            Telemetry_RecordCacheResponse("invalid_type", "unknown", context);
             Telemetry_EndSpan(processSpan, false, processError);
             message->destroy(message);
             continue;
@@ -741,7 +809,11 @@ Submission_GlobalCache_ResponseThread(Thread_t *p_pThread)
         rzb_log(LOG_DEBUG,LOG_C_CORE, "%s: Got flags SF: 0x%08x, ENT: 0x%08x", __func__, l_pRes->iSfFlags, l_pRes->iEntFlags);
         BlockPool_ForEachItem(Submission_GlobalCache_ResponseHandler, l_pRes);
         if (l_pRes->matchedCount == 0)
-            Telemetry_RecordCacheResponse("unknown_block");
+            Telemetry_RecordCacheResponse("unknown_block",
+                                          ((l_pRes->iSfFlags & SF_FLAG_CANHAZ) == SF_FLAG_CANHAZ)
+                                              ? "true"
+                                              : "false",
+                                          context);
         // Destroy allocated items in thread local storage.
         processSuccess = true;
         message->destroy(message);
@@ -769,6 +841,8 @@ Submission_SubmitThread(Thread_t *p_pThread)
     double submitStartedAt = 0.0;
     const char *submitOutcome = "error";
     const char *reasonLabel = "unknown";
+    const char *originLabel = "unknown";
+    bool needsStore = false;
 
 #if 0
     struct timespec l_tsTimeOut;
@@ -797,6 +871,8 @@ Submission_SubmitThread(Thread_t *p_pThread)
         submitStartedAt = Telemetry_GetMonotonicTimeSeconds();
         submitOutcome = "error";
         reasonLabel = "unknown";
+        originLabel = Submission_Origin_Label(item);
+        needsStore = Submission_NeedsStore(item);
         itemSpan = Telemetry_StartSpan("submit block", &item->telemetryContext);
         BlockPool_AddCommonTelemetryAttributes(item, itemSpan);
         itemSuccess = false;
@@ -808,7 +884,10 @@ Submission_SubmitThread(Thread_t *p_pThread)
             Telemetry_EndSpan(itemSpan, false, itemError);
             Telemetry_RecordSubmitDuration(Telemetry_GetMonotonicTimeSeconds() - submitStartedAt,
                                            reasonLabel,
-                                           submitOutcome);
+                                           submitOutcome,
+                                           originLabel,
+                                           needsStore,
+                                           itemContext);
             BlockPool_Item_Unlock(item);
             continue;
         }
@@ -856,7 +935,10 @@ Submission_SubmitThread(Thread_t *p_pThread)
                 Telemetry_EndSpan(itemSpan, false, itemError);
                 Telemetry_RecordSubmitDuration(Telemetry_GetMonotonicTimeSeconds() - submitStartedAt,
                                                reasonLabel,
-                                               submitOutcome);
+                                               submitOutcome,
+                                               originLabel,
+                                               needsStore,
+                                               itemContext);
                 BlockPool_Item_Unlock(item);
                 BlockPool_DestroyItem(item);
                 continue;
@@ -878,7 +960,10 @@ Submission_SubmitThread(Thread_t *p_pThread)
             Telemetry_EndSpan(itemSpan, false, itemError);
             Telemetry_RecordSubmitDuration(Telemetry_GetMonotonicTimeSeconds() - submitStartedAt,
                                            reasonLabel,
-                                           "send_failed");
+                                           "send_failed",
+                                           originLabel,
+                                           needsStore,
+                                           itemContext);
             BlockPool_Item_Unlock(item);
             BlockPool_DestroyItem(item);
             continue;
@@ -916,7 +1001,10 @@ Submission_SubmitThread(Thread_t *p_pThread)
             Telemetry_EndSpan(itemSpan, itemSuccess, itemError);
             Telemetry_RecordSubmitDuration(Telemetry_GetMonotonicTimeSeconds() - submitStartedAt,
                                            reasonLabel,
-                                           submitOutcome);
+                                           submitOutcome,
+                                           originLabel,
+                                           needsStore,
+                                           itemContext);
             BlockPool_Item_Unlock(item);
             continue;
         }
@@ -925,7 +1013,10 @@ Submission_SubmitThread(Thread_t *p_pThread)
             Telemetry_EndSpan(itemSpan, itemSuccess, itemError);
             Telemetry_RecordSubmitDuration(Telemetry_GetMonotonicTimeSeconds() - submitStartedAt,
                                            reasonLabel,
-                                           submitOutcome);
+                                           submitOutcome,
+                                           originLabel,
+                                           needsStore,
+                                           itemContext);
             BlockPool_Item_Unlock(item);
             BlockPool_DestroyItem(item);
             continue;

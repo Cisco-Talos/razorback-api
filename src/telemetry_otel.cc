@@ -20,6 +20,7 @@
 
 #include "telemetry.h"
 #include "api_internal.h"
+#include "block_pool_private.h"
 #include "connected_entity_private.h"
 #include "submission_private.h"
 
@@ -77,6 +78,7 @@
 #include <opentelemetry/trace/tracer.h>
 
 #include <cstdlib>
+#include <cctype>
 #include <array>
 #include <chrono>
 #include <cstdio>
@@ -364,11 +366,6 @@ struct RazorbackStandardMetrics
   TelemetryMetric_t *dispatcherUsable = nullptr;
 };
 
-struct ContextQueueDepth
-{
-  int64_t value = 0;
-};
-
 TelemetryState &
 GetTelemetryState() noexcept
 {
@@ -405,88 +402,219 @@ MetricLabelOrNone(const char *value) noexcept
   return (value != nullptr && value[0] != '\0') ? value : "none";
 }
 
-int
-CollectInspectionWorkQueueDepth(struct RazorbackContext *context, void *userData)
+static void
+LowercaseString(char *value) noexcept
 {
-  auto *depth = static_cast<ContextQueueDepth *>(userData);
+  if (value == nullptr)
+    return;
 
-  if (context == nullptr || depth == nullptr || context->inspector.pendingMessages == nullptr)
+  for (; *value != '\0'; ++value)
+    *value = static_cast<char>(std::tolower(static_cast<unsigned char>(*value)));
+}
+
+static const char *
+MetricBoolLabel(bool value) noexcept
+{
+  return value ? "true" : "false";
+}
+
+static const char *
+MetricStateFromContext(const struct RazorbackContext *context,
+                       const char *stateOverride) noexcept
+{
+  if (stateOverride != nullptr && stateOverride[0] != '\0')
+    return stateOverride;
+
+  if (context == nullptr)
+    return "none";
+
+  if (atomic_load(&context->paused))
+    return "paused";
+
+  if (context->regOk)
+    return "running";
+
+  return "unregistered";
+}
+
+static size_t
+AppendContextMetricAttributes(TelemetryMetricAttribute_t *attributes,
+                              size_t attributeCount,
+                              const struct RazorbackContext *context,
+                              bool includeState,
+                              const char *stateOverride,
+                              char **nuggetTypeNameStorage)
+{
+  if (nuggetTypeNameStorage != nullptr)
+    *nuggetTypeNameStorage = nullptr;
+
+  if (context != nullptr)
+  {
+    const char *nuggetTypeName = nullptr;
+
+    if (nuggetTypeNameStorage != nullptr)
+    {
+      *nuggetTypeNameStorage =
+          UUID_Get_NameByUUID(const_cast<unsigned char *>(context->uuidNuggetType),
+                              UUID_TYPE_NUGGET_TYPE);
+      if (*nuggetTypeNameStorage != nullptr)
+        LowercaseString(*nuggetTypeNameStorage);
+      nuggetTypeName = *nuggetTypeNameStorage;
+    }
+
+    attributes[attributeCount++] = {"rzb.nugget.name", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                    MetricLabelOrUnknown(context->sNuggetName), 0, 0.0, false};
+    attributes[attributeCount++] = {"rzb.nugget.type", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                    MetricLabelOrUnknown(nuggetTypeName), 0, 0.0, false};
+    attributes[attributeCount++] = {"rzb.locality", TELEMETRY_METRIC_ATTRIBUTE_INT,
+                                    nullptr, context->locality, 0.0, false};
+    attributes[attributeCount++] = {"rzb.dev_mode", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                    MetricBoolLabel((context->iFlags & CONTEXT_FLAG_STAND_ALONE) ==
+                                                    CONTEXT_FLAG_STAND_ALONE),
+                                    0, 0.0, false};
+  }
+
+  if (includeState)
+  {
+    attributes[attributeCount++] = {"state", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                    MetricStateFromContext(context, stateOverride), 0, 0.0,
+                                    false};
+  }
+
+  return attributeCount;
+}
+
+static void
+ObserveInt64ForContext(TelemetryObservation_t *observation,
+                       int64_t value,
+                       const struct RazorbackContext *context,
+                       bool includeState,
+                       const char *stateOverride)
+{
+  TelemetryMetricAttribute_t attributes[5];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
+
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context,
+                                                 includeState, stateOverride,
+                                                 &nuggetTypeName);
+
+  Telemetry_ObservableObserveInt64(observation, value, attributes, attributeCount);
+  free(nuggetTypeName);
+}
+
+int
+ObserveInspectionWorkQueueDepthForContext(struct RazorbackContext *context, void *userData)
+{
+  auto *observation = static_cast<TelemetryObservation_t *>(userData);
+  int64_t depth = 0;
+
+  if (context == nullptr || observation == nullptr)
     return LIST_EACH_OK;
 
-  depth->value += static_cast<int64_t>(List_Length(context->inspector.pendingMessages));
+  if (context->inspector.pendingMessages != nullptr)
+    depth = static_cast<int64_t>(List_Length(context->inspector.pendingMessages));
+  ObserveInt64ForContext(observation, depth, context, true, nullptr);
   return LIST_EACH_OK;
 }
 
 int
-CollectInspectionResultQueueDepth(struct RazorbackContext *context, void *userData)
+ObserveInspectionResultQueueDepthForContext(struct RazorbackContext *context, void *userData)
 {
-  auto *depth = static_cast<ContextQueueDepth *>(userData);
+  auto *observation = static_cast<TelemetryObservation_t *>(userData);
+  int64_t depth = 0;
 
-  if (context == nullptr || depth == nullptr || context->inspector.completedMessages == nullptr)
+  if (context == nullptr || observation == nullptr)
     return LIST_EACH_OK;
 
-  depth->value += static_cast<int64_t>(List_Length(context->inspector.completedMessages));
+  if (context->inspector.completedMessages != nullptr)
+    depth = static_cast<int64_t>(List_Length(context->inspector.completedMessages));
+  ObserveInt64ForContext(observation, depth, context, true, nullptr);
+  return LIST_EACH_OK;
+}
+
+int
+ObserveSubmitQueueDepthForContext(struct RazorbackContext *context, void *userData)
+{
+  auto *observation = static_cast<TelemetryObservation_t *>(userData);
+
+  if (context == nullptr || observation == nullptr)
+    return LIST_EACH_OK;
+
+  ObserveInt64ForContext(
+      observation,
+      static_cast<int64_t>(Submission_GetContextSubmitQueueDepth(context)),
+      context,
+      true,
+      nullptr);
+  return LIST_EACH_OK;
+}
+
+int
+ObserveBlockPoolSizeForContext(struct RazorbackContext *context, void *userData)
+{
+  auto *observation = static_cast<TelemetryObservation_t *>(userData);
+
+  if (context == nullptr || observation == nullptr)
+    return LIST_EACH_OK;
+
+  ObserveInt64ForContext(
+      observation,
+      static_cast<int64_t>(BlockPool_GetContextItemCount(context)),
+      context,
+      true,
+      nullptr);
   return LIST_EACH_OK;
 }
 
 void
 ObserveInspectionWorkQueueDepth(TelemetryObservation_t *observation, void *userData)
 {
-  ContextQueueDepth depth;
-
   (void)userData;
-  (void)Razorback_ForEach_Context(CollectInspectionWorkQueueDepth, &depth);
-  Telemetry_ObservableObserveInt64(observation, depth.value, nullptr, 0);
+  (void)Razorback_ForEach_Context(ObserveInspectionWorkQueueDepthForContext, observation);
 }
 
 void
 ObserveInspectionResultQueueDepth(TelemetryObservation_t *observation, void *userData)
 {
-  ContextQueueDepth depth;
-
   (void)userData;
-  (void)Razorback_ForEach_Context(CollectInspectionResultQueueDepth, &depth);
-  Telemetry_ObservableObserveInt64(observation, depth.value, nullptr, 0);
+  (void)Razorback_ForEach_Context(ObserveInspectionResultQueueDepthForContext, observation);
 }
 
 void
 ObserveSubmitQueueDepth(TelemetryObservation_t *observation, void *userData)
 {
   (void)userData;
-  Telemetry_ObservableObserveInt64(observation,
-                                   static_cast<int64_t>(Submission_GetSubmitQueueDepth()),
-                                   nullptr,
-                                   0);
+  (void)Razorback_ForEach_Context(ObserveSubmitQueueDepthForContext, observation);
 }
 
 void
 ObserveBlockPoolSize(TelemetryObservation_t *observation, void *userData)
 {
   (void)userData;
-  Telemetry_ObservableObserveInt64(observation,
-                                   static_cast<int64_t>(BlockPool_GetItemCount()),
-                                   nullptr,
-                                   0);
+  (void)Razorback_ForEach_Context(ObserveBlockPoolSizeForContext, observation);
 }
 
 void
 ObserveDispatcherAvailable(TelemetryObservation_t *observation, void *userData)
 {
   (void)userData;
-  Telemetry_ObservableObserveInt64(observation,
-                                   static_cast<int64_t>(ConnectedEntityList_CountDispatchers()),
-                                   nullptr,
-                                   0);
+  ObserveInt64ForContext(observation,
+                         static_cast<int64_t>(ConnectedEntityList_CountDispatchers()),
+                         nullptr,
+                         true,
+                         nullptr);
 }
 
 void
 ObserveDispatcherUsable(TelemetryObservation_t *observation, void *userData)
 {
   (void)userData;
-  Telemetry_ObservableObserveInt64(observation,
-                                   static_cast<int64_t>(ConnectedEntityList_CountUsableDispatchers()),
-                                   nullptr,
-                                   0);
+  ObserveInt64ForContext(observation,
+                         static_cast<int64_t>(ConnectedEntityList_CountUsableDispatchers()),
+                         nullptr,
+                         true,
+                         nullptr);
 }
 
 void
@@ -1388,48 +1516,6 @@ Telemetry_Shutdown(void)
   state.initialized = false;
 }
 
-static void
-RecordSingleStringCounterMetric(TelemetryMetric_t *metric,
-                                const char *attributeName,
-                                const char *attributeValue)
-{
-  TelemetryMetricAttribute_t attributes[1] = {
-      {attributeName, TELEMETRY_METRIC_ATTRIBUTE_STRING,
-       MetricLabelOrUnknown(attributeValue), 0, 0.0, false},
-  };
-
-  Telemetry_CounterAddUInt64(metric, 1, attributes, 1);
-}
-
-static void
-RecordMessageTypeCounterMetric(TelemetryMetric_t *metric,
-                               uint32_t messageType,
-                               const char *attributeName,
-                               const char *attributeValue)
-{
-  char typeBuffer[32];
-  TelemetryMetricAttribute_t attributes[2];
-
-  std::snprintf(typeBuffer, sizeof(typeBuffer), "%u", messageType);
-  attributes[0] = {"message_type", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-                   typeBuffer, 0, 0.0, false};
-  attributes[1] = {attributeName, TELEMETRY_METRIC_ATTRIBUTE_STRING,
-                   MetricLabelOrUnknown(attributeValue), 0, 0.0, false};
-  Telemetry_CounterAddUInt64(metric, 1, attributes, 2);
-}
-
-static void
-RecordMessageTypeOnlyCounterMetric(TelemetryMetric_t *metric, uint32_t messageType)
-{
-  char typeBuffer[32];
-  TelemetryMetricAttribute_t attributes[1];
-
-  std::snprintf(typeBuffer, sizeof(typeBuffer), "%u", messageType);
-  attributes[0] = {"message_type", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-                   typeBuffer, 0, 0.0, false};
-  Telemetry_CounterAddUInt64(metric, 1, attributes, 1);
-}
-
 extern "C" double
 Telemetry_GetMonotonicTimeSeconds(void)
 {
@@ -1437,195 +1523,406 @@ Telemetry_GetMonotonicTimeSeconds(void)
 }
 
 extern "C" void
-Telemetry_RecordDispatcherWait(double durationSeconds, const char *outcome)
+Telemetry_RecordDispatcherWait(double durationSeconds,
+                               const char *outcome,
+                               const char *phase,
+                               const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
-  TelemetryMetricAttribute_t attributes[1] = {
-      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-       MetricLabelOrUnknown(outcome), 0, 0.0, false},
-  };
+  TelemetryMetricAttribute_t attributes[6];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
+
+  attributes[attributeCount++] = {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(outcome), 0, 0.0, false};
+  attributes[attributeCount++] = {"phase", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(phase), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
 
   Telemetry_HistogramRecordDouble(metrics.dispatcherWait,
                                   (durationSeconds >= 0.0) ? durationSeconds : 0.0,
                                   attributes,
-                                  1);
+                                  attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordDispatcherSelection(const char *path)
+Telemetry_RecordDispatcherSelection(const char *path,
+                                    const char *selectedLocality,
+                                    const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[6];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
 
-  RecordSingleStringCounterMetric(metrics.dispatcherSelection, "path", path);
+  attributes[attributeCount++] = {"path", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(path), 0, 0.0, false};
+  attributes[attributeCount++] = {"selected_locality", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(selectedLocality), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
+  Telemetry_CounterAddUInt64(metrics.dispatcherSelection, 1, attributes, attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordOutboundMessage(uint32_t messageType, const char *outcome)
+Telemetry_RecordOutboundMessage(uint32_t messageType,
+                                const char *outcome,
+                                const char *messageFamily,
+                                const char *destination,
+                                const char *exchangeKind,
+                                const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[9];
+  char typeBuffer[32];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
 
-  RecordMessageTypeCounterMetric(metrics.outboundMessages, messageType, "outcome", outcome);
+  std::snprintf(typeBuffer, sizeof(typeBuffer), "%u", messageType);
+  attributes[attributeCount++] = {"message_type", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  typeBuffer, 0, 0.0, false};
+  attributes[attributeCount++] = {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(outcome), 0, 0.0, false};
+  attributes[attributeCount++] = {"message_family", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(messageFamily), 0, 0.0, false};
+  attributes[attributeCount++] = {"destination", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(destination), 0, 0.0, false};
+  attributes[attributeCount++] = {"exchange_kind", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(exchangeKind), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
+  Telemetry_CounterAddUInt64(metrics.outboundMessages, 1, attributes, attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordOutboundPublishRetry(uint32_t messageType)
+Telemetry_RecordOutboundPublishRetry(uint32_t messageType,
+                                     const char *messageFamily,
+                                     const char *destination,
+                                     const char *exchangeKind,
+                                     const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[8];
+  char typeBuffer[32];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
 
-  RecordMessageTypeOnlyCounterMetric(metrics.outboundPublishRetry, messageType);
+  std::snprintf(typeBuffer, sizeof(typeBuffer), "%u", messageType);
+  attributes[attributeCount++] = {"message_type", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  typeBuffer, 0, 0.0, false};
+  attributes[attributeCount++] = {"message_family", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(messageFamily), 0, 0.0, false};
+  attributes[attributeCount++] = {"destination", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(destination), 0, 0.0, false};
+  attributes[attributeCount++] = {"exchange_kind", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(exchangeKind), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
+  Telemetry_CounterAddUInt64(metrics.outboundPublishRetry, 1, attributes, attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordOutboundReconnect(void)
+Telemetry_RecordOutboundReconnect(const char *cause,
+                                  const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[6];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
 
-  Telemetry_CounterAddUInt64(metrics.outboundReconnect, 1, nullptr, 0);
+  attributes[attributeCount++] = {"cause", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(cause), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
+  Telemetry_CounterAddUInt64(metrics.outboundReconnect, 1, attributes, attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_AddInspectionInFlight(int64_t delta)
+Telemetry_AddInspectionInFlight(int64_t delta,
+                                bool needsFile,
+                                const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[6];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
 
-  Telemetry_UpDownCounterAddInt64(metrics.inspectionInFlight, delta, nullptr, 0);
+  attributes[attributeCount++] = {"needs_file", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricBoolLabel(needsFile), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
+  Telemetry_UpDownCounterAddInt64(metrics.inspectionInFlight, delta, attributes,
+                                  attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordInspectionDuration(double durationSeconds, const char *reason)
+Telemetry_RecordInspectionDuration(double durationSeconds,
+                                   const char *reason,
+                                   bool needsFile,
+                                   bool hasAlerts,
+                                   const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
-  TelemetryMetricAttribute_t attributes[1] = {
-      {"reason", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-       MetricLabelOrUnknown(reason), 0, 0.0, false},
-  };
+  TelemetryMetricAttribute_t attributes[7];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
+
+  attributes[attributeCount++] = {"reason", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(reason), 0, 0.0, false};
+  attributes[attributeCount++] = {"needs_file", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricBoolLabel(needsFile), 0, 0.0, false};
+  attributes[attributeCount++] = {"has_alerts", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricBoolLabel(hasAlerts), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
 
   Telemetry_HistogramRecordDouble(metrics.inspectionDuration,
                                   (durationSeconds >= 0.0) ? durationSeconds : 0.0,
                                   attributes,
-                                  1);
+                                  attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordInspectionResult(const char *reason)
+Telemetry_RecordInspectionResult(const char *reason,
+                                 bool hasAlerts,
+                                 const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[6];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
 
-  RecordSingleStringCounterMetric(metrics.inspectionResults, "reason", reason);
+  attributes[attributeCount++] = {"reason", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(reason), 0, 0.0, false};
+  attributes[attributeCount++] = {"has_alerts", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricBoolLabel(hasAlerts), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
+  Telemetry_CounterAddUInt64(metrics.inspectionResults, 1, attributes, attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordInspectionError(const char *phase)
+Telemetry_RecordInspectionError(const char *phase,
+                                const char *errorClass,
+                                const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[6];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
 
-  RecordSingleStringCounterMetric(metrics.inspectionErrors, "phase", phase);
+  attributes[attributeCount++] = {"phase", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(phase), 0, 0.0, false};
+  attributes[attributeCount++] = {"error_class", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(errorClass), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
+  Telemetry_CounterAddUInt64(metrics.inspectionErrors, 1, attributes, attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordShutdownRequeuedInspection(void)
+Telemetry_RecordShutdownRequeuedInspection(const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[5];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
 
-  Telemetry_CounterAddUInt64(metrics.shutdownRequeuedInspections, 1, nullptr, 0);
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, true,
+                                                 "stopping", &nuggetTypeName);
+  Telemetry_CounterAddUInt64(metrics.shutdownRequeuedInspections, 1, attributes,
+                             attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordBlockSubmitDecision(const char *decision)
+Telemetry_RecordBlockSubmitDecision(const char *decision,
+                                    const char *origin,
+                                    const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[6];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
 
-  RecordSingleStringCounterMetric(metrics.blockSubmitDecisions, "decision", decision);
+  attributes[attributeCount++] = {"decision", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(decision), 0, 0.0, false};
+  attributes[attributeCount++] = {"origin", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(origin), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
+  Telemetry_CounterAddUInt64(metrics.blockSubmitDecisions, 1, attributes, attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordCacheResponse(const char *result)
+Telemetry_RecordCacheResponse(const char *result,
+                              const char *canHaz,
+                              const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[6];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
 
-  RecordSingleStringCounterMetric(metrics.cacheResponses, "result", result);
+  attributes[attributeCount++] = {"result", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(result), 0, 0.0, false};
+  attributes[attributeCount++] = {"can_haz", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(canHaz), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
+  Telemetry_CounterAddUInt64(metrics.cacheResponses, 1, attributes, attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordCacheLookupWait(double durationSeconds)
+Telemetry_RecordCacheLookupWait(double durationSeconds,
+                                const char *result,
+                                const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[5];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
+
+  attributes[attributeCount++] = {"result", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(result), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
 
   Telemetry_HistogramRecordDouble(metrics.cacheLookupWait,
                                   (durationSeconds >= 0.0) ? durationSeconds : 0.0,
-                                  nullptr,
-                                  0);
+                                  attributes,
+                                  attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
 Telemetry_RecordSubmitDuration(double durationSeconds,
                                const char *reason,
-                               const char *outcome)
+                               const char *outcome,
+                               const char *origin,
+                               bool needsStore,
+                               const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
-  TelemetryMetricAttribute_t attributes[2] = {
-      {"reason", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-       MetricLabelOrUnknown(reason), 0, 0.0, false},
-      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-       MetricLabelOrUnknown(outcome), 0, 0.0, false},
-  };
+  TelemetryMetricAttribute_t attributes[8];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
+
+  attributes[attributeCount++] = {"reason", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(reason), 0, 0.0, false};
+  attributes[attributeCount++] = {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(outcome), 0, 0.0, false};
+  attributes[attributeCount++] = {"origin", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(origin), 0, 0.0, false};
+  attributes[attributeCount++] = {"needs_store", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricBoolLabel(needsStore), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
 
   Telemetry_HistogramRecordDouble(metrics.submitDuration,
                                   (durationSeconds >= 0.0) ? durationSeconds : 0.0,
                                   attributes,
-                                  2);
+                                  attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
 Telemetry_RecordTransferFetchDuration(double durationSeconds,
                                       const char *outcome,
-                                      const char *protocol)
+                                      const char *protocol,
+                                      const char *dispatcherLocality,
+                                      const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
-  TelemetryMetricAttribute_t attributes[2] = {
-      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-       MetricLabelOrUnknown(outcome), 0, 0.0, false},
-      {"protocol", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-       MetricLabelOrNone(protocol), 0, 0.0, false},
-  };
+  TelemetryMetricAttribute_t attributes[7];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
+
+  attributes[attributeCount++] = {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(outcome), 0, 0.0, false};
+  attributes[attributeCount++] = {"protocol", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrNone(protocol), 0, 0.0, false};
+  attributes[attributeCount++] = {"dispatcher_locality",
+                                  TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(dispatcherLocality), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
 
   Telemetry_HistogramRecordDouble(metrics.transferFetchDuration,
                                   (durationSeconds >= 0.0) ? durationSeconds : 0.0,
                                   attributes,
-                                  2);
+                                  attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
 Telemetry_RecordTransferStoreDuration(double durationSeconds,
                                       const char *outcome,
-                                      const char *protocol)
+                                      const char *protocol,
+                                      const char *dispatcherLocality,
+                                      const char *streamKind,
+                                      const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
-  TelemetryMetricAttribute_t attributes[2] = {
-      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-       MetricLabelOrUnknown(outcome), 0, 0.0, false},
-      {"protocol", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-       MetricLabelOrNone(protocol), 0, 0.0, false},
-  };
+  TelemetryMetricAttribute_t attributes[8];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
+
+  attributes[attributeCount++] = {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(outcome), 0, 0.0, false};
+  attributes[attributeCount++] = {"protocol", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrNone(protocol), 0, 0.0, false};
+  attributes[attributeCount++] = {"dispatcher_locality",
+                                  TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(dispatcherLocality), 0, 0.0, false};
+  attributes[attributeCount++] = {"stream_kind", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(streamKind), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
 
   Telemetry_HistogramRecordDouble(metrics.transferStoreDuration,
                                   (durationSeconds >= 0.0) ? durationSeconds : 0.0,
                                   attributes,
-                                  2);
+                                  attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" void
-Telemetry_RecordTransferFailure(const char *operation, const char *protocol)
+Telemetry_RecordTransferFailure(const char *operation, const char *protocol,
+                                const char *errorClass,
+                                const char *dispatcherLocality,
+                                const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
-  TelemetryMetricAttribute_t attributes[2] = {
-      {"operation", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-       MetricLabelOrUnknown(operation), 0, 0.0, false},
-      {"protocol", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-       MetricLabelOrNone(protocol), 0, 0.0, false},
-  };
+  TelemetryMetricAttribute_t attributes[8];
+  char *nuggetTypeName = nullptr;
+  size_t attributeCount = 0;
 
-  Telemetry_CounterAddUInt64(metrics.transferFailures, 1, attributes, 2);
+  attributes[attributeCount++] = {"operation", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(operation), 0, 0.0, false};
+  attributes[attributeCount++] = {"protocol", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrNone(protocol), 0, 0.0, false};
+  attributes[attributeCount++] = {"error_class", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(errorClass), 0, 0.0, false};
+  attributes[attributeCount++] = {"dispatcher_locality",
+                                  TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(dispatcherLocality), 0, 0.0, false};
+  attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
+                                                 nullptr, &nuggetTypeName);
+  Telemetry_CounterAddUInt64(metrics.transferFailures, 1, attributes, attributeCount);
+  free(nuggetTypeName);
 }
 
 extern "C" TelemetrySpan_t *
