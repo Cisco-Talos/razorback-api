@@ -503,96 +503,122 @@ ObserveInt64ForContext(TelemetryObservation_t *observation,
   free(nuggetTypeName);
 }
 
+struct PerContextObservationState
+{
+  TelemetryObservation_t *observation;
+  bool observed;
+};
+
 int
 ObserveInspectionWorkQueueDepthForContext(struct RazorbackContext *context, void *userData)
 {
-  auto *observation = static_cast<TelemetryObservation_t *>(userData);
+  auto *state = static_cast<PerContextObservationState *>(userData);
   int64_t depth = 0;
 
-  if (context == nullptr || observation == nullptr)
+  if (context == nullptr || state == nullptr || state->observation == nullptr)
     return LIST_EACH_OK;
 
   if (context->inspector.pendingMessages != nullptr)
     depth = static_cast<int64_t>(List_Length(context->inspector.pendingMessages));
-  ObserveInt64ForContext(observation, depth, context, true, nullptr);
+  ObserveInt64ForContext(state->observation, depth, context, true, nullptr);
+  state->observed = true;
   return LIST_EACH_OK;
 }
 
 int
 ObserveInspectionResultQueueDepthForContext(struct RazorbackContext *context, void *userData)
 {
-  auto *observation = static_cast<TelemetryObservation_t *>(userData);
+  auto *state = static_cast<PerContextObservationState *>(userData);
   int64_t depth = 0;
 
-  if (context == nullptr || observation == nullptr)
+  if (context == nullptr || state == nullptr || state->observation == nullptr)
     return LIST_EACH_OK;
 
   if (context->inspector.completedMessages != nullptr)
     depth = static_cast<int64_t>(List_Length(context->inspector.completedMessages));
-  ObserveInt64ForContext(observation, depth, context, true, nullptr);
+  ObserveInt64ForContext(state->observation, depth, context, true, nullptr);
+  state->observed = true;
   return LIST_EACH_OK;
 }
 
 int
 ObserveSubmitQueueDepthForContext(struct RazorbackContext *context, void *userData)
 {
-  auto *observation = static_cast<TelemetryObservation_t *>(userData);
+  auto *state = static_cast<PerContextObservationState *>(userData);
 
-  if (context == nullptr || observation == nullptr)
+  if (context == nullptr || state == nullptr || state->observation == nullptr)
     return LIST_EACH_OK;
 
   ObserveInt64ForContext(
-      observation,
+      state->observation,
       static_cast<int64_t>(Submission_GetContextSubmitQueueDepth(context)),
       context,
       true,
       nullptr);
+  state->observed = true;
   return LIST_EACH_OK;
 }
 
 int
 ObserveBlockPoolSizeForContext(struct RazorbackContext *context, void *userData)
 {
-  auto *observation = static_cast<TelemetryObservation_t *>(userData);
+  auto *state = static_cast<PerContextObservationState *>(userData);
 
-  if (context == nullptr || observation == nullptr)
+  if (context == nullptr || state == nullptr || state->observation == nullptr)
     return LIST_EACH_OK;
 
   ObserveInt64ForContext(
-      observation,
+      state->observation,
       static_cast<int64_t>(BlockPool_GetContextItemCount(context)),
       context,
       true,
       nullptr);
+  state->observed = true;
   return LIST_EACH_OK;
 }
 
 void
 ObserveInspectionWorkQueueDepth(TelemetryObservation_t *observation, void *userData)
 {
+  PerContextObservationState state = {observation, false};
+
   (void)userData;
-  (void)Razorback_ForEach_Context(ObserveInspectionWorkQueueDepthForContext, observation);
+  (void)Razorback_ForEach_Context(ObserveInspectionWorkQueueDepthForContext, &state);
+  if (!state.observed && observation != nullptr)
+    ObserveInt64ForContext(observation, 0, nullptr, true, nullptr);
 }
 
 void
 ObserveInspectionResultQueueDepth(TelemetryObservation_t *observation, void *userData)
 {
+  PerContextObservationState state = {observation, false};
+
   (void)userData;
-  (void)Razorback_ForEach_Context(ObserveInspectionResultQueueDepthForContext, observation);
+  (void)Razorback_ForEach_Context(ObserveInspectionResultQueueDepthForContext, &state);
+  if (!state.observed && observation != nullptr)
+    ObserveInt64ForContext(observation, 0, nullptr, true, nullptr);
 }
 
 void
 ObserveSubmitQueueDepth(TelemetryObservation_t *observation, void *userData)
 {
+  PerContextObservationState state = {observation, false};
+
   (void)userData;
-  (void)Razorback_ForEach_Context(ObserveSubmitQueueDepthForContext, observation);
+  (void)Razorback_ForEach_Context(ObserveSubmitQueueDepthForContext, &state);
+  if (!state.observed && observation != nullptr)
+    ObserveInt64ForContext(observation, 0, nullptr, true, nullptr);
 }
 
 void
 ObserveBlockPoolSize(TelemetryObservation_t *observation, void *userData)
 {
+  PerContextObservationState state = {observation, false};
+
   (void)userData;
-  (void)Razorback_ForEach_Context(ObserveBlockPoolSizeForContext, observation);
+  (void)Razorback_ForEach_Context(ObserveBlockPoolSizeForContext, &state);
+  if (!state.observed && observation != nullptr)
+    ObserveInt64ForContext(observation, 0, nullptr, true, nullptr);
 }
 
 void
