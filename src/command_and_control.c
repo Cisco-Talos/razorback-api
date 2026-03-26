@@ -53,7 +53,8 @@ static struct Queue *sg_readQueue;
 
 static void CommandAndControl_Thread (Thread_t *p_pThread);
 static int CommandAndControl_DispatchCommand (struct RazorbackContext *, void *);
-static bool CommandAndControl_Register (struct RazorbackContext *);
+static bool CommandAndControl_Register (struct RazorbackContext *,
+                                        const char *);
 static int CommandAndControl_SendHello (struct RazorbackContext *p_pContext, void *);
 static void CommandAndControl_HelloTimer (void * val);
 SO_PUBLIC bool CommandAndControl_ArmHelloTimer (void);
@@ -160,7 +161,7 @@ CommandAndControl_Start (struct RazorbackContext *p_pContext) {
     }
 
     if (!isDispatcher) {
-        return CommandAndControl_Register(p_pContext);
+        return CommandAndControl_Register(p_pContext, "startup");
     }
 
     return true;
@@ -498,7 +499,8 @@ CommandAndControl_SendBye (struct RazorbackContext *context) {
 }
 
 static bool
-CommandAndControl_Register (struct RazorbackContext *p_pContext) {
+CommandAndControl_Register (struct RazorbackContext *p_pContext,
+                            const char *phase) {
     struct Message *regReq;
     struct ConnectedEntity *dispatcher = NULL;
     double waitStartedAt;
@@ -518,7 +520,9 @@ CommandAndControl_Register (struct RazorbackContext *p_pContext) {
 #endif
     }
     Telemetry_RecordDispatcherWait(Telemetry_GetMonotonicTimeSeconds() - waitStartedAt,
-                                   "available");
+                                   "available",
+                                   phase,
+                                   p_pContext);
 
     if ((regReq = MessageRegistrationRequest_Initialize(
             dispatcher->uuidNuggetId,
@@ -915,7 +919,7 @@ ReregistrationThread(Thread_t *thread) {
 
     context->regOk = false;
 
-    if (!CommandAndControl_Register(context)) {
+    if (!CommandAndControl_Register(context, "reregister")) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Failed to re-register context, destroying it", __func__);
         Razorback_Destroy_Context(context);
         return;

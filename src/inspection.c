@@ -395,7 +395,7 @@ Inspection_Complete_Message(struct RazorbackContext *p_pContext,
     if (!List_Push(p_pContext->inspector.completedMessages, message)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to queue completed inspection message",
                 __func__);
-        Telemetry_RecordInspectionError("result_ack_queue");
+        Telemetry_RecordInspectionError("result_ack_queue", "queue_push_failed", p_pContext);
         Inspection_Request_Emergency_Shutdown(
             p_pContext,
             "failed to queue completed inspection message for receiver-thread ack");
@@ -415,7 +415,7 @@ Inspection_Drain_Completed(struct RazorbackContext *p_pContext)
         if (!Queue_Ack_Message(p_pContext->inspector.inspectionQueue, message)) {
             rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to ack completed inspection message",
                     __func__);
-            Telemetry_RecordInspectionError("result_ack");
+            Telemetry_RecordInspectionError("result_ack", "ack_failed", p_pContext);
         }
         Inspection_Destroy_Message(message);
     }
@@ -458,7 +458,7 @@ Inspection_Receiver_Thread(Thread_t *p_pThread)
 
         if (Inspection_Is_Shutdown_Started(l_pContext)) {
             Queue_Reject_Message(l_pQueue, message, true);
-            Telemetry_RecordShutdownRequeuedInspection();
+            Telemetry_RecordShutdownRequeuedInspection(l_pContext);
             Telemetry_EndSpan(receiveSpan, false, "inspection shutdown in progress");
             Inspection_Destroy_Message(message);
             Thread_Sleep(INSPECTION_SHUTDOWN_REJECT_SLEEP_MS);
@@ -473,7 +473,7 @@ Inspection_Receiver_Thread(Thread_t *p_pThread)
 
         if (Thread_IsStopped(p_pThread) || Inspection_Is_Shutdown_Started(l_pContext)) {
             Queue_Reject_Message(l_pQueue, message, true);
-            Telemetry_RecordShutdownRequeuedInspection();
+            Telemetry_RecordShutdownRequeuedInspection(l_pContext);
             Telemetry_EndSpan(receiveSpan, false,
                               Thread_IsStopped(p_pThread)
                                   ? "inspection receiver stopping"
@@ -526,6 +526,8 @@ Inspection_Process_Message(Thread_t *p_pThread,
     const char *runError = NULL;
     const char *resultReason = "error";
     const char *errorPhase = NULL;
+    const char *errorClass = NULL;
+    bool hasAlerts = false;
     double inspectionStartedAt = Telemetry_GetMonotonicTimeSeconds();
 
     (void)p_pThread;
@@ -536,6 +538,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
                 __func__, message->type);
         processError = "unexpected inspection message type";
         errorPhase = "validation";
+        errorClass = "invalid_message";
         goto cleanup;
     }
 
@@ -545,6 +548,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
                 __func__);
         processError = "inspection message missing payload";
         errorPhase = "validation";
+        errorClass = "invalid_message";
         goto cleanup;
     }
     if (l_misMessage->pBlock == NULL) {
@@ -552,6 +556,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
                 __func__);
         processError = "inspection message missing block";
         errorPhase = "validation";
+        errorClass = "invalid_message";
         goto cleanup;
     }
     if (l_misMessage->pBlock->pId == NULL || l_misMessage->pBlock->pId->pHash == NULL) {
@@ -559,6 +564,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
                 __func__);
         processError = "inspection message missing block hash";
         errorPhase = "validation";
+        errorClass = "invalid_message";
         goto cleanup;
     }
 
@@ -592,6 +598,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to transfer block giving up", __func__);
         processError = "failed to fetch block from dispatcher";
         errorPhase = "transfer";
+        errorClass = "transfer_failed";
         goto cleanup;
     }
     destroyOriginalBlock = true;
@@ -600,18 +607,21 @@ Inspection_Process_Message(Thread_t *p_pThread,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: No data block", __func__);
         processError = "inspection block has no local data";
         errorPhase = "transfer";
+        errorClass = "missing_block_data";
         goto cleanup;
     }
     if ((l_pEventId = EventId_Clone(l_misMessage->eventId)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed create new event id", __func__);
         processError = "failed to clone event id";
         errorPhase = "inspection";
+        errorClass = "clone_failed";
         goto cleanup;
     }
     if ((l_pClonedBlock = Block_Clone(l_pBlock)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed create new block", __func__);
         processError = "failed to clone inspection block";
         errorPhase = "inspection";
+        errorClass = "clone_failed";
         goto cleanup;
     }
 
@@ -647,8 +657,13 @@ Inspection_Process_Message(Thread_t *p_pThread,
     Telemetry_EndSpan(runSpan, runSuccess, runError);
     runSpan = NULL;
     resultReason = Inspection_Result_Label(l_iResult);
+    hasAlerts = (l_iResult == JUDGMENT_REASON_ALERT);
     if (l_iResult == JUDGMENT_REASON_ERROR || !runSuccess)
+    {
         errorPhase = "inspection";
+        errorClass = (l_iResult == JUDGMENT_REASON_ERROR) ? "judgment_error"
+                                                          : "invalid_judgment";
+    }
 
     if ((l_iResult != JUDGMENT_REASON_DONE) &&
         (l_iResult != JUDGMENT_REASON_ERROR) &&
@@ -656,6 +671,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Bad return from inspection", __func__);
         processError = "inspector returned invalid judgment";
         errorPhase = "inspection";
+        errorClass = "invalid_judgment";
         goto cleanup;
     }
 
@@ -663,6 +679,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
     if (judgment == NULL) {
         processError = "failed to create judgment";
         errorPhase = "submission";
+        errorClass = "judgment_create_failed";
         goto cleanup;
     }
 
@@ -677,6 +694,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);
         processError = "failed to create judgment submission";
         errorPhase = "submission";
+        errorClass = "message_create_failed";
         judgment = NULL;
         goto cleanup;
     }
@@ -686,6 +704,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to send judgment submission", __func__);
         processError = "failed to send judgment submission";
         errorPhase = "submission";
+        errorClass = "send_failed";
         goto cleanup;
     }
 
@@ -714,10 +733,13 @@ cleanup:
     if (runSpan != NULL)
         Telemetry_EndSpan(runSpan, false, (runError != NULL) ? runError : processError);
     if (errorPhase != NULL)
-        Telemetry_RecordInspectionError(errorPhase);
-    Telemetry_RecordInspectionResult(resultReason);
+        Telemetry_RecordInspectionError(errorPhase, errorClass, p_pContext);
+    Telemetry_RecordInspectionResult(resultReason, hasAlerts, p_pContext);
     Telemetry_RecordInspectionDuration(Telemetry_GetMonotonicTimeSeconds() - inspectionStartedAt,
-                                       resultReason);
+                                       resultReason,
+                                       true,
+                                       hasAlerts,
+                                       p_pContext);
     if (inspectSpan != NULL)
         Telemetry_EndSpan(inspectSpan, processSuccess, processError);
 }
@@ -766,13 +788,13 @@ Inspection_Process_Thread(Thread_t *p_pThread)
             continue;
         }
 
-        Telemetry_AddInspectionInFlight(1);
+        Telemetry_AddInspectionInFlight(1, true, l_pContext);
         Inspection_Process_Message(p_pThread,
                                    l_pContext,
                                    l_pContext->inspector.inspectionQueue,
                                    message,
                                    threadData);
-        Telemetry_AddInspectionInFlight(-1);
+        Telemetry_AddInspectionInFlight(-1, true, l_pContext);
         if (!Inspection_Complete_Message(l_pContext, message))
             break;
     }

@@ -82,6 +82,39 @@ Transfer_AddItemFileAttribute(TelemetrySpan_t *span,
     }
 }
 
+static const char *
+Transfer_DispatcherLocalityLabel(const struct RazorbackContext *context,
+                                 const struct ConnectedEntity *dispatcher)
+{
+    if (context == NULL || dispatcher == NULL)
+        return "unknown";
+
+    return (dispatcher->locality == context->locality) ? "local" : "remote";
+}
+
+static const char *
+Transfer_StreamKind(const struct BlockPoolItem *item)
+{
+    const struct BlockPoolData *dataItem;
+
+    if (item == NULL)
+        return "memory";
+
+    if (item->pEvent != NULL &&
+        item->pEvent->pBlock != NULL &&
+        item->pEvent->pBlock->data.fileName != NULL)
+        return "file";
+
+    dataItem = item->pDataHead;
+    while (dataItem != NULL) {
+        if ((dataItem->iFlags & BLOCK_POOL_DATA_FLAG_FILE) == BLOCK_POOL_DATA_FLAG_FILE)
+            return "file";
+        dataItem = dataItem->pNext;
+    }
+
+    return "memory";
+}
+
 char *
 Transfer_generateFilename (struct Block *block)
 {
@@ -207,19 +240,28 @@ Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
     enum TransferStatus status;
     const char *transferError = NULL;
     const char *protocol = "none";
+    const char *dispatcherLocality = "unknown";
+    const char *streamKind = Transfer_StreamKind(item);
+    struct RazorbackContext *context = NULL;
     double transferStartedAt = Telemetry_GetMonotonicTimeSeconds();
 
     transferSpan = Telemetry_StartSpan("store block", NULL);
     if (item != NULL && item->pEvent != NULL)
         Telemetry_AddBlockAttributes(transferSpan, item->pEvent->pBlock);
     Transfer_AddItemFileAttribute(transferSpan, item);
+    context = (item != NULL && item->context != NULL) ? item->context
+                                                      : Thread_GetCurrentContext();
 
     if (dispatcher == NULL || dispatcher->dispatcher == NULL) {
         transferError = "missing dispatcher for store";
         Telemetry_RecordTransferStoreDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
                                               "failure",
-                                              protocol);
-        Telemetry_RecordTransferFailure("store", protocol);
+                                              protocol,
+                                              dispatcherLocality,
+                                              streamKind,
+                                              context);
+        Telemetry_RecordTransferFailure("store", protocol, "missing_dispatcher",
+                                        dispatcherLocality, context);
         Telemetry_EndSpan(transferSpan, false, transferError);
         return TRANSFER_FAIL_LOCAL;
     }
@@ -229,12 +271,17 @@ Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
         transferError = "failed to find transport descriptor for store";
         Telemetry_RecordTransferStoreDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
                                               "failure",
-                                              protocol);
-        Telemetry_RecordTransferFailure("store", protocol);
+                                              protocol,
+                                              dispatcherLocality,
+                                              streamKind,
+                                              context);
+        Telemetry_RecordTransferFailure("store", protocol, "transport_missing",
+                                        dispatcherLocality, context);
         Telemetry_EndSpan(transferSpan, false, transferError);
         return TRANSFER_FAIL_LOCAL;
     }
     protocol = trans->name;
+    dispatcherLocality = Transfer_DispatcherLocalityLabel(context, dispatcher);
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Transport: %s", __func__, trans->name);
 
@@ -251,9 +298,13 @@ Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher)
         transferError = "failed to store block";
     Telemetry_RecordTransferStoreDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
                                           (status == TRANSFER_OK) ? "success" : "failure",
-                                          protocol);
+                                          protocol,
+                                          dispatcherLocality,
+                                          streamKind,
+                                          context);
     if (status != TRANSFER_OK)
-        Telemetry_RecordTransferFailure("store", protocol);
+        Telemetry_RecordTransferFailure("store", protocol, "request_failed",
+                                        dispatcherLocality, context);
     Telemetry_EndSpan(transferSpan, status == TRANSFER_OK, transferError);
     return status;
 }
@@ -267,6 +318,8 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
     enum TransferStatus status;
     const char *transferError = NULL;
     const char *protocol = "none";
+    const char *dispatcherLocality = "unknown";
+    struct RazorbackContext *context = Thread_GetCurrentContext();
     double transferStartedAt = Telemetry_GetMonotonicTimeSeconds();
 
     transferSpan = Telemetry_StartSpan("fetch block", NULL);
@@ -276,8 +329,11 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         transferError = "missing dispatcher for fetch";
         Telemetry_RecordTransferFetchDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
                                               "failure",
-                                              protocol);
-        Telemetry_RecordTransferFailure("fetch", protocol);
+                                              protocol,
+                                              dispatcherLocality,
+                                              context);
+        Telemetry_RecordTransferFailure("fetch", protocol, "missing_dispatcher",
+                                        dispatcherLocality, context);
         Telemetry_EndSpan(transferSpan, false, transferError);
         return TRANSFER_FAIL_LOCAL;
     }
@@ -287,12 +343,16 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         transferError = "failed to find transport descriptor for fetch";
         Telemetry_RecordTransferFetchDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
                                               "failure",
-                                              protocol);
-        Telemetry_RecordTransferFailure("fetch", protocol);
+                                              protocol,
+                                              dispatcherLocality,
+                                              context);
+        Telemetry_RecordTransferFailure("fetch", protocol, "transport_missing",
+                                        dispatcherLocality, context);
         Telemetry_EndSpan(transferSpan, false, transferError);
         return TRANSFER_FAIL_LOCAL;
     }
     protocol = trans->name;
+    dispatcherLocality = Transfer_DispatcherLocalityLabel(context, dispatcher);
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: locality: %u, protocol: %u", __func__, dispatcher->locality, dispatcher->dispatcher->protocol);
     rzb_log(LOG_DEBUG,LOG_C_TRANSFER, "%s: Transport: %s", __func__, trans->name);
 
@@ -310,9 +370,12 @@ Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher)
         transferError = "failed to fetch block";
     Telemetry_RecordTransferFetchDuration(Telemetry_GetMonotonicTimeSeconds() - transferStartedAt,
                                           (status == TRANSFER_OK) ? "success" : "failure",
-                                          protocol);
+                                          protocol,
+                                          dispatcherLocality,
+                                          context);
     if (status != TRANSFER_OK)
-        Telemetry_RecordTransferFailure("fetch", protocol);
+        Telemetry_RecordTransferFailure("fetch", protocol, "request_failed",
+                                        dispatcherLocality, context);
     Telemetry_EndSpan(transferSpan, status == TRANSFER_OK, transferError);
     return status;
 }

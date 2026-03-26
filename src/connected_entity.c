@@ -483,11 +483,14 @@ ConnectedEntityList_GetDispatcher(void) {
     conf_int_t localityCount = Config_getLocalityBackupCount();
     struct ConnectedEntity *entity = NULL;
     struct ConnectedEntity *ret = NULL;
+    struct RazorbackContext *context = NULL;
     const char *selectionPath = "none";
+    const char *selectedLocality = "none";
     conf_int_t i;
     struct ConnectedEntityKey searchKey;
 
     memset(&searchKey, 0, sizeof(struct ConnectedEntityKey));
+    context = Thread_GetCurrentContext();
 
     dispatchers = List_Create(LIST_MODE_GENERIC,
             ConnectedEntity_Cmp, // Cmp
@@ -507,7 +510,7 @@ ConnectedEntityList_GetDispatcher(void) {
     if (dispatcherCount == 0) {
         List_Destroy(dispatchers);
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: No dispatchers", __func__);
-        Telemetry_RecordDispatcherSelection("none");
+        Telemetry_RecordDispatcherSelection("none", "none", context);
         return NULL;
     }
     // Our locality
@@ -539,10 +542,11 @@ ConnectedEntityList_GetDispatcher(void) {
 getdispdone:
     if (entity == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Failed to find any usable dispatchers", __func__);
-        Telemetry_RecordDispatcherSelection("none");
+        Telemetry_RecordDispatcherSelection("none", "none", context);
     } else {
         ret = ConnectedEntity_Clone(entity);
-        Telemetry_RecordDispatcherSelection(selectionPath);
+        selectedLocality = (entity->locality == locality) ? "local" : "remote";
+        Telemetry_RecordDispatcherSelection(selectionPath, selectedLocality, context);
     }
     List_Destroy(dispatchers);
     if (ret == NULL) {
