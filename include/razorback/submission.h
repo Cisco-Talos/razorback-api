@@ -39,7 +39,12 @@ extern "C" {
  * @param p_iFlags The submission flags.
  * @param p_pSf_Flags Pointer to a uint32_t to store the SourceFire threat flags in.
  * @param p_pEnt_Flags Pointer to a uint32_t to store the Enterprise threat flags in.
- * @return true on success false on error.
+ * If p_pItem->submittedCallback is set, it will be invoked for terminal
+ * submission completion and for all submission failure cases, including
+ * immediate failures returned directly by this function.
+ * @return RZB_SUBMISSION_OK when the item was accepted for submission,
+ * RZB_SUBMISSION_ERROR on submission failure, or RZB_SUBMISSION_NO_TYPE when
+ * the block does not have a data type.
  */
 SO_PUBLIC extern int Submission_Submit(
     struct BlockPoolItem *p_pItem,
