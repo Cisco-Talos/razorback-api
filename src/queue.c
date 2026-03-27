@@ -1035,8 +1035,7 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
                 goto cleanup;
             }
 
-            if (!Queue_Process_Pending_Settlements(queue, __func__) &&
-                timeoutMilliseconds > 0) {
+            if (!Queue_Process_Pending_Settlements(queue, __func__)) {
                 receiveError = "failed to process pending settlements";
                 errno = EIO;
                 goto cleanup;
