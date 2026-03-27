@@ -1027,7 +1027,12 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
                 rzb_log(LOG_ERR, LOG_C_QUEUE,
                         "%s: Error servicing read connection after timeout, reconnecting read side",
                         __func__);
-                Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL);
+                if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL) ||
+                    queue->pReadSocket == NULL) {
+                    receiveError = "failed to reconnect read connection";
+                    errno = EIO;
+                    goto cleanup;
+                }
                 receiveError = "failed to service read connection";
                 if (timeoutMilliseconds == 0)
                     continue;
