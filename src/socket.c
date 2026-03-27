@@ -487,6 +487,7 @@ Socket_Accept (struct Socket **retSock,
     struct Socket *sock = NULL;
     fd_set fdSet;
     struct timeval timeout;
+    int selectResult;
 
     ASSERT (retSock != NULL);
     if (retSock == NULL)
@@ -496,6 +497,20 @@ Socket_Accept (struct Socket **retSock,
     if (listeningSocket == NULL)
         return -1;
 
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 10000;
+    FD_ZERO (&fdSet);
+    FD_SET (listeningSocket->iSocket, &fdSet);
+    selectResult = select(listeningSocket->iSocket + 1, &fdSet, NULL, NULL, &timeout);
+    if (selectResult < 0)
+    {
+        rzb_perror
+            (LOG_C_NETWORK,"Socket_Accept failed due to failure of accept call: %s");
+        return -1;
+    }
+    if (selectResult == 0 || !FD_ISSET(listeningSocket->iSocket, &fdSet))
+        return 0;
+
     if ((sock = (struct Socket *)calloc(1, sizeof (struct Socket))) == NULL)
     {
         rzb_log(LOG_ERR,LOG_C_NETWORK, "%s: Failed to allocate new socket", __func__);
@@ -503,18 +518,6 @@ Socket_Accept (struct Socket **retSock,
     }
 
     Socket_CopyAddress (sock, listeningSocket);
-
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 10000;
-    FD_ZERO (&fdSet);
-    FD_SET (listeningSocket->iSocket, &fdSet);
-    if (select (listeningSocket->iSocket +1, &fdSet, NULL, NULL, &timeout) < 0)
-    {
-        Socket_Destroy (sock);
-        rzb_perror
-            (LOG_C_NETWORK,"Socket_Accept failed due to failure of accept call: %s");
-        return -1;
-    }
 
     {
         // check for error
@@ -531,7 +534,6 @@ Socket_Accept (struct Socket **retSock,
         *retSock = sock;
         return 1;
     }
-    return 0;
 }
 
 SO_PUBLIC struct Socket *

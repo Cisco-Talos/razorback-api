@@ -225,6 +225,7 @@
     <ClCompile Include="src\event.c" />
     <ClCompile Include="src\fantasia.c" />
     <ClCompile Include="src\hash.c" />
+    <ClCompile Include="src\health.c" />
     <ClCompile Include="src\init.c" />
     <ClCompile Include="src\inspection.c" />
     <ClCompile Include="src\inspector_queue.c" />
@@ -294,6 +295,7 @@
     <ClInclude Include="include\razorback\debug.h" />
     <ClInclude Include="include\razorback\event.h" />
     <ClInclude Include="include\razorback\hash.h" />
+    <ClInclude Include="include\razorback\health.h" />
     <ClInclude Include="include\razorback\inspector_queue.h" />
     <ClInclude Include="include\razorback\json_buffer.h" />
     <ClInclude Include="include\razorback\judgment.h" />
@@ -360,6 +362,7 @@
     <ClInclude Include="src\command_and_control.h" />
     <ClInclude Include="src\connected_entity_private.h" />
     <ClInclude Include="src\fantasia.h" />
+    <ClInclude Include="src\health_internal.h" />
     <ClInclude Include="src\init.h" />
     <ClInclude Include="src\inspection.h" />
     <ClInclude Include="src\judgment_private.h" />
