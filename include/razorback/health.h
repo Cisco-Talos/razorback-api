@@ -126,6 +126,9 @@ SO_PUBLIC extern RazorbackHealthCheckId_t Razorback_Health_RegisterCheck(
 
 /**
  * Unregister a previously registered custom process-wide health check.
+ * On success, this function does not return until any in-flight evaluation of
+ * the unregistered callback has completed, so the callback and its userData
+ * may be safely freed after it returns true.
  * @param id Registration id returned by Razorback_Health_RegisterCheck().
  * @return true if the check was removed, false otherwise.
  */

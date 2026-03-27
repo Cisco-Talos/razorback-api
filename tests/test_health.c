@@ -32,6 +32,7 @@
 #include <netinet/in.h>
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,6 +51,17 @@ static struct RazorbackContext *g_contexts[8];
 static size_t g_contextCount = 0U;
 static uint16_t g_nextHealthPort = 48080U;
 
+struct health_test_unregister_state
+{
+    Semaphore_t *callbackEntered;
+    Semaphore_t *callbackRelease;
+    Semaphore_t *unregisterStarted;
+    atomic_bool unregisterReturned;
+    bool evaluateResult;
+    bool unregisterResult;
+    RazorbackHealthCheckId_t checkId;
+};
+
 static void health_test_sleep_ms(unsigned int milliseconds);
 static void health_test_reset_contexts(void);
 static void health_test_set_contexts(struct RazorbackContext **contexts, size_t count);
@@ -64,7 +76,10 @@ static void health_test_send_all(int fd, const char *request);
 static void health_test_request(uint16_t port, const char *request,
                                 char *response, size_t responseSize);
 static bool health_test_custom_check(void *userData);
+static bool health_test_blocking_check(void *userData);
+static void *health_test_evaluate_ready(void *userData);
 static void *health_test_stop_listener(void *userData);
+static void *health_test_unregister_ready(void *userData);
 static void health_test_setup(void);
 static void health_test_teardown(void);
 
@@ -272,12 +287,45 @@ health_test_custom_check(void *userData)
     return *healthy;
 }
 
+static bool
+health_test_blocking_check(void *userData)
+{
+    struct health_test_unregister_state *state = userData;
+
+    ck_assert_ptr_nonnull(state);
+    ck_assert(Semaphore_Post(state->callbackEntered));
+    ck_assert(Semaphore_Wait(state->callbackRelease));
+    return true;
+}
+
+static void *
+health_test_evaluate_ready(void *userData)
+{
+    struct health_test_unregister_state *state = userData;
+
+    ck_assert_ptr_nonnull(state);
+    state->evaluateResult = Razorback_Health_Evaluate(RAZORBACK_HEALTH_READY);
+    return NULL;
+}
+
 static void *
 health_test_stop_listener(void *userData)
 {
     (void)userData;
 
     Razorback_Health_Stop();
+    return NULL;
+}
+
+static void *
+health_test_unregister_ready(void *userData)
+{
+    struct health_test_unregister_state *state = userData;
+
+    ck_assert_ptr_nonnull(state);
+    ck_assert(Semaphore_Post(state->unregisterStarted));
+    state->unregisterResult = Razorback_Health_UnregisterCheck(state->checkId);
+    atomic_store(&state->unregisterReturned, true);
     return NULL;
 }
 
@@ -488,6 +536,52 @@ START_TEST(test_health_start_rejects_concurrent_restart_during_stop)
 }
 END_TEST
 
+START_TEST(test_health_unregister_waits_for_inflight_callback)
+{
+    struct health_test_unregister_state state;
+    pthread_t evaluateThread;
+    pthread_t unregisterThread;
+
+    memset(&state, 0, sizeof(state));
+    state.callbackEntered = Semaphore_Create(false, 0U);
+    state.callbackRelease = Semaphore_Create(false, 0U);
+    state.unregisterStarted = Semaphore_Create(false, 0U);
+    ck_assert_ptr_nonnull(state.callbackEntered);
+    ck_assert_ptr_nonnull(state.callbackRelease);
+    ck_assert_ptr_nonnull(state.unregisterStarted);
+    atomic_init(&state.unregisterReturned, false);
+
+    Razorback_Health_SetStartupComplete(true);
+
+    state.checkId = Razorback_Health_RegisterCheck(RAZORBACK_HEALTH_READY,
+                                                   "blocking-check",
+                                                   health_test_blocking_check,
+                                                   &state);
+    ck_assert_uint_ne(state.checkId, 0U);
+
+    ck_assert_int_eq(pthread_create(&evaluateThread, NULL, health_test_evaluate_ready, &state), 0);
+    ck_assert(Semaphore_Wait(state.callbackEntered));
+
+    ck_assert_int_eq(pthread_create(&unregisterThread, NULL, health_test_unregister_ready, &state), 0);
+    ck_assert(Semaphore_Wait(state.unregisterStarted));
+
+    health_test_sleep_ms(50U);
+    ck_assert(!atomic_load(&state.unregisterReturned));
+
+    ck_assert(Semaphore_Post(state.callbackRelease));
+
+    ck_assert_int_eq(pthread_join(unregisterThread, NULL), 0);
+    ck_assert_int_eq(pthread_join(evaluateThread, NULL), 0);
+
+    ck_assert(state.unregisterResult);
+    ck_assert(state.evaluateResult);
+
+    Semaphore_Destroy(state.unregisterStarted);
+    Semaphore_Destroy(state.callbackRelease);
+    Semaphore_Destroy(state.callbackEntered);
+}
+END_TEST
+
 static Suite *
 health_suite(void)
 {
@@ -505,6 +599,7 @@ health_suite(void)
     tcase_add_test(testcase, test_healthz_reports_aggregate_json);
     tcase_add_test(testcase, test_health_slow_client_does_not_block_listener);
     tcase_add_test(testcase, test_health_start_rejects_concurrent_restart_during_stop);
+    tcase_add_test(testcase, test_health_unregister_waits_for_inflight_callback);
     tcase_set_timeout(testcase, 20);
 
     suite_add_tcase(suite, testcase);

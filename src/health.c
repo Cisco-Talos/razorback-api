@@ -34,8 +34,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <stdatomic.h>
 
 #define HEALTH_DEFAULT_BIND_ADDRESS "127.0.0.1"
+#define HEALTH_CHECK_RELEASE_WAIT_MS 1U
 #define HEALTH_REQUEST_LINE_TIMEOUT_MS 250U
 #define HEALTH_HTTP_OK "HTTP/1.1 200 OK"
 #define HEALTH_HTTP_BAD_REQUEST "HTTP/1.1 400 Bad Request"
@@ -50,6 +52,7 @@ struct RazorbackHealthCheck
     char *name;
     RazorbackHealthCheckFn callback;
     void *userData;
+    atomic_size_t activeSnapshots;
 };
 
 struct RazorbackHealthState
@@ -94,6 +97,7 @@ struct RazorbackHealthHttpRequest
 struct RazorbackHealthRemoveState
 {
     RazorbackHealthCheckId_t id;
+    struct RazorbackHealthCheck *check;
     bool removed;
 };
 
@@ -112,8 +116,9 @@ static struct RazorbackHealthState sg_health = {
 
 static int Health_Check_Cmp(void *a, void *b);
 static int Health_Check_KeyCmp(void *a, const void *b);
-static void Health_Check_Destroy(void *item);
-static void *Health_Check_Clone(void *item);
+static void Health_Check_Free(struct RazorbackHealthCheck *check);
+static void Health_Check_Retain(struct RazorbackHealthCheck *check);
+static void Health_Check_Snapshot_Release(void *item);
 static void Health_Thread(Thread_t *thread);
 static bool Health_IsInitialized(void);
 static bool Health_SendResponse(const struct Socket *socket,
@@ -164,10 +169,8 @@ Health_Check_KeyCmp(void *a, const void *b)
 }
 
 static void
-Health_Check_Destroy(void *item)
+Health_Check_Free(struct RazorbackHealthCheck *check)
 {
-    struct RazorbackHealthCheck *check = item;
-
     if (check == NULL)
         return;
 
@@ -175,25 +178,26 @@ Health_Check_Destroy(void *item)
     free(check);
 }
 
-static void *
-Health_Check_Clone(void *item)
+static void
+Health_Check_Retain(struct RazorbackHealthCheck *check)
 {
-    struct RazorbackHealthCheck *source = item;
-    struct RazorbackHealthCheck *clone;
+    ASSERT(check != NULL);
+    if (check == NULL)
+        return;
 
-    if ((clone = calloc(1, sizeof(*clone))) == NULL)
-        return NULL;
+    atomic_fetch_add(&check->activeSnapshots, 1U);
+}
 
-    clone->id = source->id;
-    clone->kind = source->kind;
-    clone->callback = source->callback;
-    clone->userData = source->userData;
-    if (source->name != NULL && (clone->name = strdup(source->name)) == NULL) {
-        free(clone);
-        return NULL;
-    }
+static void
+Health_Check_Snapshot_Release(void *item)
+{
+    struct RazorbackHealthCheck *check = item;
 
-    return clone;
+    ASSERT(check != NULL);
+    if (check == NULL)
+        return;
+
+    atomic_fetch_sub(&check->activeSnapshots, 1U);
 }
 
 bool
@@ -208,8 +212,8 @@ Health_Initialize(void)
     sg_health.checks = List_Create(LIST_MODE_GENERIC,
                                    Health_Check_Cmp,
                                    Health_Check_KeyCmp,
-                                   Health_Check_Destroy,
-                                   Health_Check_Clone,
+                                   NULL,
+                                   NULL,
                                    NULL,
                                    NULL);
     if (sg_health.checks == NULL) {
@@ -227,22 +231,39 @@ Health_Initialize(void)
 void
 Health_Shutdown_Global(void)
 {
+    struct RazorbackHealthCheck *check;
+
     Razorback_Health_Stop();
 
     if (sg_health.mutex == NULL)
         return;
 
-    Mutex_Lock(sg_health.mutex);
-    if (sg_health.checks != NULL) {
-        List_Destroy(sg_health.checks);
-        sg_health.checks = NULL;
+    while (true) {
+        Mutex_Lock(sg_health.mutex);
+        if (sg_health.checks == NULL) {
+            Mutex_Unlock(sg_health.mutex);
+            break;
+        }
+
+        check = List_Pop(sg_health.checks);
+        if (check == NULL) {
+            List_Destroy(sg_health.checks);
+            sg_health.checks = NULL;
+            free(sg_health.bindAddress);
+            sg_health.bindAddress = NULL;
+            sg_health.port = 0;
+            sg_health.requireContextsForReady = false;
+            sg_health.stopping = false;
+            Mutex_Unlock(sg_health.mutex);
+            break;
+        }
+        Mutex_Unlock(sg_health.mutex);
+
+        while (atomic_load(&check->activeSnapshots) != 0U)
+            Thread_Sleep(HEALTH_CHECK_RELEASE_WAIT_MS);
+
+        Health_Check_Free(check);
     }
-    free(sg_health.bindAddress);
-    sg_health.bindAddress = NULL;
-    sg_health.port = 0;
-    sg_health.requireContextsForReady = false;
-    sg_health.stopping = false;
-    Mutex_Unlock(sg_health.mutex);
 
     Mutex_Destroy(sg_health.mutex);
     sg_health.mutex = NULL;
@@ -420,13 +441,14 @@ Razorback_Health_RegisterCheck(RazorbackHealthCheckKind_t kind,
     check->kind = kind;
     check->callback = callback;
     check->userData = userData;
+    atomic_init(&check->activeSnapshots, 0U);
 
     Mutex_Lock(sg_health.mutex);
     id = sg_health.nextCheckId++;
     check->id = id;
     if (!List_Push(sg_health.checks, check)) {
         Mutex_Unlock(sg_health.mutex);
-        Health_Check_Destroy(check);
+        Health_Check_Free(check);
         return 0U;
     }
     Mutex_Unlock(sg_health.mutex);
@@ -443,6 +465,7 @@ Health_RemoveCheck(void *item, void *userData)
     if (check->id != state->id)
         return LIST_EACH_OK;
 
+    state->check = check;
     state->removed = true;
     return LIST_EACH_REMOVE;
 }
@@ -450,7 +473,7 @@ Health_RemoveCheck(void *item, void *userData)
 SO_PUBLIC bool
 Razorback_Health_UnregisterCheck(RazorbackHealthCheckId_t id)
 {
-    struct RazorbackHealthRemoveState state = { id, false };
+    struct RazorbackHealthRemoveState state = { id, NULL, false };
 
     if (!Health_IsInitialized())
         return false;
@@ -461,6 +484,13 @@ Razorback_Health_UnregisterCheck(RazorbackHealthCheckId_t id)
     Mutex_Lock(sg_health.mutex);
     List_ForEach(sg_health.checks, Health_RemoveCheck, &state);
     Mutex_Unlock(sg_health.mutex);
+
+    if (state.check != NULL) {
+        while (atomic_load(&state.check->activeSnapshots) != 0U)
+            Thread_Sleep(HEALTH_CHECK_RELEASE_WAIT_MS);
+
+        Health_Check_Free(state.check);
+    }
 
     return state.removed;
 }
@@ -536,18 +566,14 @@ Health_SnapshotCheck(void *item, void *userData)
 {
     struct RazorbackHealthCheck *check = item;
     struct RazorbackHealthCheckSnapshotState *state = userData;
-    struct RazorbackHealthCheck *clone;
 
     if (check->kind != state->kind)
         return LIST_EACH_OK;
 
-    if ((clone = Health_Check_Clone(check)) == NULL) {
-        state->ok = false;
-        return LIST_EACH_ERROR;
-    }
+    Health_Check_Retain(check);
 
-    if (!List_Push(state->snapshot, clone)) {
-        Health_Check_Destroy(clone);
+    if (!List_Push(state->snapshot, check)) {
+        Health_Check_Snapshot_Release(check);
         state->ok = false;
         return LIST_EACH_ERROR;
     }
@@ -583,8 +609,8 @@ Health_EvaluateCustomChecks(RazorbackHealthCheckKind_t kind)
     if ((snapshot = List_Create(LIST_MODE_GENERIC,
                                 Health_Check_Cmp,
                                 Health_Check_KeyCmp,
-                                Health_Check_Destroy,
-                                Health_Check_Clone,
+                                Health_Check_Snapshot_Release,
+                                NULL,
                                 NULL,
                                 NULL)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create health snapshot list", __func__);
