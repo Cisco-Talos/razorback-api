@@ -46,6 +46,7 @@ typedef struct _Semaphore Semaphore_t;
 typedef struct _List List_t;
 typedef struct _Thread Thread_t;
 typedef struct ThreadPool ThreadPool_t;
+typedef struct MessageSettlement MessageSettlement_t;
 
 typedef struct TelemetryContextCarrier TelemetryContextCarrier_t;
 typedef struct TelemetryMetric TelemetryMetric_t;

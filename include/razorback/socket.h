@@ -141,6 +141,23 @@ SO_PUBLIC extern ssize_t Socket_Rx(const struct Socket *socket, size_t len, uint
  * @param socket the socket.
  * @param r_buffer Buffer with the read data.
  * @param terminator the terminating character.
+ * @param timeoutMilliseconds Total read deadline in milliseconds. A value of 0 waits indefinitely.
+ * @return -1 on error or timeout, 0 on EOF, len+1 if the terminator was not found, or the amount of
+ *         data read >0 && <= len if the terminator was found.
+ * @note On timeout, errno is set to EAGAIN.
+ */
+SO_PUBLIC extern ssize_t Socket_Rx_Until_Ex(
+    const struct Socket *socket,
+    uint8_t ** r_buffer,
+    uint8_t terminator,
+    uint32_t timeoutMilliseconds
+);
+
+/**
+ * receives on a socket until the terminator is reached.
+ * @param socket the socket.
+ * @param r_buffer Buffer with the read data.
+ * @param terminator the terminating character.
  * @return -1 on error, 0 on EOF, len+1 if the terminator was not found, or the amount of data read >0 && <= len if the terminator was found.
  */
 SO_PUBLIC extern ssize_t Socket_Rx_Until(

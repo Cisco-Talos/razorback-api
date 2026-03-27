@@ -16,30 +16,20 @@
  *  MA 02110-1301, USA.
  */
 
-/** @file razorback.h
- * Razorback API.
- */
-#ifndef RAZORBACK_H
-#define RAZORBACK_H
+#ifndef RAZORBACK_HEALTH_INTERNAL_H
+#define RAZORBACK_HEALTH_INTERNAL_H
 
-#include <razorback/types.h>
+#include <stdbool.h>
 
-#include <razorback/block.h>
-#include <razorback/block_id.h>
-#include <razorback/block_pool.h>
-#include <razorback/config_file.h>
-#include <razorback/daemon.h>
-#include <razorback/debug.h>
-#include <razorback/hash.h>
-#include <razorback/health.h>
-#include <razorback/log.h>
-#include <razorback/messages.h>
-#include <razorback/ntlv.h>
-#include <razorback/queue.h>
-#include <razorback/queue_list.h>
-#include <razorback/socket.h>
-#include <razorback/telemetry.h>
-#include <razorback/thread.h>
-#include <razorback/uuids.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#endif //RAZORBACK_H
+bool Health_Initialize(void);
+void Health_Shutdown_Global(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* RAZORBACK_HEALTH_INTERNAL_H */

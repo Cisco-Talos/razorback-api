@@ -33,6 +33,7 @@
 #endif //_MSC_VER
 #include <stdlib.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <time.h>
 #include <amqp.h>
 #include <amqp_tcp_socket.h>
@@ -43,6 +44,7 @@
 #include "telemetry.h"
 #define MBUF_SIZE 1024
 #define AMQP_CHAN_ID 1
+#define QUEUE_GET_POLL_TIMEOUT_MS 100U
 
 struct StompMessage {
     char * sVerb;
@@ -58,12 +60,33 @@ struct _AMQP_Socket {
     bool bChannelOpen;              ///< Is the channel open
 };
 
+struct MessageSettlement
+{
+    uint64_t deliveryTag;
+    uint64_t connectionSerial;
+    bool acknowledge;
+    bool requeue;
+};
+
 static bool Queue_Reconnect(struct Queue *queue, int p_iSide, const char *cause);
 static bool Queue_Connect_ReadSocket(struct Queue *queue);
 static bool Queue_Connect_WriteSocket(struct Queue *queue);
+static bool Queue_EndReading(struct Queue *p_pQ);
+static bool Queue_Reject_Delivery(struct Queue *queue, uint64_t delivery_tag, bool requeue,
+                                  const char *context);
+static bool Queue_Acknowledge_Delivery(struct Queue *queue, uint64_t delivery_tag,
+                                       const char *context);
+static void AMQP_Socket_Close(AMQP_Socket_t *socket);
 static const char *Queue_MessageFamily(uint32_t messageType);
 static const char *Queue_ExchangeKind(const struct Queue *queue);
 static struct RazorbackContext *Queue_TryGetCurrentContext(void);
+static void Queue_Pending_Settlement_Destroy(void *item);
+static bool Queue_Process_Pending_Settlements(struct Queue *queue, const char *context);
+static bool Queue_Enqueue_Settlement(struct Queue *queue, struct Message *message,
+                                     bool acknowledge, bool requeue);
+static bool Queue_Retain(struct Queue *queue);
+static void Queue_Release(struct Queue *queue);
+static void Queue_Final_Destroy(struct Queue *queue);
 static char sg_messageTypeHeaderName[] = "rzb-msg-type";
 static char sg_messageVersionHeaderName[] = "rzb-msg-ver";
 
@@ -103,6 +126,173 @@ Queue_TryGetCurrentContext(void)
     context = Thread_GetContext(thread);
     Thread_Destroy(thread);
     return context;
+}
+
+static void
+Queue_Pending_Settlement_Destroy(void *item)
+{
+    free(item);
+}
+
+static bool
+Queue_Retain(struct Queue *queue)
+{
+    unsigned int refs;
+
+    ASSERT(queue != NULL);
+    if (queue == NULL)
+        return false;
+
+    refs = atomic_load(&queue->refs);
+    while (refs != 0U) {
+        if (atomic_compare_exchange_weak(&queue->refs, &refs, refs + 1U))
+            return true;
+    }
+
+    return false;
+}
+
+static void
+Queue_Final_Destroy(struct Queue *queue)
+{
+    bool settlementsFlushed = true;
+
+    ASSERT(queue != NULL);
+    if (queue == NULL)
+        return;
+
+    if (queue->pWriteHeartbeat != NULL)
+    {
+        Timer_Destroy(queue->pWriteHeartbeat);
+        queue->pWriteHeartbeat = NULL;
+    }
+    if (queue->pReadSocket != NULL)
+    {
+        settlementsFlushed = Queue_Process_Pending_Settlements(queue, __func__);
+        if (!settlementsFlushed) {
+            rzb_log(LOG_WARNING, LOG_C_QUEUE,
+                    "%s: Failed to flush pending settlement requests on queue '%s' during final"
+                    " teardown; remaining deliveries will be settled by broker disconnect semantics",
+                    __func__, queue->sName);
+        }
+        Queue_EndReading(queue);
+    }
+    if (queue->pReadSocket != NULL)
+        AMQP_Socket_Close(queue->pReadSocket);
+    if (queue->pWriteSocket != NULL)
+        AMQP_Socket_Close(queue->pWriteSocket);
+    if (queue->pendingSettlements != NULL)
+        List_Destroy(queue->pendingSettlements);
+    if (queue->mReadMutex != NULL)
+        Mutex_Destroy(queue->mReadMutex);
+    if (queue->mWriteMutex != NULL)
+        Mutex_Destroy(queue->mWriteMutex);
+    if (queue->mSettlementMutex != NULL)
+        Mutex_Destroy(queue->mSettlementMutex);
+    free(queue->sName);
+    free(queue);
+}
+
+static void
+Queue_Release(struct Queue *queue)
+{
+    ASSERT(queue != NULL);
+    if (queue == NULL)
+        return;
+
+    if (atomic_fetch_sub(&queue->refs, 1U) == 1U)
+        Queue_Final_Destroy(queue);
+}
+
+static bool
+Queue_Process_Pending_Settlements(struct Queue *queue, const char *context)
+{
+    MessageSettlement_t *settlement;
+
+    ASSERT(queue != NULL);
+    ASSERT(context != NULL);
+    if (queue == NULL || context == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: invalid settlement processing arguments", __func__);
+        return false;
+    }
+
+    if (queue->pendingSettlements == NULL)
+        return true;
+
+    if (queue->pReadSocket == NULL) {
+        rzb_log(LOG_DEBUG, LOG_C_QUEUE,
+                "%s: Read socket unavailable while processing pending settlements on '%s'",
+                context, queue->sName);
+        return false;
+    }
+
+    while ((settlement = List_Pop(queue->pendingSettlements)) != NULL) {
+        bool ok;
+
+        if (settlement->connectionSerial != queue->readConnectionSerial) {
+            rzb_log(LOG_DEBUG, LOG_C_QUEUE,
+                    "%s: Dropping stale settlement for queue '%s' serial %" PRIu64
+                    " (current %" PRIu64 ")",
+                    context, queue->sName, settlement->connectionSerial,
+                    queue->readConnectionSerial);
+            free(settlement);
+            continue;
+        }
+
+        if (settlement->acknowledge) {
+            ok = Queue_Acknowledge_Delivery(queue, settlement->deliveryTag, context);
+        } else {
+            ok = Queue_Reject_Delivery(queue, settlement->deliveryTag,
+                                       settlement->requeue, context);
+        }
+        free(settlement);
+
+        if (!ok && queue->pReadSocket == NULL) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+static bool
+Queue_Enqueue_Settlement(struct Queue *queue, struct Message *message,
+                         bool acknowledge, bool requeue)
+{
+    MessageSettlement_t *settlement;
+
+    ASSERT(queue != NULL);
+    ASSERT(message != NULL);
+    if (queue == NULL || message == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue or message is NULL", __func__);
+        return false;
+    }
+
+    if ((settlement = message->brokerSettlement) == NULL) {
+        return true;
+    }
+
+    settlement->acknowledge = acknowledge;
+    settlement->requeue = requeue;
+
+    Mutex_Lock(queue->mSettlementMutex);
+    if (queue->pendingSettlements == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE,
+                "%s: queue '%s' has no pending settlement list",
+                __func__, queue->sName);
+        Mutex_Unlock(queue->mSettlementMutex);
+        return false;
+    }
+
+    if (!List_Push(queue->pendingSettlements, settlement)) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to enqueue pending settlement", __func__);
+        Mutex_Unlock(queue->mSettlementMutex);
+        return false;
+    }
+    message->brokerSettlement = NULL;
+    Mutex_Unlock(queue->mSettlementMutex);
+
+    return true;
 }
 
 /** Log an AMQP RPC reply and return true when it represents an error. */
@@ -517,7 +707,7 @@ AMQP_Heartbeat(void *p_arg)
     struct Queue *queue = (struct Queue *)p_arg;
 
     Mutex_Lock(queue->mWriteMutex);
-    if (queue->bShuttingDown) {
+    if (atomic_load(&queue->bShuttingDown)) {
         Mutex_Unlock(queue->mWriteMutex);
         return;
     }
@@ -541,7 +731,7 @@ AMQP_Heartbeat(void *p_arg)
 static bool
 Queue_Connect_ReadSocket(struct Queue *queue)
 {
-    if (queue->bShuttingDown)
+    if (atomic_load(&queue->bShuttingDown))
         return false;
 
     if ((queue->iFlags & QUEUE_FLAG_RECV) != QUEUE_FLAG_RECV ||
@@ -565,6 +755,10 @@ Queue_Connect_ReadSocket(struct Queue *queue)
         return false;
     }
 
+    queue->readConnectionSerial++;
+    if (queue->readConnectionSerial == 0U)
+        queue->readConnectionSerial++;
+
     return true;
 }
 
@@ -572,7 +766,7 @@ Queue_Connect_ReadSocket(struct Queue *queue)
 static bool
 Queue_Connect_WriteSocket(struct Queue *queue)
 {
-    if (queue->bShuttingDown)
+    if (atomic_load(&queue->bShuttingDown))
         return false;
 
     if ((queue->iFlags & QUEUE_FLAG_SEND) != QUEUE_FLAG_SEND ||
@@ -619,7 +813,7 @@ Queue_Reconnect(struct Queue *queue, int p_iSide, const char *cause)
 {
     struct RazorbackContext *context = NULL;
 
-    if (queue->bShuttingDown)
+    if (atomic_load(&queue->bShuttingDown))
         return false;
 
     if ((p_iSide & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND) {
@@ -627,8 +821,7 @@ Queue_Reconnect(struct Queue *queue, int p_iSide, const char *cause)
         Telemetry_RecordOutboundReconnect(cause, context);
     }
 
-    if ((p_iSide & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
-        queue->pReadSocket != NULL)
+    if ((p_iSide & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV)
     {
         if (queue->pReadSocket != NULL)
         {
@@ -723,6 +916,22 @@ Queue_Create_With_Host (const char * p_sQueueName,
     {
         goto error;
     }
+    if ((l_pQueue->mSettlementMutex = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL)
+    {
+        goto error;
+    }
+    if ((l_pQueue->pendingSettlements = List_Create(LIST_MODE_GENERIC,
+                                                    NULL,
+                                                    NULL,
+                                                    Queue_Pending_Settlement_Destroy,
+                                                    NULL,
+                                                    NULL,
+                                                    NULL)) == NULL)
+    {
+        goto error;
+    }
+    atomic_init(&l_pQueue->refs, 1U);
+    atomic_init(&l_pQueue->bShuttingDown, false);
     l_pQueue->iFlags = p_iFlags;
     if (!Queue_Connect(l_pQueue))
     {
@@ -740,6 +949,10 @@ error:
             Mutex_Destroy(l_pQueue->mReadMutex);
         if (l_pQueue->mWriteMutex != NULL)
             Mutex_Destroy(l_pQueue->mWriteMutex);
+        if (l_pQueue->mSettlementMutex != NULL)
+            Mutex_Destroy(l_pQueue->mSettlementMutex);
+        if (l_pQueue->pendingSettlements != NULL)
+            List_Destroy(l_pQueue->pendingSettlements);
         free(l_pQueue->sName);
         free(l_pQueue);
     }
@@ -749,47 +962,20 @@ error:
 SO_PUBLIC void
 Queue_Terminate (struct Queue *p_pQ)
 {
-    struct Timer *heartbeat = NULL;
-
     ASSERT (p_pQ != NULL);
     if (p_pQ == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue is NULL", __func__);
         return;
     }
 
-    Mutex_Lock (p_pQ->mReadMutex);
-    Mutex_Lock (p_pQ->mWriteMutex);
-    p_pQ->bShuttingDown = true;
-    heartbeat = p_pQ->pWriteHeartbeat;
-    p_pQ->pWriteHeartbeat = NULL;
-    Mutex_Unlock (p_pQ->mWriteMutex);
-
-    if (heartbeat != NULL)
-        Timer_Destroy(heartbeat);
-
-    Mutex_Lock (p_pQ->mWriteMutex);
-
-    if ((p_pQ->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
-            p_pQ->pReadSocket != NULL)
-    {
-        Queue_EndReading (p_pQ);
-        AMQP_Socket_Close (p_pQ->pReadSocket);
-        p_pQ->pReadSocket = NULL;
-    }
-    if ((p_pQ->iFlags & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND &&
-            p_pQ->pWriteSocket != NULL)
-    {
-        AMQP_Socket_Close (p_pQ->pWriteSocket);
-        p_pQ->pWriteSocket = NULL;
+    if (atomic_exchange(&p_pQ->bShuttingDown, true)) {
+        rzb_log(LOG_DEBUG, LOG_C_QUEUE,
+                "%s: Queue '%s' is already shutting down",
+                __func__, p_pQ->sName);
+        return;
     }
 
-
-    Mutex_Unlock (p_pQ->mReadMutex);
-    Mutex_Unlock (p_pQ->mWriteMutex);
-    Mutex_Destroy (p_pQ->mReadMutex);
-    Mutex_Destroy (p_pQ->mWriteMutex);
-    free(p_pQ->sName);
-    free(p_pQ);
+    Queue_Release(p_pQ);
 }
 
 SO_PUBLIC struct Message *
@@ -801,25 +987,29 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
     amqp_rpc_reply_t res;
     amqp_envelope_t envelope;
     struct timeval timeout;
-    struct timeval *timeoutPtr = NULL;
     int headerIndex = 0;
     bool envelopeReady = false;
     bool rejectDelivery = false;
     bool requeueDelivery = false;
     bool receiveSuccess = false;
     const char *receiveError = NULL;
+    uint32_t remainingTimeout = timeoutMilliseconds;
+    uint32_t pollTimeout;
 
     ASSERT (queue);
     if (queue == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue is NULL", __func__);
         return NULL;
     }
+    if (!Queue_Retain(queue))
+        return NULL;
     Mutex_Lock (queue->mReadMutex);
-    if (queue->bShuttingDown) {
+    if (atomic_load(&queue->bShuttingDown)) {
         rzb_log(LOG_DEBUG, LOG_C_QUEUE,
                 "%s: Skipping receive on queue '%s' because the connection is shutting down",
                 __func__, queue->sName);
         Mutex_Unlock(queue->mReadMutex);
+        Queue_Release(queue);
         return NULL;
     }
 
@@ -827,20 +1017,37 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Read socket unavailable, attempting reconnect", __func__);
         if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL) || queue->pReadSocket == NULL) {
             Mutex_Unlock(queue->mReadMutex);
+            Queue_Release(queue);
             return NULL;
         }
     }
 
-    amqp_maybe_release_buffers(queue->pReadSocket->pConn);
-    if (timeoutMilliseconds > 0) {
-        timeout.tv_sec = timeoutMilliseconds / 1000;
-        timeout.tv_usec = (timeoutMilliseconds % 1000) * 1000;
-        timeoutPtr = &timeout;
-    }
-    res = amqp_consume_message(queue->pReadSocket->pConn, &envelope, timeoutPtr, 0);
-    envelopeReady = (res.reply_type == AMQP_RESPONSE_NORMAL);
+    for (;;) {
+        pollTimeout = QUEUE_GET_POLL_TIMEOUT_MS;
+        if (timeoutMilliseconds > 0 && remainingTimeout < pollTimeout)
+            pollTimeout = remainingTimeout;
 
-    if (AMQP_RESPONSE_NORMAL != res.reply_type) {
+        amqp_maybe_release_buffers(queue->pReadSocket->pConn);
+        timeout.tv_sec = pollTimeout / 1000;
+        timeout.tv_usec = (pollTimeout % 1000) * 1000;
+        res = amqp_consume_message(queue->pReadSocket->pConn, &envelope, &timeout, 0);
+        envelopeReady = (res.reply_type == AMQP_RESPONSE_NORMAL);
+
+        if (AMQP_RESPONSE_NORMAL == res.reply_type) {
+            if (!Queue_Process_Pending_Settlements(queue, __func__)) {
+                receiveError = "failed to process pending settlements";
+                errno = EIO;
+                goto cleanup;
+            }
+            if (atomic_load(&queue->bShuttingDown)) {
+                rejectDelivery = true;
+                requeueDelivery = true;
+                receiveError = "queue is shutting down";
+                goto cleanup;
+            }
+            break;
+        }
+
         if (res.reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION &&
             res.library_error == AMQP_STATUS_TIMEOUT) {
             errno = EAGAIN;
@@ -848,18 +1055,46 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
                 rzb_log(LOG_ERR, LOG_C_QUEUE,
                         "%s: Error servicing read connection after timeout, reconnecting read side",
                         __func__);
-                Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL);
+                if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL) ||
+                    queue->pReadSocket == NULL) {
+                    receiveError = "failed to reconnect read connection";
+                    errno = EIO;
+                    goto cleanup;
+                }
                 receiveError = "failed to service read connection";
+                if (timeoutMilliseconds == 0)
+                    continue;
                 errno = EIO;
+                goto cleanup;
             }
-            goto cleanup;
+
+            if (!Queue_Process_Pending_Settlements(queue, __func__)) {
+                receiveError = "failed to process pending settlements";
+                errno = EIO;
+                goto cleanup;
+            }
+            if (atomic_load(&queue->bShuttingDown)) {
+                receiveError = "queue is shutting down";
+                goto cleanup;
+            }
+
+            if (timeoutMilliseconds == 0)
+                continue;
+
+            if (remainingTimeout <= pollTimeout)
+                goto cleanup;
+
+            remainingTimeout -= pollTimeout;
+            continue;
         }
+
         AMQP_error(res, __func__);
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error consuming message, reconnecting read side", __func__);
         Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL);
         receiveError = "failed to consume message";
         goto cleanup;
     }
+
     if ((ret = (struct Message *)calloc(1,sizeof(struct Message))) == NULL)
     {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating message struct", __func__);
@@ -875,6 +1110,14 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
         receiveError = "failed to allocate message header list";
         goto cleanup;
     }
+    if (!autoAck &&
+        (ret->brokerSettlement = calloc(1, sizeof(*ret->brokerSettlement))) == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Error allocating deferred settlement", __func__);
+        rejectDelivery = true;
+        requeueDelivery = true;
+        receiveError = "failed to allocate deferred settlement";
+        goto cleanup;
+    }
 
     ret->serialized = (uint8_t *)calloc(1, envelope.message.body.len + 1);
     if (ret->serialized == NULL) {
@@ -886,8 +1129,10 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
     }
     memcpy(ret->serialized, envelope.message.body.bytes, envelope.message.body.len);
     ret->length = envelope.message.body.len;
-    ret->brokerDeliveryTag = envelope.delivery_tag;
-    ret->brokerAckPending = false;
+    if (ret->brokerSettlement != NULL) {
+        ret->brokerSettlement->deliveryTag = envelope.delivery_tag;
+        ret->brokerSettlement->connectionSerial = queue->readConnectionSerial;
+    }
     if (envelope.message.properties._flags & AMQP_BASIC_HEADERS_FLAG) {
         //rzb_log(LOG_DEBUG, LOG_C_QUEUE, "%s: Message has %u headers", __func__, envelope.message.properties.headers.num_entries);
         for (headerIndex = 0; headerIndex < envelope.message.properties.headers.num_entries; headerIndex++) {
@@ -976,7 +1221,6 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
             receiveSuccess = true;
         }
     } else {
-        ret->brokerAckPending = true;
         receiveSuccess = true;
     }
 
@@ -988,6 +1232,7 @@ cleanup:
     }
     Telemetry_EndSpan(receiveSpan, receiveSuccess && !rejectDelivery, receiveError);
     Mutex_Unlock (queue->mReadMutex);
+    Queue_Release(queue);
 
     if (rejectDelivery) {
         if (ret != NULL) {
@@ -1013,35 +1258,11 @@ Queue_Ack_Message(struct Queue *queue, struct Message *message)
 {
     bool ret;
 
-    ASSERT(queue != NULL);
-    ASSERT(message != NULL);
-    if (queue == NULL || message == NULL) {
-        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue or message is NULL", __func__);
+    if (!Queue_Retain(queue))
         return false;
-    }
 
-    if (!message->brokerAckPending)
-        return true;
-
-    Mutex_Lock(queue->mReadMutex);
-    if (queue->bShuttingDown) {
-        Mutex_Unlock(queue->mReadMutex);
-        return false;
-    }
-
-    if (queue->pReadSocket == NULL) {
-        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Read socket unavailable, attempting reconnect", __func__);
-        if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL) || queue->pReadSocket == NULL) {
-            Mutex_Unlock(queue->mReadMutex);
-            return false;
-        }
-    }
-
-    ret = Queue_Acknowledge_Delivery(queue, message->brokerDeliveryTag, __func__);
-    Mutex_Unlock(queue->mReadMutex);
-    if (ret)
-        message->brokerAckPending = false;
-
+    ret = Queue_Enqueue_Settlement(queue, message, true, false);
+    Queue_Release(queue);
     return ret;
 }
 
@@ -1050,35 +1271,11 @@ Queue_Reject_Message(struct Queue *queue, struct Message *message, bool requeue)
 {
     bool ret;
 
-    ASSERT(queue != NULL);
-    ASSERT(message != NULL);
-    if (queue == NULL || message == NULL) {
-        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: queue or message is NULL", __func__);
+    if (!Queue_Retain(queue))
         return false;
-    }
 
-    if (!message->brokerAckPending)
-        return true;
-
-    Mutex_Lock(queue->mReadMutex);
-    if (queue->bShuttingDown) {
-        Mutex_Unlock(queue->mReadMutex);
-        return false;
-    }
-
-    if (queue->pReadSocket == NULL) {
-        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Read socket unavailable, attempting reconnect", __func__);
-        if (!Queue_Reconnect(queue, QUEUE_FLAG_RECV, NULL) || queue->pReadSocket == NULL) {
-            Mutex_Unlock(queue->mReadMutex);
-            return false;
-        }
-    }
-
-    ret = Queue_Reject_Delivery(queue, message->brokerDeliveryTag, requeue, __func__);
-    Mutex_Unlock(queue->mReadMutex);
-    if (ret)
-        message->brokerAckPending = false;
-
+    ret = Queue_Enqueue_Settlement(queue, message, false, requeue);
+    Queue_Release(queue);
     return ret;
 }
 
@@ -1086,10 +1283,14 @@ SO_PUBLIC bool
 Queue_Settle_Message(struct Queue *queue, struct Message *message,
                      bool ackMessage, bool requeueMessage)
 {
-    if (ackMessage)
-        return Queue_Ack_Message(queue, message);
+    bool ret;
 
-    return Queue_Reject_Message(queue, message, requeueMessage);
+    if (!Queue_Retain(queue))
+        return false;
+
+    ret = Queue_Enqueue_Settlement(queue, message, ackMessage, requeueMessage);
+    Queue_Release(queue);
+    return ret;
 }
 
 SO_PUBLIC bool
@@ -1148,6 +1349,8 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
         return false;
     if (dest == NULL)
         return false;
+    if (!Queue_Retain(queue))
+        return false;
 
     context = Queue_TryGetCurrentContext();
     messageFamily = Queue_MessageFamily(message->type);
@@ -1155,7 +1358,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     exchangeKind = Queue_ExchangeKind(queue);
 
     Mutex_Lock (queue->mWriteMutex);
-    if (queue->bShuttingDown) {
+    if (atomic_load(&queue->bShuttingDown)) {
         rzb_log(LOG_DEBUG, LOG_C_QUEUE,
                 "%s: Refusing to send message type %u to '%s' because the connection is shutting down",
                 __func__, message->type, dest);
@@ -1294,6 +1497,7 @@ cleanup:
     Telemetry_FreeInjectedHeaders(&injectedHeaders);
     Mutex_Unlock (queue->mWriteMutex);
     Telemetry_EndSpan(sendSpan, ret, sendError);
+    Queue_Release(queue);
     return ret;
 }
 

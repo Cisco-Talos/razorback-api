@@ -29,6 +29,7 @@ razorback/event.h \
 razorback/file.h \
 razorback.h \
 razorback/hash.h \
+razorback/health.h \
 razorback/inspector_queue.h \
 razorback/json_buffer.h \
 razorback/judgment.h \

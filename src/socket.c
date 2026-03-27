@@ -46,6 +46,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <time.h>
 
 
 /* controls the amount sent per call to read or write */
@@ -61,6 +62,9 @@ static SSL_CTX *sg_pTlsInsecureClientContext = NULL;
 
 static SSL_CTX *Socket_TLS_GetSharedContextLocked(bool insecureMode);
 static bool Socket_TLS_CreateHandle(struct Socket *sock, bool insecureMode);
+static uint64_t Socket_GetTimeMilliseconds(void);
+static bool Socket_HasPendingReadData(const struct Socket *sock);
+static int Socket_WaitForRead(const struct Socket *sock, uint32_t timeoutMilliseconds);
 
 static bool
 Socket_TLS_ConfigureContext(SSL_CTX *context, bool insecureMode)
@@ -89,6 +93,48 @@ Socket_TLS_ConfigureContext(SSL_CTX *context, bool insecureMode)
 
     SSL_CTX_set_verify(context, SSL_VERIFY_PEER, NULL);
     return true;
+}
+
+static uint64_t
+Socket_GetTimeMilliseconds(void)
+{
+    struct timespec ts;
+
+    if (timespec_get(&ts, TIME_UTC) != TIME_UTC)
+        return 0U;
+
+    return ((uint64_t)ts.tv_sec * 1000ULL) + ((uint64_t)ts.tv_nsec / 1000000ULL);
+}
+
+static bool
+Socket_HasPendingReadData(const struct Socket *sock)
+{
+    ASSERT(sock != NULL);
+    if (sock == NULL)
+        return false;
+
+    return sock->ssl && sock->sslHandle != NULL && SSL_pending(sock->sslHandle) > 0;
+}
+
+static int
+Socket_WaitForRead(const struct Socket *sock, uint32_t timeoutMilliseconds)
+{
+    fd_set fdSet;
+    struct timeval timeout;
+
+    ASSERT(sock != NULL);
+    if (sock == NULL)
+        return -1;
+
+    if (Socket_HasPendingReadData(sock))
+        return 1;
+
+    FD_ZERO(&fdSet);
+    FD_SET(sock->iSocket, &fdSet);
+    timeout.tv_sec = timeoutMilliseconds / 1000U;
+    timeout.tv_usec = (timeoutMilliseconds % 1000U) * 1000U;
+
+    return select(sock->iSocket + 1, &fdSet, NULL, NULL, &timeout);
 }
 
 bool
@@ -487,6 +533,7 @@ Socket_Accept (struct Socket **retSock,
     struct Socket *sock = NULL;
     fd_set fdSet;
     struct timeval timeout;
+    int selectResult;
 
     ASSERT (retSock != NULL);
     if (retSock == NULL)
@@ -496,6 +543,20 @@ Socket_Accept (struct Socket **retSock,
     if (listeningSocket == NULL)
         return -1;
 
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 10000;
+    FD_ZERO (&fdSet);
+    FD_SET (listeningSocket->iSocket, &fdSet);
+    selectResult = select(listeningSocket->iSocket + 1, &fdSet, NULL, NULL, &timeout);
+    if (selectResult < 0)
+    {
+        rzb_perror
+            (LOG_C_NETWORK,"Socket_Accept failed due to failure of accept call: %s");
+        return -1;
+    }
+    if (selectResult == 0 || !FD_ISSET(listeningSocket->iSocket, &fdSet))
+        return 0;
+
     if ((sock = (struct Socket *)calloc(1, sizeof (struct Socket))) == NULL)
     {
         rzb_log(LOG_ERR,LOG_C_NETWORK, "%s: Failed to allocate new socket", __func__);
@@ -503,18 +564,6 @@ Socket_Accept (struct Socket **retSock,
     }
 
     Socket_CopyAddress (sock, listeningSocket);
-
-    timeout.tv_sec = 0;
-    timeout.tv_usec = 10000;
-    FD_ZERO (&fdSet);
-    FD_SET (listeningSocket->iSocket, &fdSet);
-    if (select (listeningSocket->iSocket +1, &fdSet, NULL, NULL, &timeout) < 0)
-    {
-        Socket_Destroy (sock);
-        rzb_perror
-            (LOG_C_NETWORK,"Socket_Accept failed due to failure of accept call: %s");
-        return -1;
-    }
 
     {
         // check for error
@@ -531,7 +580,6 @@ Socket_Accept (struct Socket **retSock,
         *retSock = sock;
         return 1;
     }
-    return 0;
 }
 
 SO_PUBLIC struct Socket *
@@ -894,14 +942,15 @@ Socket_Rx (const struct Socket * sock, size_t len,
 }
 
 SO_PUBLIC ssize_t
-Socket_Rx_Until (const struct Socket * sock, uint8_t ** r_buffer,
-                 uint8_t terminator)
+Socket_Rx_Until_Ex(const struct Socket * sock, uint8_t ** r_buffer,
+                   uint8_t terminator, uint32_t timeoutMilliseconds)
 {
     ssize_t now = 0;
     ssize_t total = 0;
     ssize_t bufSize = MAXRWSIZE;
     uint8_t *buffer = NULL;
     uint8_t *tmp = NULL;
+    uint64_t deadline = 0U;
 
     ASSERT(sock != NULL);
     if (sock == NULL)
@@ -914,7 +963,35 @@ Socket_Rx_Until (const struct Socket * sock, uint8_t ** r_buffer,
     if ((buffer = calloc(MAXRWSIZE, sizeof(uint8_t))) == NULL)
         return -1;
 
+    if (timeoutMilliseconds > 0U)
+        deadline = Socket_GetTimeMilliseconds() + timeoutMilliseconds;
+
     do {
+        if (timeoutMilliseconds > 0U && !Socket_HasPendingReadData(sock)) {
+            uint64_t nowMilliseconds = Socket_GetTimeMilliseconds();
+            int waitStatus;
+
+            if (nowMilliseconds >= deadline) {
+                free(buffer);
+                errno = EAGAIN;
+                return -1;
+            }
+
+            waitStatus = Socket_WaitForRead(sock, (uint32_t)(deadline - nowMilliseconds));
+            if (waitStatus == 0) {
+                free(buffer);
+                errno = EAGAIN;
+                return -1;
+            }
+            if (waitStatus < 0) {
+                if (errno == EINTR || errno == EAGAIN)
+                    continue;
+                free(buffer);
+                rzb_perror(LOG_C_NETWORK, "Socket_Rx_Until_Ex select failed: %s");
+                return -1;
+            }
+        }
+
         now = Socket_Rx(sock, 1, &buffer[total]);
         if (now == -1) {
             free(buffer);
@@ -946,4 +1023,11 @@ Socket_Rx_Until (const struct Socket * sock, uint8_t ** r_buffer,
     } while (now > 0);
     // Unreachable
     return -1;
+}
+
+SO_PUBLIC ssize_t
+Socket_Rx_Until (const struct Socket * sock, uint8_t ** r_buffer,
+                 uint8_t terminator)
+{
+    return Socket_Rx_Until_Ex(sock, r_buffer, terminator, 0U);
 }

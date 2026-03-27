@@ -114,6 +114,9 @@ Message_Destroy(struct Message *message)
     if (message->headers != NULL) {
         List_Destroy(message->headers);
     }
+    if (message->brokerSettlement != NULL) {
+        free(message->brokerSettlement);
+    }
     Telemetry_ClearContext(&message->telemetryContext);
     free(message);
 }

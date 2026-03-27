@@ -70,6 +70,45 @@ int main(void)
 }
 ```
 
+## Health Checks
+
+Razorback provides a small process-wide health subsystem for library consumers
+that need Kubernetes-style probes.
+
+The HTTP listener is opt-in. After calling `RZB_Init_API()`, start it
+explicitly and mark startup complete when your application finishes its own
+initialization:
+
+```c
+#include <razorback/api.h>
+#include <razorback/health.h>
+
+int main(void)
+{
+    RazorbackHealthServerConfig_t health = {
+        .bindAddress = "127.0.0.1",
+        .port = 8080,
+        .requireContextsForReady = true,
+    };
+
+    RZB_Init_API();
+    Razorback_Health_Start(&health);
+    Razorback_Health_SetStartupComplete(true);
+}
+```
+
+Supported endpoints:
+
+* `/livez`
+* `/readyz`
+* `/startupz`
+* `/healthz`
+
+The three probe endpoints return `200` when healthy and `503` when unhealthy.
+`/healthz` returns a small JSON summary of the built-in liveness, readiness,
+and startup states. Consumers may also extend any of those checks with
+`Razorback_Health_RegisterCheck()`.
+
 ## Telemetry
 
 Razorback is instrumented with OpenTelemetry and requires `opentelemetry-cpp`

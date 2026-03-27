@@ -22,6 +22,7 @@ block_pool_private.h \
 command_and_control.h \
 connected_entity_private.h \
 fantasia.h \
+health_internal.h \
 init.h \
 inspection.h \
 judgment_private.h \
@@ -46,6 +47,7 @@ daemon.c \
 event.c \
 fantasia.c \
 hash.c \
+health.c \
 init.c \
 inspection.c \
 inspector_queue.c \
