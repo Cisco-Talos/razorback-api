@@ -63,6 +63,7 @@ static SSL_CTX *sg_pTlsInsecureClientContext = NULL;
 static SSL_CTX *Socket_TLS_GetSharedContextLocked(bool insecureMode);
 static bool Socket_TLS_CreateHandle(struct Socket *sock, bool insecureMode);
 static uint64_t Socket_GetTimeMilliseconds(void);
+static bool Socket_HasPendingReadData(const struct Socket *sock);
 static int Socket_WaitForRead(const struct Socket *sock, uint32_t timeoutMilliseconds);
 
 static bool
@@ -105,6 +106,16 @@ Socket_GetTimeMilliseconds(void)
     return ((uint64_t)ts.tv_sec * 1000ULL) + ((uint64_t)ts.tv_nsec / 1000000ULL);
 }
 
+static bool
+Socket_HasPendingReadData(const struct Socket *sock)
+{
+    ASSERT(sock != NULL);
+    if (sock == NULL)
+        return false;
+
+    return sock->ssl && sock->sslHandle != NULL && SSL_pending(sock->sslHandle) > 0;
+}
+
 static int
 Socket_WaitForRead(const struct Socket *sock, uint32_t timeoutMilliseconds)
 {
@@ -114,6 +125,9 @@ Socket_WaitForRead(const struct Socket *sock, uint32_t timeoutMilliseconds)
     ASSERT(sock != NULL);
     if (sock == NULL)
         return -1;
+
+    if (Socket_HasPendingReadData(sock))
+        return 1;
 
     FD_ZERO(&fdSet);
     FD_SET(sock->iSocket, &fdSet);
@@ -953,7 +967,7 @@ Socket_Rx_Until_Ex(const struct Socket * sock, uint8_t ** r_buffer,
         deadline = Socket_GetTimeMilliseconds() + timeoutMilliseconds;
 
     do {
-        if (timeoutMilliseconds > 0U) {
+        if (timeoutMilliseconds > 0U && !Socket_HasPendingReadData(sock)) {
             uint64_t nowMilliseconds = Socket_GetTimeMilliseconds();
             int waitStatus;
 
