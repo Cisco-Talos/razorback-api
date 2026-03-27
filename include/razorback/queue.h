@@ -26,6 +26,18 @@
 
 #ifndef RAZORBACK_QUEUE_H
 #define RAZORBACK_QUEUE_H
+
+#if defined(__cplusplus)
+#if defined(_MSVC_LANG)
+#if _MSVC_LANG < 202100L
+#error "razorback/queue.h requires C++23 or later"
+#endif
+#elif __cplusplus < 202100L
+#error "razorback/queue.h requires C++23 or later"
+#endif
+#endif
+
+#include <stdatomic.h>
 #include <razorback/visibility.h>
 #include <razorback/types.h>
 #include <razorback/socket.h>
@@ -62,7 +74,7 @@ struct Queue
     uint32_t iPrefetch;             ///< Prefetch count
     bool bTopic;                    ///< Is this a topic (vs queue)
     struct Timer *pWriteHeartbeat;  ///< Write heartbeat timer
-    bool bShuttingDown;             ///< Is queue teardown in progress
+    atomic_bool bShuttingDown;      ///< Is queue teardown in progress
 };
 
 #define QUEUE_FLAG_SEND 0x01

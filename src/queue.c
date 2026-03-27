@@ -202,6 +202,13 @@ Queue_Enqueue_Settlement(struct Queue *queue, struct Message *message,
     if (!message->brokerAckPending)
         return true;
 
+    if (atomic_load(&queue->bShuttingDown)) {
+        rzb_log(LOG_DEBUG, LOG_C_QUEUE,
+                "%s: Refusing to queue settlement for '%s' because shutdown has started",
+                __func__, queue->sName);
+        return false;
+    }
+
     if (queue->pendingSettlements == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE,
                 "%s: queue '%s' has no pending settlement list",
@@ -640,7 +647,7 @@ AMQP_Heartbeat(void *p_arg)
     struct Queue *queue = (struct Queue *)p_arg;
 
     Mutex_Lock(queue->mWriteMutex);
-    if (queue->bShuttingDown) {
+    if (atomic_load(&queue->bShuttingDown)) {
         Mutex_Unlock(queue->mWriteMutex);
         return;
     }
@@ -664,7 +671,7 @@ AMQP_Heartbeat(void *p_arg)
 static bool
 Queue_Connect_ReadSocket(struct Queue *queue)
 {
-    if (queue->bShuttingDown)
+    if (atomic_load(&queue->bShuttingDown))
         return false;
 
     if ((queue->iFlags & QUEUE_FLAG_RECV) != QUEUE_FLAG_RECV ||
@@ -695,7 +702,7 @@ Queue_Connect_ReadSocket(struct Queue *queue)
 static bool
 Queue_Connect_WriteSocket(struct Queue *queue)
 {
-    if (queue->bShuttingDown)
+    if (atomic_load(&queue->bShuttingDown))
         return false;
 
     if ((queue->iFlags & QUEUE_FLAG_SEND) != QUEUE_FLAG_SEND ||
@@ -742,7 +749,7 @@ Queue_Reconnect(struct Queue *queue, int p_iSide, const char *cause)
 {
     struct RazorbackContext *context = NULL;
 
-    if (queue->bShuttingDown)
+    if (atomic_load(&queue->bShuttingDown))
         return false;
 
     if ((p_iSide & QUEUE_FLAG_SEND) == QUEUE_FLAG_SEND) {
@@ -856,6 +863,7 @@ Queue_Create_With_Host (const char * p_sQueueName,
     {
         goto error;
     }
+    atomic_init(&l_pQueue->bShuttingDown, false);
     l_pQueue->iFlags = p_iFlags;
     if (!Queue_Connect(l_pQueue))
     {
@@ -894,7 +902,7 @@ Queue_Terminate (struct Queue *p_pQ)
 
     Mutex_Lock (p_pQ->mReadMutex);
     Mutex_Lock (p_pQ->mWriteMutex);
-    p_pQ->bShuttingDown = true;
+    atomic_store(&p_pQ->bShuttingDown, true);
     heartbeat = p_pQ->pWriteHeartbeat;
     p_pQ->pWriteHeartbeat = NULL;
     Mutex_Unlock (p_pQ->mWriteMutex);
@@ -960,7 +968,7 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
         return NULL;
     }
     Mutex_Lock (queue->mReadMutex);
-    if (queue->bShuttingDown) {
+    if (atomic_load(&queue->bShuttingDown)) {
         rzb_log(LOG_DEBUG, LOG_C_QUEUE,
                 "%s: Skipping receive on queue '%s' because the connection is shutting down",
                 __func__, queue->sName);
@@ -1268,7 +1276,7 @@ Queue_Put_Dest (struct Queue * queue,  struct Message * message, const char *des
     exchangeKind = Queue_ExchangeKind(queue);
 
     Mutex_Lock (queue->mWriteMutex);
-    if (queue->bShuttingDown) {
+    if (atomic_load(&queue->bShuttingDown)) {
         rzb_log(LOG_DEBUG, LOG_C_QUEUE,
                 "%s: Refusing to send message type %u to '%s' because the connection is shutting down",
                 __func__, message->type, dest);
