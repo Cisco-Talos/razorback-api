@@ -52,6 +52,7 @@ struct Queue
     int iFlags;                     ///< Flags (read/write/etc)
     Mutex_t *mReadMutex;            ///< Read Lock
     Mutex_t *mWriteMutex;           ///< Write lock
+    List_t *pendingSettlements;     ///< Deferred broker ack/reject requests owned by the read side
     const char *sHostname;          ///< Broker hostname
     const char *sVhost;             ///< Broker virtual host
     uint32_t iPort;                 ///< Broker port
@@ -128,7 +129,8 @@ SO_PUBLIC extern struct Message * Queue_Get(struct Queue *queue);
  * Gets a message from the queue with configurable ack behavior.
  * @param queue the queue.
  * @param autoAck true to ack before returning, false to leave the delivery pending.
- * @param timeoutMilliseconds timeout for the receive poll. A value of 0 blocks indefinitely.
+ * @param timeoutMilliseconds timeout for the receive wait. A value of 0 blocks indefinitely
+ *        by restarting timed receive polls internally.
  * @return A message struct, NULL on error or timeout (errno==EAGAIN on timeout).
  */
 SO_PUBLIC extern struct Message * Queue_Get_Ex(
@@ -139,18 +141,22 @@ SO_PUBLIC extern struct Message * Queue_Get_Ex(
 
 /**
  * Acknowledge a message previously received with deferred ack enabled.
+ * The request is queued onto the owning Queue and applied by Queue_Get_Ex()
+ * from the queue's read thread.
  * @param queue the queue.
  * @param message the received message.
- * @return true on success, false on failure.
+ * @return true if the settlement request was queued, false on failure.
  */
 SO_PUBLIC extern bool Queue_Ack_Message(struct Queue *queue, struct Message *message);
 
 /**
  * Reject a message previously received with deferred ack enabled.
+ * The request is queued onto the owning Queue and applied by Queue_Get_Ex()
+ * from the queue's read thread.
  * @param queue the queue.
  * @param message the received message.
  * @param requeue true to request broker redelivery, false to discard.
- * @return true on success, false on failure.
+ * @return true if the settlement request was queued, false on failure.
  */
 SO_PUBLIC extern bool Queue_Reject_Message(
     struct Queue *queue,
@@ -160,11 +166,13 @@ SO_PUBLIC extern bool Queue_Reject_Message(
 
 /**
  * Settle a message previously received with deferred ack enabled.
+ * The request is queued onto the owning Queue and applied by Queue_Get_Ex()
+ * from the queue's read thread.
  * @param queue the queue.
  * @param message the received message.
  * @param ackMessage true to ack the delivery, false to reject it.
  * @param requeueMessage when rejecting, true to request broker redelivery.
- * @return true on success, false on failure.
+ * @return true if the settlement request was queued, false on failure.
  */
 SO_PUBLIC extern bool Queue_Settle_Message(
     struct Queue *queue,
