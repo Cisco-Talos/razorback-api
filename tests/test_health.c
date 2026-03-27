@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -58,6 +59,7 @@ static void health_test_init_context(struct RazorbackContext *context,
 static void health_test_destroy_context(struct RazorbackContext *context);
 static uint16_t health_test_start_listener(bool requireContextsForReady);
 static int health_test_connect(uint16_t port);
+static void health_test_set_recv_timeout(int fd, unsigned int milliseconds);
 static void health_test_send_all(int fd, const char *request);
 static void health_test_request(uint16_t port, const char *request,
                                 char *response, size_t responseSize);
@@ -202,6 +204,18 @@ health_test_connect(uint16_t port)
 }
 
 static void
+health_test_set_recv_timeout(int fd, unsigned int milliseconds)
+{
+    struct timeval timeout;
+
+    timeout.tv_sec = milliseconds / 1000U;
+    timeout.tv_usec = (int)(milliseconds % 1000U) * 1000;
+
+    ck_assert_int_eq(setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO,
+                                &timeout, sizeof(timeout)), 0);
+}
+
+static void
 health_test_send_all(int fd, const char *request)
 {
     size_t remaining = strlen(request);
@@ -227,6 +241,7 @@ health_test_request(uint16_t port, const char *request,
     ck_assert_uint_gt(responseSize, 0U);
 
     fd = health_test_connect(port);
+    health_test_set_recv_timeout(fd, 2000U);
     health_test_send_all(fd, request);
 
     while (used + 1U < responseSize) {
@@ -406,6 +421,27 @@ START_TEST(test_healthz_reports_aggregate_json)
 }
 END_TEST
 
+START_TEST(test_health_slow_client_does_not_block_listener)
+{
+    char response[HEALTH_TEST_RESPONSE_SIZE];
+    int slowClient;
+    uint16_t port = health_test_start_listener(false);
+
+    Razorback_Health_SetStartupComplete(true);
+
+    slowClient = health_test_connect(port);
+    health_test_send_all(slowClient, "GET /livez HTTP/1.1");
+
+    health_test_request(port,
+                        "GET /livez HTTP/1.1\r\n",
+                        response, sizeof(response));
+    ck_assert_ptr_nonnull(strstr(response, "HTTP/1.1 200 OK"));
+    ck_assert_ptr_nonnull(strstr(response, "\r\n\r\nok\n"));
+
+    close(slowClient);
+}
+END_TEST
+
 static Suite *
 health_suite(void)
 {
@@ -421,6 +457,7 @@ health_suite(void)
     tcase_add_test(testcase, test_health_readyz_fails_for_unregistered_or_emergency_context);
     tcase_add_test(testcase, test_health_custom_ready_check_affects_probe);
     tcase_add_test(testcase, test_healthz_reports_aggregate_json);
+    tcase_add_test(testcase, test_health_slow_client_does_not_block_listener);
     tcase_set_timeout(testcase, 20);
 
     suite_add_tcase(suite, testcase);

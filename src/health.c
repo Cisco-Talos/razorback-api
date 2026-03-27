@@ -33,8 +33,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 
 #define HEALTH_DEFAULT_BIND_ADDRESS "127.0.0.1"
+#define HEALTH_REQUEST_LINE_TIMEOUT_MS 250U
 #define HEALTH_HTTP_OK "HTTP/1.1 200 OK"
 #define HEALTH_HTTP_BAD_REQUEST "HTTP/1.1 400 Bad Request"
 #define HEALTH_HTTP_METHOD_NOT_ALLOWED "HTTP/1.1 405 Method Not Allowed"
@@ -710,8 +712,13 @@ Health_HandleClient(const struct Socket *socket)
 
     memset(&request, 0, sizeof(request));
 
-    length = Socket_Rx_Until(socket, &line, '\n');
+    length = Socket_Rx_Until_Ex(socket, &line, '\n', HEALTH_REQUEST_LINE_TIMEOUT_MS);
     if (length <= 0) {
+        if (length < 0 && errno == EAGAIN) {
+            rzb_log(LOG_DEBUG, LOG_C_CORE,
+                    "%s: Timed out waiting for health request line",
+                    __func__);
+        }
         free(line);
         return false;
     }
