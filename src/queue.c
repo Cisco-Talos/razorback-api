@@ -202,20 +202,6 @@ Queue_Enqueue_Settlement(struct Queue *queue, struct Message *message,
     if (!message->brokerAckPending)
         return true;
 
-    if (atomic_load(&queue->bShuttingDown)) {
-        rzb_log(LOG_DEBUG, LOG_C_QUEUE,
-                "%s: Refusing to queue settlement for '%s' because shutdown has started",
-                __func__, queue->sName);
-        return false;
-    }
-
-    if (queue->pendingSettlements == NULL) {
-        rzb_log(LOG_ERR, LOG_C_QUEUE,
-                "%s: queue '%s' has no pending settlement list",
-                __func__, queue->sName);
-        return false;
-    }
-
     if ((settlement = calloc(1, sizeof(*settlement))) == NULL) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to allocate pending settlement", __func__);
         return false;
@@ -225,11 +211,32 @@ Queue_Enqueue_Settlement(struct Queue *queue, struct Message *message,
     settlement->acknowledge = acknowledge;
     settlement->requeue = requeue;
 
-    if (!List_Push(queue->pendingSettlements, settlement)) {
-        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to enqueue pending settlement", __func__);
+    Mutex_Lock(queue->mSettlementMutex);
+    if (atomic_load(&queue->bShuttingDown)) {
+        rzb_log(LOG_DEBUG, LOG_C_QUEUE,
+                "%s: Refusing to queue settlement for '%s' because shutdown has started",
+                __func__, queue->sName);
+        Mutex_Unlock(queue->mSettlementMutex);
         free(settlement);
         return false;
     }
+
+    if (queue->pendingSettlements == NULL) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE,
+                "%s: queue '%s' has no pending settlement list",
+                __func__, queue->sName);
+        Mutex_Unlock(queue->mSettlementMutex);
+        free(settlement);
+        return false;
+    }
+
+    if (!List_Push(queue->pendingSettlements, settlement)) {
+        rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to enqueue pending settlement", __func__);
+        Mutex_Unlock(queue->mSettlementMutex);
+        free(settlement);
+        return false;
+    }
+    Mutex_Unlock(queue->mSettlementMutex);
 
     message->brokerAckPending = false;
     return true;
@@ -853,6 +860,10 @@ Queue_Create_With_Host (const char * p_sQueueName,
     {
         goto error;
     }
+    if ((l_pQueue->mSettlementMutex = Mutex_Create(MUTEX_MODE_NORMAL)) == NULL)
+    {
+        goto error;
+    }
     if ((l_pQueue->pendingSettlements = List_Create(LIST_MODE_GENERIC,
                                                     NULL,
                                                     NULL,
@@ -881,6 +892,8 @@ error:
             Mutex_Destroy(l_pQueue->mReadMutex);
         if (l_pQueue->mWriteMutex != NULL)
             Mutex_Destroy(l_pQueue->mWriteMutex);
+        if (l_pQueue->mSettlementMutex != NULL)
+            Mutex_Destroy(l_pQueue->mSettlementMutex);
         if (l_pQueue->pendingSettlements != NULL)
             List_Destroy(l_pQueue->pendingSettlements);
         free(l_pQueue->sName);
@@ -902,7 +915,9 @@ Queue_Terminate (struct Queue *p_pQ)
 
     Mutex_Lock (p_pQ->mReadMutex);
     Mutex_Lock (p_pQ->mWriteMutex);
+    Mutex_Lock (p_pQ->mSettlementMutex);
     atomic_store(&p_pQ->bShuttingDown, true);
+    Mutex_Unlock (p_pQ->mSettlementMutex);
     heartbeat = p_pQ->pWriteHeartbeat;
     p_pQ->pWriteHeartbeat = NULL;
     Mutex_Unlock (p_pQ->mWriteMutex);
@@ -940,6 +955,7 @@ Queue_Terminate (struct Queue *p_pQ)
         List_Destroy(p_pQ->pendingSettlements);
     Mutex_Destroy (p_pQ->mReadMutex);
     Mutex_Destroy (p_pQ->mWriteMutex);
+    Mutex_Destroy (p_pQ->mSettlementMutex);
     free(p_pQ->sName);
     free(p_pQ);
 }

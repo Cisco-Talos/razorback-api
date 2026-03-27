@@ -64,6 +64,7 @@ struct Queue
     int iFlags;                     ///< Flags (read/write/etc)
     Mutex_t *mReadMutex;            ///< Read Lock
     Mutex_t *mWriteMutex;           ///< Write lock
+    Mutex_t *mSettlementMutex;      ///< Settlement lock for deferred broker ack/reject coordination
     List_t *pendingSettlements;     ///< Deferred broker ack/reject requests owned by the read side
     const char *sHostname;          ///< Broker hostname
     const char *sVhost;             ///< Broker virtual host
