@@ -64,6 +64,7 @@ static void health_test_send_all(int fd, const char *request);
 static void health_test_request(uint16_t port, const char *request,
                                 char *response, size_t responseSize);
 static bool health_test_custom_check(void *userData);
+static void *health_test_stop_listener(void *userData);
 static void health_test_setup(void);
 static void health_test_teardown(void);
 
@@ -271,6 +272,15 @@ health_test_custom_check(void *userData)
     return *healthy;
 }
 
+static void *
+health_test_stop_listener(void *userData)
+{
+    (void)userData;
+
+    Razorback_Health_Stop();
+    return NULL;
+}
+
 static void
 health_test_setup(void)
 {
@@ -442,6 +452,42 @@ START_TEST(test_health_slow_client_does_not_block_listener)
 }
 END_TEST
 
+START_TEST(test_health_start_rejects_concurrent_restart_during_stop)
+{
+    char response[HEALTH_TEST_RESPONSE_SIZE];
+    RazorbackHealthServerConfig_t config;
+    pthread_t stopThread;
+    int slowClient;
+    uint16_t port = health_test_start_listener(false);
+
+    Razorback_Health_SetStartupComplete(true);
+
+    slowClient = health_test_connect(port);
+    health_test_send_all(slowClient, "GET /livez HTTP/1.1");
+
+    ck_assert_int_eq(pthread_create(&stopThread, NULL, health_test_stop_listener, NULL), 0);
+    health_test_sleep_ms(50U);
+
+    config.bindAddress = "127.0.0.1";
+    config.port = g_nextHealthPort++;
+    if (g_nextHealthPort >= 49000U)
+        g_nextHealthPort = 48080U;
+    config.requireContextsForReady = false;
+
+    ck_assert(!Razorback_Health_Start(&config));
+    ck_assert_int_eq(pthread_join(stopThread, NULL), 0);
+
+    ck_assert(Razorback_Health_Start(&config));
+    health_test_request(config.port,
+                        "GET /livez HTTP/1.1\r\n",
+                        response, sizeof(response));
+    ck_assert_ptr_nonnull(strstr(response, "HTTP/1.1 200 OK"));
+    ck_assert_ptr_nonnull(strstr(response, "\r\n\r\nok\n"));
+
+    close(slowClient);
+}
+END_TEST
+
 static Suite *
 health_suite(void)
 {
@@ -458,6 +504,7 @@ health_suite(void)
     tcase_add_test(testcase, test_health_custom_ready_check_affects_probe);
     tcase_add_test(testcase, test_healthz_reports_aggregate_json);
     tcase_add_test(testcase, test_health_slow_client_does_not_block_listener);
+    tcase_add_test(testcase, test_health_start_rejects_concurrent_restart_during_stop);
     tcase_set_timeout(testcase, 20);
 
     suite_add_tcase(suite, testcase);

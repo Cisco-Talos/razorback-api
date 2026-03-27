@@ -61,6 +61,7 @@ struct RazorbackHealthState
     char *bindAddress;
     uint16_t port;
     bool requireContextsForReady;
+    bool stopping;
     atomic_bool startupComplete;
     RazorbackHealthCheckId_t nextCheckId;
 };
@@ -104,6 +105,7 @@ static struct RazorbackHealthState sg_health = {
     .bindAddress = NULL,
     .port = 0,
     .requireContextsForReady = false,
+    .stopping = false,
     .startupComplete = false,
     .nextCheckId = 1U
 };
@@ -218,6 +220,7 @@ Health_Initialize(void)
 
     atomic_init(&sg_health.startupComplete, false);
     sg_health.nextCheckId = 1U;
+    sg_health.stopping = false;
     return true;
 }
 
@@ -238,6 +241,7 @@ Health_Shutdown_Global(void)
     sg_health.bindAddress = NULL;
     sg_health.port = 0;
     sg_health.requireContextsForReady = false;
+    sg_health.stopping = false;
     Mutex_Unlock(sg_health.mutex);
 
     Mutex_Destroy(sg_health.mutex);
@@ -286,11 +290,11 @@ Razorback_Health_Start(const RazorbackHealthServerConfig_t *config)
     }
 
     Mutex_Lock(sg_health.mutex);
-    if (sg_health.thread != NULL) {
+    if (sg_health.thread != NULL || sg_health.stopping) {
         Mutex_Unlock(sg_health.mutex);
         Socket_Close(listener);
         free(bindAddress);
-        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Health listener is already running", __func__);
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Health listener is already running or stopping", __func__);
         return false;
     }
 
@@ -318,15 +322,28 @@ SO_PUBLIC void
 Razorback_Health_Stop(void)
 {
     Thread_t *thread = NULL;
+    struct Socket *listener = NULL;
+    char *bindAddress = NULL;
 
     if (!Health_IsInitialized())
         return;
 
     Mutex_Lock(sg_health.mutex);
-    if (sg_health.thread != NULL) {
-        thread = sg_health.thread;
-        sg_health.thread = NULL;
+    if (sg_health.stopping) {
+        Mutex_Unlock(sg_health.mutex);
+        return;
     }
+
+    thread = sg_health.thread;
+    listener = sg_health.listener;
+    bindAddress = sg_health.bindAddress;
+
+    sg_health.stopping = true;
+    sg_health.thread = NULL;
+    sg_health.listener = NULL;
+    sg_health.bindAddress = NULL;
+    sg_health.port = 0;
+    sg_health.requireContextsForReady = false;
     Mutex_Unlock(sg_health.mutex);
 
     if (thread != NULL) {
@@ -334,15 +351,12 @@ Razorback_Health_Stop(void)
         Thread_Destroy(thread);
     }
 
+    if (listener != NULL)
+        Socket_Close(listener);
+    free(bindAddress);
+
     Mutex_Lock(sg_health.mutex);
-    if (sg_health.listener != NULL) {
-        Socket_Close(sg_health.listener);
-        sg_health.listener = NULL;
-    }
-    free(sg_health.bindAddress);
-    sg_health.bindAddress = NULL;
-    sg_health.port = 0;
-    sg_health.requireContextsForReady = false;
+    sg_health.stopping = false;
     Mutex_Unlock(sg_health.mutex);
 }
 
