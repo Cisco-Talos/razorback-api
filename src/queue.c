@@ -907,6 +907,12 @@ Queue_Terminate (struct Queue *p_pQ)
     if ((p_pQ->iFlags & QUEUE_FLAG_RECV) == QUEUE_FLAG_RECV &&
             p_pQ->pReadSocket != NULL)
     {
+        if (!Queue_Process_Pending_Settlements(p_pQ, __func__)) {
+            rzb_log(LOG_WARNING, LOG_C_QUEUE,
+                    "%s: Failed to flush pending settlement requests on queue '%s' during shutdown;"
+                    " remaining deliveries will be settled by broker disconnect semantics",
+                    __func__, p_pQ->sName);
+        }
         Queue_EndReading (p_pQ);
         AMQP_Socket_Close (p_pQ->pReadSocket);
         p_pQ->pReadSocket = NULL;
@@ -981,8 +987,14 @@ Queue_Get_Ex(struct Queue *queue, bool autoAck, uint32_t timeoutMilliseconds)
         res = amqp_consume_message(queue->pReadSocket->pConn, &envelope, &timeout, 0);
         envelopeReady = (res.reply_type == AMQP_RESPONSE_NORMAL);
 
-        if (AMQP_RESPONSE_NORMAL == res.reply_type)
+        if (AMQP_RESPONSE_NORMAL == res.reply_type) {
+            if (!Queue_Process_Pending_Settlements(queue, __func__)) {
+                receiveError = "failed to process pending settlements";
+                errno = EIO;
+                goto cleanup;
+            }
             break;
+        }
 
         if (res.reply_type == AMQP_RESPONSE_LIBRARY_EXCEPTION &&
             res.library_error == AMQP_STATUS_TIMEOUT) {
