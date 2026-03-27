@@ -60,6 +60,18 @@ typedef void (*TelemetryObservableCallback_t)(
     void *userData
 );
 
+typedef struct TelemetryHeader
+{
+    char *name;
+    char *value;
+} TelemetryHeader_t;
+
+typedef struct TelemetryInjectedHeaders
+{
+    size_t count;
+    TelemetryHeader_t *entries;
+} TelemetryInjectedHeaders_t;
+
 /**
  * Capture the current tracing context into a reusable carrier.
  * @param context Pointer to the carrier slot to update.
@@ -108,6 +120,23 @@ SO_PUBLIC extern TelemetrySpan_t * Telemetry_StartMessageProcessSpan(
  * @param context Pointer to the carrier slot to clear.
  */
 SO_PUBLIC extern void Telemetry_ClearContext(TelemetryContextCarrier_t **context);
+
+/**
+ * Inject the current tracing context into a reusable header list.
+ * @param headers Header container to populate.
+ * @return true on success, false on error.
+ */
+SO_PUBLIC extern bool Telemetry_InjectCurrentContext(
+    TelemetryInjectedHeaders_t *headers
+);
+
+/**
+ * Release a header list populated by Telemetry_InjectCurrentContext().
+ * @param headers Header container to clear.
+ */
+SO_PUBLIC extern void Telemetry_FreeInjectedHeaders(
+    TelemetryInjectedHeaders_t *headers
+);
 
 /**
  * Add a string attribute to a span.

@@ -25,22 +25,10 @@
 extern "C" {
 #endif
 
-struct TelemetryHeader
-{
-    char *name;
-    char *value;
-};
-
-struct TelemetryInjectedHeaders
-{
-    size_t count;
-    struct TelemetryHeader *entries;
-};
-
 struct TelemetryContextCarrier
 {
     size_t count;
-    struct TelemetryHeader *entries;
+    TelemetryHeader_t *entries;
 };
 
 struct RazorbackContext;
@@ -55,18 +43,14 @@ TelemetrySpan_t *
 Telemetry_StartQueueSendSpan(const struct Queue *queue,
                              const struct Message *message,
                              const char *destination,
-                             struct TelemetryInjectedHeaders *headers);
+                             TelemetryInjectedHeaders_t *headers);
 
 TelemetrySpan_t *
 Telemetry_StartQueueReceiveSpan(const struct Queue *queue,
                                 const struct Message *message);
 
-bool Telemetry_InjectCurrentContext(struct TelemetryInjectedHeaders *headers);
-
 bool Telemetry_IsLogEnabled(void);
 void Telemetry_LogMessage(unsigned level, uint64_t component, const char *message);
-
-void Telemetry_FreeInjectedHeaders(struct TelemetryInjectedHeaders *headers);
 
 void Telemetry_RecordDispatcherWait(double durationSeconds,
                                     const char *outcome,
