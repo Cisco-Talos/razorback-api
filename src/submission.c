@@ -485,6 +485,9 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
     {
         // You shall not pass!!!
         rzb_log(LOG_ERR,LOG_C_CORE, "%s: Block submission listing its self as parent dropped.", __func__);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_ERROR);
+        if (p_pItem->submittedCallback != NULL)
+            p_pItem->submittedCallback(p_pItem);
         BlockPool_Item_Unlock(p_pItem);
         BlockPool_DestroyItem(p_pItem);
         return RZB_SUBMISSION_ERROR;
@@ -493,6 +496,9 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
 
     if (p_pSf_Flags == NULL || p_pEnt_Flags == NULL) {
         rzb_log(LOG_ERR,LOG_C_CORE, "%s: NULL pointer arguments to function", __func__);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_ERROR);
+        if (p_pItem->submittedCallback != NULL)
+            p_pItem->submittedCallback(p_pItem);
         BlockPool_Item_Unlock(p_pItem);
         BlockPool_DestroyItem(p_pItem);
         return RZB_SUBMISSION_ERROR;
@@ -505,7 +511,7 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
         Telemetry_RecordBlockSubmitDecision("invalid_datatype",
                                            Submission_Origin_Label(p_pItem),
                                            p_pItem->context);
-        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_ERROR);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_NO_TYPE);
         if (p_pItem->submittedCallback != NULL)
             p_pItem->submittedCallback(p_pItem);
 
