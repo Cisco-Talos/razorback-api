@@ -99,6 +99,6 @@ ResponseQueue_Terminate (uuid_t p_pCollectorId)
     l_pQueue = QueueList_Find (sg_qlResponseQueue, p_pCollectorId);
     if (l_pQueue == NULL)
         return;
-    Queue_Terminate (l_pQueue);
     QueueList_Remove(sg_qlResponseQueue, p_pCollectorId);
+    Queue_Terminate (l_pQueue);
 }

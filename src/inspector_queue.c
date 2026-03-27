@@ -96,6 +96,6 @@ InspectorQueue_Terminate (uuid_t p_pApplicationType)
     if (l_pQueue == NULL)
         return;
 
-    Queue_Terminate (l_pQueue);
     QueueList_Remove(sg_qlInspectorQueue, p_pApplicationType);
+    Queue_Terminate (l_pQueue);
 }

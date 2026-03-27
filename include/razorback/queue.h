@@ -66,6 +66,8 @@ struct Queue
     Mutex_t *mWriteMutex;           ///< Write lock
     Mutex_t *mSettlementMutex;      ///< Settlement lock for deferred broker ack/reject coordination
     List_t *pendingSettlements;     ///< Deferred broker ack/reject requests owned by the read side
+    uint64_t readConnectionSerial;  ///< Monotonic serial for the current read-side broker connection
+    atomic_uint refs;               ///< Combined owner + in-flight API reference count
     const char *sHostname;          ///< Broker hostname
     const char *sVhost;             ///< Broker virtual host
     uint32_t iPort;                 ///< Broker port
@@ -126,6 +128,8 @@ SO_PUBLIC extern struct Queue * Queue_Create_With_Host(
 
 /**
  * Terminates the queue.
+ * Queue shutdown begins immediately, but internal broker resources are released
+ * only after the last in-flight queue reference has been dropped.
  * @param p_pQ the queue to terminate.
  * @return No return value.
  */
@@ -144,6 +148,9 @@ SO_PUBLIC extern struct Message * Queue_Get(struct Queue *queue);
  * @param autoAck true to ack before returning, false to leave the delivery pending.
  * @param timeoutMilliseconds timeout for the receive wait. A value of 0 blocks indefinitely
  *        by restarting timed receive polls internally.
+ * @note A returned Message has single-thread ownership. Ownership may be transferred
+ *       to another thread, but concurrent use or concurrent settlement of the same
+ *       Message is not supported.
  * @return A message struct, NULL on error or timeout (errno==EAGAIN on timeout).
  */
 SO_PUBLIC extern struct Message * Queue_Get_Ex(
@@ -158,6 +165,8 @@ SO_PUBLIC extern struct Message * Queue_Get_Ex(
  * from the queue's read thread.
  * @param queue the queue.
  * @param message the received message.
+ * @note Message ownership is single-threaded. Concurrent settlement of the same
+ *       Message from multiple threads is not supported.
  * @return true if the settlement request was queued, false on failure.
  */
 SO_PUBLIC extern bool Queue_Ack_Message(struct Queue *queue, struct Message *message);
@@ -169,6 +178,8 @@ SO_PUBLIC extern bool Queue_Ack_Message(struct Queue *queue, struct Message *mes
  * @param queue the queue.
  * @param message the received message.
  * @param requeue true to request broker redelivery, false to discard.
+ * @note Message ownership is single-threaded. Concurrent settlement of the same
+ *       Message from multiple threads is not supported.
  * @return true if the settlement request was queued, false on failure.
  */
 SO_PUBLIC extern bool Queue_Reject_Message(
@@ -185,6 +196,8 @@ SO_PUBLIC extern bool Queue_Reject_Message(
  * @param message the received message.
  * @param ackMessage true to ack the delivery, false to reject it.
  * @param requeueMessage when rejecting, true to request broker redelivery.
+ * @note Message ownership is single-threaded. Concurrent settlement of the same
+ *       Message from multiple threads is not supported.
  * @return true if the settlement request was queued, false on failure.
  */
 SO_PUBLIC extern bool Queue_Settle_Message(
