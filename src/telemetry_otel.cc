@@ -73,6 +73,7 @@
 #include <opentelemetry/trace/noop.h>
 #include <opentelemetry/trace/propagation/http_trace_context.h>
 #include <opentelemetry/trace/provider.h>
+#include <opentelemetry/trace/span_metadata.h>
 #include <opentelemetry/trace/scope.h>
 #include <opentelemetry/trace/span.h>
 #include <opentelemetry/trace/tracer.h>
@@ -954,6 +955,14 @@ GetLinkedSpanContext(const context_api::Context &context) noexcept
   return trace_api::GetSpan(context)->GetContext();
 }
 
+context_api::Context
+MarkContextAsRoot(const context_api::Context &context) noexcept
+{
+  context_api::Context root_context = context;
+
+  return root_context.SetValue(trace_api::kIsRootSpanKey, true);
+}
+
 void
 FreeTelemetryHeaders(struct TelemetryHeader *entries, size_t count) noexcept
 {
@@ -1234,7 +1243,9 @@ StartSpanWithLink(const char *span_name,
   trace_api::StartSpanOptions options;
   trace_api::SpanContext linked_context = trace_api::SpanContext::GetInvalid();
   context_api::Context extracted_context;
+  context_api::Context parent_context;
   context_api::Context scope_context = context_api::RuntimeContext::GetCurrent();
+  bool has_extracted_parent = false;
 
   if (!state.tracing_enabled || state.tracer == nullptr)
   {
@@ -1258,8 +1269,13 @@ StartSpanWithLink(const char *span_name,
     handle = new TelemetrySpan;
     extracted_context = ExtractMessageContext(message);
     linked_context = GetLinkedSpanContext(extracted_context);
+    has_extracted_parent = linked_context.IsValid();
     if (message_context_mode == MessageContextMode::kParent)
-      options.parent = extracted_context;
+    {
+      parent_context = has_extracted_parent ? extracted_context
+                                            : MarkContextAsRoot(extracted_context);
+      options.parent = parent_context;
+    }
 
     if (message_context_mode == MessageContextMode::kLink && linked_context.IsValid())
     {
@@ -1273,7 +1289,7 @@ StartSpanWithLink(const char *span_name,
       handle->span = state.tracer->StartSpan(MakeSpanName(span_name, destination), options);
     }
     if (message_context_mode == MessageContextMode::kParent)
-      scope_context = extracted_context;
+      scope_context = parent_context;
     scope_context = trace_api::SetSpan(scope_context, handle->span);
     handle->token = context_api::RuntimeContext::Attach(scope_context);
 
