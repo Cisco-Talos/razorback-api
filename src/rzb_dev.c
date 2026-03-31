@@ -86,6 +86,16 @@ RzbDev_SetDefaultLogMask(void)
 #endif
 }
 
+static void
+RzbDev_ClearFailedPreparedFile(struct Block *block)
+{
+    if (block == NULL)
+        return;
+
+    free(block->data.fileName);
+    memset(&block->data, 0, sizeof(block->data));
+}
+
 static const char *
 RzbDev_ResultLabel(uint8_t result)
 {
@@ -315,6 +325,8 @@ RzbDev_InspectThread(Thread_t *thread)
     struct Block *block = NULL;
     char *fileName = NULL;
     void *threadData = NULL;
+    bool threadInitialized = false;
+    bool filePrepared = false;
 
     run = Thread_GetUserData(thread);
     context = Thread_GetContext(thread);
@@ -323,11 +335,14 @@ RzbDev_InspectThread(Thread_t *thread)
     if (run == NULL || context == NULL || run->inputItem == NULL)
         return;
 
-    if (context->inspector.hooks->initThread != NULL &&
-        !context->inspector.hooks->initThread(&threadData))
-    {
-        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Nugget initThread failed", __func__);
-        goto cleanup;
+    if (context->inspector.hooks->initThread != NULL) {
+        if (!context->inspector.hooks->initThread(&threadData)) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Nugget initThread failed", __func__);
+            goto cleanup;
+        }
+        threadInitialized = true;
+    } else {
+        threadInitialized = true;
     }
 
     block = Block_Clone(run->inputItem->pEvent->pBlock);
@@ -349,10 +364,12 @@ RzbDev_InspectThread(Thread_t *thread)
 
     if (!Transfer_Prepare_File(block, fileName, false)) {
         fileName = NULL;
+        RzbDev_ClearFailedPreparedFile(block);
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to prepare file-backed block", __func__);
         goto cleanup;
     }
     fileName = NULL;
+    filePrepared = true;
 
     run->result = context->inspector.hooks->processBlock(block,
                                                          run->inputItem->pEvent->pId,
@@ -362,11 +379,16 @@ RzbDev_InspectThread(Thread_t *thread)
 cleanup:
     free(fileName);
     if (block != NULL) {
-        Transfer_Free(block, NULL);
+        if (filePrepared)
+            Transfer_Free(block, NULL);
         Block_Destroy(block);
     }
-    if (context != NULL && context->inspector.hooks->cleanupThread != NULL)
+    if (threadInitialized &&
+        context != NULL &&
+        context->inspector.hooks->cleanupThread != NULL)
+    {
         context->inspector.hooks->cleanupThread(threadData);
+    }
 }
 
 int
