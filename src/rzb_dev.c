@@ -36,6 +36,7 @@
 #include <razorback/uuids.h>
 
 #include <getopt.h>
+#include <arpa/inet.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -60,6 +61,16 @@ RzbDev_Usage(const char *name)
 {
     fprintf(stderr, "Usage: %s [--debug] [--type=DATA_TYPE] <nugget-module> <file>\n",
             name);
+}
+
+static bool
+RzbDev_DisableTelemetryExporters(void)
+{
+#ifdef _MSC_VER
+    return _putenv_s("OTEL_SDK_DISABLED", "true") == 0;
+#else
+    return setenv("OTEL_SDK_DISABLED", "true", 1) == 0;
+#endif
 }
 
 static const char *
@@ -179,6 +190,76 @@ RzbDev_PrintJudgment(void *item, void *userData)
     return LIST_EACH_OK;
 }
 
+struct DevMetadataPrintState
+{
+    size_t index;
+};
+
+static int
+RzbDev_PrintMetadataItem(void *item, void *userData)
+{
+    struct NTLVItem *metadata = item;
+    struct DevMetadataPrintState *state = userData;
+    char *name = NULL;
+    char *type = NULL;
+    char addressBuffer[INET6_ADDRSTRLEN];
+    const char *value = NULL;
+    char numberBuffer[32];
+    uint16_t portValue;
+
+    if (metadata == NULL || state == NULL)
+        return LIST_EACH_ERROR;
+
+    state->index++;
+    name = UUID_Get_NameByUUID(metadata->uuidName, UUID_TYPE_NTLV_NAME);
+    type = UUID_Get_NameByUUID(metadata->uuidType, UUID_TYPE_NTLV_TYPE);
+
+    if (type != NULL && strcmp(type, NTLV_TYPE_STRING) == 0) {
+        value = (const char *)metadata->pData;
+    } else if (type != NULL && strcmp(type, NTLV_TYPE_JSON) == 0) {
+        value = (const char *)metadata->pData;
+    } else if (type != NULL && strcmp(type, NTLV_TYPE_IPv4_ADDR) == 0 &&
+               metadata->iLength == 4 &&
+               inet_ntop(AF_INET, metadata->pData, addressBuffer, sizeof(addressBuffer)) != NULL) {
+        value = addressBuffer;
+    } else if (type != NULL && strcmp(type, NTLV_TYPE_IPv6_ADDR) == 0 &&
+               metadata->iLength == 16 &&
+               inet_ntop(AF_INET6, metadata->pData, addressBuffer, sizeof(addressBuffer)) != NULL) {
+        value = addressBuffer;
+    } else if (type != NULL && strcmp(type, NTLV_TYPE_PORT) == 0 &&
+               metadata->iLength == sizeof(uint16_t)) {
+        memcpy(&portValue, metadata->pData, sizeof(portValue));
+        snprintf(numberBuffer, sizeof(numberBuffer), "%u", (unsigned int)portValue);
+        value = numberBuffer;
+    }
+
+    printf("  metadata[%zu]: name=%s type=%s length=%u",
+           state->index,
+           (name != NULL) ? name : "unknown",
+           (type != NULL) ? type : "unknown",
+           metadata->iLength);
+    if (value != NULL)
+        printf(" value=%s", value);
+    printf("\n");
+
+    free(name);
+    free(type);
+    return LIST_EACH_OK;
+}
+
+static void
+RzbDev_PrintMetadataList(const char *label, List_t *metadataList)
+{
+    struct DevMetadataPrintState state;
+
+    if (metadataList == NULL || List_Length(metadataList) == 0)
+        return;
+
+    printf("  %s_count: %zu\n", label, List_Length(metadataList));
+    state.index = 0;
+    (void)List_ForEach(metadataList, RzbDev_PrintMetadataItem, &state);
+}
+
 static int
 RzbDev_PrintSubmission(void *item, void *userData)
 {
@@ -202,6 +283,11 @@ RzbDev_PrintSubmission(void *item, void *userData)
            (unsigned long long)poolItem->pEvent->pBlock->pId->iLength);
     if (hashValue != NULL)
         printf("  hash: %s\n", hashValue);
+    if (poolItem->pEvent != NULL) {
+        RzbDev_PrintMetadataList("event_metadata", poolItem->pEvent->pMetaDataList);
+        if (poolItem->pEvent->pBlock != NULL)
+            RzbDev_PrintMetadataList("block_metadata", poolItem->pEvent->pBlock->pMetaDataList);
+    }
 
     free(typeName);
     free(hashValue);
@@ -322,6 +408,11 @@ main(int argc, char **argv)
 
     modulePath = argv[optind];
     filePath = argv[optind + 1];
+
+    if (!RzbDev_DisableTelemetryExporters()) {
+        fprintf(stderr, "%s: failed to disable OpenTelemetry SDK\n", argv[0]);
+        return 1;
+    }
 
     RZB_Init_API();
     if (debug)
