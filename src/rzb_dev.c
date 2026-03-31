@@ -73,6 +73,19 @@ RzbDev_DisableTelemetryExporters(void)
 #endif
 }
 
+static bool
+RzbDev_SetDefaultLogMask(void)
+{
+    if (getenv("RZB_LOG_MASK") != NULL)
+        return true;
+
+#ifdef _MSC_VER
+    return _putenv_s("RZB_LOG_MASK", "FFFFFFFFFFFFFEDF") == 0;
+#else
+    return setenv("RZB_LOG_MASK", "FFFFFFFFFFFFFEDF", 0) == 0;
+#endif
+}
+
 static const char *
 RzbDev_ResultLabel(uint8_t result)
 {
@@ -411,6 +424,10 @@ main(int argc, char **argv)
 
     if (!RzbDev_DisableTelemetryExporters()) {
         fprintf(stderr, "%s: failed to disable OpenTelemetry SDK\n", argv[0]);
+        return 1;
+    }
+    if (!RzbDev_SetDefaultLogMask()) {
+        fprintf(stderr, "%s: failed to set default RZB_LOG_MASK\n", argv[0]);
         return 1;
     }
 
