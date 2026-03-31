@@ -96,12 +96,14 @@ static struct RazorbackCommandAndControlHooks sg_DefaultHooks = {
 
 void
 CommandAndControl_Pause(void) {
-    Mutex_Lock(processLock);
+    if (processLock != NULL)
+        Mutex_Lock(processLock);
 }
 
 void
 CommandAndControl_Unpause(void) {
-    Mutex_Unlock(processLock);
+    if (processLock != NULL)
+        Mutex_Unlock(processLock);
 }
 
 bool
@@ -116,6 +118,12 @@ CommandAndControl_Start (struct RazorbackContext *p_pContext) {
 
     if (p_pContext->pCommandHooks == NULL)
         p_pContext->pCommandHooks = &sg_DefaultHooks;
+
+    if ((p_pContext->iFlags & CONTEXT_FLAG_DEV_TOOL) == CONTEXT_FLAG_DEV_TOOL) {
+        p_pContext->regOk = true;
+        Semaphore_Post(p_pContext->regSem);
+        return true;
+    }
 
     if ((p_pContext->iFlags & CONTEXT_FLAG_STAND_ALONE) ==
         CONTEXT_FLAG_STAND_ALONE) {

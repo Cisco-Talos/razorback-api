@@ -97,6 +97,19 @@ initThreading (void)
 #endif
 }
 
+bool
+Thread_Initialize(void)
+{
+#ifdef _MSC_VER
+    if (initialized == 0)
+        initThreading();
+#else
+    pthread_once(&g_once_control, initThreading);
+#endif
+
+    return (sg_threadList != NULL);
+}
+
 static void
 Thread_LogLaunchFailure(const char *threadName, const char *reason)
 {
@@ -442,6 +455,10 @@ Thread_GetCurrent(void)
 {
     Thread_t *l_pRet = NULL;
     rzb_thread_t l_tCurrent = Thread_GetCurrentId();
+
+    if (sg_threadList == NULL)
+        return NULL;
+
     l_pRet = (Thread_t *)List_Find(sg_threadList, &l_tCurrent);
     if (l_pRet == NULL)
         return NULL;

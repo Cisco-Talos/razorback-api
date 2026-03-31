@@ -105,6 +105,7 @@ struct RazorbackCommandAndControlHooks
 
 
 #define CONTEXT_FLAG_STAND_ALONE 0x00000001
+#define CONTEXT_FLAG_DEV_TOOL    0x00000002
 
 /** API Context
  */

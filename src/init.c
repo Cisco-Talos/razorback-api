@@ -20,6 +20,7 @@
 
 #include "init.h"
 #include "block_pool_private.h"
+#include "dev_mode.h"
 #include "health_internal.h"
 #include "submission_private.h"
 #include "telemetry.h"
@@ -76,7 +77,15 @@ RZB_Init_API(void)
     Magic_Init();
     initcache();
     initUuids();
+    if (!Thread_Initialize()) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize thread subsystem", __func__);
+        exit(1);
+    }
     initApi();
+    if (!Razorback_DevMode_Initialize()) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize local dev-mode support",
+                __func__);
+    }
     if (!Health_Initialize()) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize health subsystem, continuing without health",
                 __func__);

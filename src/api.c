@@ -41,6 +41,7 @@
 #endif //_MSC_VER
 #include "api_internal.h"
 #include "command_and_control.h"
+#include "dev_mode.h"
 #include "submission_private.h"
 #include "judgment_private.h"
 #include "runtime_config.h"
@@ -76,6 +77,8 @@ void Razorback_Destroy_Context(struct RazorbackContext *context) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Context is NULL", __func__);
         return;
     }
+    if ((context->iFlags & CONTEXT_FLAG_DEV_TOOL) == CONTEXT_FLAG_DEV_TOOL)
+        Razorback_DevMode_UnregisterContext(context);
     if (context->inspector.dataTypeList != NULL)
         free(context->inspector.dataTypeList);
     if (context->regSem != NULL)
@@ -152,7 +155,7 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
     uuid_copy (context->uuidNuggetId, nuggetId);
     uuid_copy (context->uuidNuggetType, uuidInspector);
     uuid_copy (context->uuidApplicationType, applicationType);
-    context->iFlags = 0;
+    context->iFlags = Razorback_DevMode_IsEnabled() ? CONTEXT_FLAG_DEV_TOOL : 0;
     context->inspector.dataTypeCount = dataTypeCount;
     context->inspector.dataTypeList = dataTypeList;
     context->inspector.dataTypeList = calloc(dataTypeCount, sizeof(uuid_t));
@@ -169,6 +172,18 @@ Razorback_Init_Inspection_Context (uuid_t nuggetId,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to initialize context", __func__);
         Razorback_Destroy_Context(context);
         return NULL;
+    }
+
+    if ((context->iFlags & CONTEXT_FLAG_DEV_TOOL) == CONTEXT_FLAG_DEV_TOOL) {
+        if (!Razorback_DevMode_RegisterContext(context)) {
+            rzb_log(LOG_ERR, LOG_C_CORE,
+                    "%s: Failed to initialize dev-mode capture state",
+                    __func__);
+            Razorback_Remove_Context(context);
+            Razorback_Destroy_Context(context);
+            return NULL;
+        }
+        return context;
     }
 
     if ((context->inspector.judgmentQueue = Queue_Create(JUDGMENT_QUEUE, false, QUEUE_FLAG_SEND)) == NULL) {
@@ -208,7 +223,7 @@ Razorback_Init_Output_Context (uuid_t nuggetId,
     uuid_copy (context->uuidNuggetId, nuggetId);
     uuid_copy (context->uuidNuggetType, uuidOutput);
     uuid_copy (context->uuidApplicationType, applicationType);
-    context->iFlags = 0;
+    context->iFlags = Razorback_DevMode_IsEnabled() ? CONTEXT_FLAG_DEV_TOOL : 0;
     context->pCommandHooks = NULL;
     context->inspector.hooks = NULL;
     context->output.threads = List_Create(LIST_MODE_GENERIC,
@@ -244,6 +259,8 @@ Razorback_Init_Collection_Context (uuid_t nuggetId,
     uuid_copy (context->uuidNuggetType, uuidCollection);
     uuid_copy (context->uuidApplicationType, applicationType);
     context->iFlags = CONTEXT_FLAG_STAND_ALONE;
+    if (Razorback_DevMode_IsEnabled())
+        context->iFlags |= CONTEXT_FLAG_DEV_TOOL;
     context->inspector.dataTypeCount = 0;
     context->inspector.dataTypeList = NULL;
     context->pCommandHooks = NULL;
@@ -268,15 +285,24 @@ Kill_Output_Thread(void *ut, void *ud) {
 
 SO_PUBLIC void
 Razorback_Shutdown_Context (struct RazorbackContext *context) {
-    CommandAndControl_SendBye(context);
+    bool useCommandAndControl;
 
-    CommandAndControl_Pause();
-    List_Remove(sg_ContextList, context);
-    CommandAndControl_Unpause();
+    useCommandAndControl =
+        ((context->iFlags & CONTEXT_FLAG_DEV_TOOL) != CONTEXT_FLAG_DEV_TOOL);
+
+    if (useCommandAndControl) {
+        CommandAndControl_SendBye(context);
+        CommandAndControl_Pause();
+        List_Remove(sg_ContextList, context);
+        CommandAndControl_Unpause();
+    } else {
+        List_Remove(sg_ContextList, context);
+    }
 
     Inspection_Shutdown(context);
     Submission_Shutdown(context);
-    if ((context->iFlags & CONTEXT_FLAG_STAND_ALONE) ==
+    if (useCommandAndControl &&
+        (context->iFlags & CONTEXT_FLAG_STAND_ALONE) ==
         CONTEXT_FLAG_STAND_ALONE) {
        CommandAndControl_Shutdown();
     }
@@ -344,6 +370,18 @@ Razorback_Render_Verdict (struct Judgment *judgment) {
     }
 
     context = Thread_GetCurrentContext();
+    if (context == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to resolve current context", __func__);
+        return false;
+    }
+
+    if ((context->iFlags & CONTEXT_FLAG_DEV_TOOL) == CONTEXT_FLAG_DEV_TOOL) {
+        if (!Razorback_DevMode_CaptureVerdict(context, judgment)) {
+            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to capture local dev verdict", __func__);
+            return false;
+        }
+        return true;
+    }
 
     if ((message = MessageJudgmentSubmission_Initialize (JUDGMENT_REASON_ALERT, judgment)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);

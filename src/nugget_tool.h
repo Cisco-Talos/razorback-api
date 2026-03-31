@@ -16,43 +16,28 @@
  *  MA 02110-1301, USA.
  */
 
-#ifndef RAZORBACK_INIT_H
-#define RAZORBACK_INIT_H
+#ifndef RAZORBACK_NUGGET_TOOL_H
+#define RAZORBACK_NUGGET_TOOL_H
+
 #include <razorback/types.h>
-#ifdef __cplusplus
-extern "C" {
+
+#ifdef _MSC_VER
+#include <windows.h>
 #endif
-// log.c
-extern bool configureLogging (void);
 
-// local_cache.c
-extern void initcache (void);
-
-// uuids.c
-extern void initUuids (void);
-
-// runtime_config.c
-bool readApiConfig (void);
-
-// api.c
-void initApi (void);
-
-// thread.c
-bool Thread_Initialize(void);
-
-bool Crypto_Initialize(void);
-bool Socket_TLS_InitializeSharedState(void);
-
-//magic.c
-bool Magic_Init(void);
-
-//messages/core.c
-bool Message_Init(void);
-
-//transfer/core.c
-bool Transfer_Init(void);
-
-#ifdef __cplusplus
-}
+struct NuggetToolModule
+{
+    char *path;
+#ifdef _MSC_VER
+    HMODULE handle;
+#else
+    void *handle;
 #endif
+    bool (*initNug)(void);
+    void (*shutdownNug)(void);
+};
+
+bool NuggetTool_LoadModule(const char *path, struct NuggetToolModule *module);
+void NuggetTool_UnloadModule(struct NuggetToolModule *module);
+
 #endif

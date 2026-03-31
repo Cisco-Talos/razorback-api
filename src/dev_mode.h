@@ -16,43 +16,32 @@
  *  MA 02110-1301, USA.
  */
 
-#ifndef RAZORBACK_INIT_H
-#define RAZORBACK_INIT_H
+#ifndef RAZORBACK_DEV_MODE_H
+#define RAZORBACK_DEV_MODE_H
+
 #include <razorback/types.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-// log.c
-extern bool configureLogging (void);
 
-// local_cache.c
-extern void initcache (void);
+bool Razorback_DevMode_Initialize(void);
+void Razorback_DevMode_SetEnabled(bool enabled);
+bool Razorback_DevMode_IsEnabled(void);
 
-// uuids.c
-extern void initUuids (void);
+bool Razorback_DevMode_RegisterContext(struct RazorbackContext *context);
+void Razorback_DevMode_UnregisterContext(struct RazorbackContext *context);
 
-// runtime_config.c
-bool readApiConfig (void);
+bool Razorback_DevMode_CaptureVerdict(struct RazorbackContext *context,
+                                      const struct Judgment *judgment);
+bool Razorback_DevMode_CaptureSubmission(struct RazorbackContext *context,
+                                         struct BlockPoolItem *item);
 
-// api.c
-void initApi (void);
-
-// thread.c
-bool Thread_Initialize(void);
-
-bool Crypto_Initialize(void);
-bool Socket_TLS_InitializeSharedState(void);
-
-//magic.c
-bool Magic_Init(void);
-
-//messages/core.c
-bool Message_Init(void);
-
-//transfer/core.c
-bool Transfer_Init(void);
+List_t *Razorback_DevMode_GetJudgments(struct RazorbackContext *context);
+List_t *Razorback_DevMode_GetSubmissions(struct RazorbackContext *context);
 
 #ifdef __cplusplus
 }
 #endif
+
 #endif

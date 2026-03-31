@@ -31,6 +31,7 @@
 #include <razorback/response_queue.h>
 
 #include "block_pool_private.h"
+#include "dev_mode.h"
 #include "submission_private.h"
 #include "local_cache.h"
 #include "connected_entity_private.h"
@@ -78,6 +79,10 @@ static int Submission_CacheLookupTiming_Cmp(void *a, void *b);
 static void Submission_CacheLookupTiming_Destroy(void *item);
 static void Submission_ClearCacheLookupTiming(struct BlockPoolItem *item);
 static void Submission_RecordCacheLookupStart(struct BlockPoolItem *item);
+static int Submission_Submit_DevMode(struct BlockPoolItem *p_pItem,
+                                     int p_iFlags,
+                                     uint32_t *p_pSf_Flags,
+                                     uint32_t *p_pEnt_Flags);
 static void Submission_RecordCacheLookupWait(struct BlockPoolItem *item, const char *result);
 static const char *Submission_Reason_Label(uint32_t reason);
 static void Submission_DestroySharedResources(void);
@@ -373,7 +378,13 @@ Submission_Shutdown(struct RazorbackContext *p_pContext)
     double drainDeadline;
     size_t cleanedCount;
 
-    if (p_pContext == NULL || p_pContext->submission.responseThreadPool == NULL)
+    if (p_pContext == NULL)
+        return;
+
+    if ((p_pContext->iFlags & CONTEXT_FLAG_DEV_TOOL) == CONTEXT_FLAG_DEV_TOOL)
+        return;
+
+    if (p_pContext->submission.responseThreadPool == NULL)
         return;
 
     drainDeadline = Telemetry_GetMonotonicTimeSeconds() +
@@ -403,6 +414,9 @@ Submission_Init(struct RazorbackContext *p_pContext)
 {
     if (p_pContext == NULL)
         return false;
+
+    if ((p_pContext->iFlags & CONTEXT_FLAG_DEV_TOOL) == CONTEXT_FLAG_DEV_TOOL)
+        return true;
 
     if (p_pContext->submission.responseThreadPool != NULL)
         return true;
@@ -471,6 +485,59 @@ Submission_GetContextSubmitQueueDepth(const struct RazorbackContext *p_pContext)
     return depth.count;
 }
 
+static int
+Submission_Submit_DevMode(struct BlockPoolItem *p_pItem,
+                          int p_iFlags,
+                          uint32_t *p_pSf_Flags,
+                          uint32_t *p_pEnt_Flags)
+{
+    int ret = RZB_SUBMISSION_OK;
+
+    if (p_pSf_Flags != NULL)
+        *p_pSf_Flags = 0;
+    if (p_pEnt_Flags != NULL)
+        *p_pEnt_Flags = 0;
+
+    if ((p_pItem->pEvent->pBlock->pParentId != NULL) &&
+        BlockId_IsEqual(p_pItem->pEvent->pBlock->pId,
+                        p_pItem->pEvent->pBlock->pParentId)) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Block submission listing its self as parent dropped.",
+                __func__);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_ERROR);
+        ret = RZB_SUBMISSION_ERROR;
+    } else if (p_pSf_Flags == NULL || p_pEnt_Flags == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL pointer arguments to function", __func__);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_ERROR);
+        ret = RZB_SUBMISSION_ERROR;
+    } else if (uuid_is_null(p_pItem->pEvent->pBlock->pId->uuidDataType) == 1) {
+        rzb_log(LOG_INFO, LOG_C_CORE, "%s: Submission with null data type dropped.",
+                __func__);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_NO_TYPE);
+        ret = RZB_SUBMISSION_NO_TYPE;
+    } else {
+        BlockPool_SetFlags(p_pItem, p_iFlags);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_FINALIZED);
+    }
+
+    if (!Razorback_DevMode_CaptureSubmission(p_pItem->context, p_pItem)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to capture local dev submission",
+                __func__);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_ERROR);
+        ret = RZB_SUBMISSION_ERROR;
+        if (p_pItem->submittedCallback != NULL)
+            p_pItem->submittedCallback(p_pItem);
+        BlockPool_Item_Unlock(p_pItem);
+        BlockPool_DestroyItem(p_pItem);
+        return ret;
+    }
+
+    if (p_pItem->submittedCallback != NULL)
+        p_pItem->submittedCallback(p_pItem);
+    BlockPool_Item_Unlock(p_pItem);
+    return ret;
+}
+
 SO_PUBLIC int
 Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_Flags, uint32_t *p_pEnt_Flags)
 {
@@ -479,6 +546,9 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
     uint32_t entflags = 0;
     BlockPool_Item_Lock(p_pItem);
     Telemetry_UpdateContext(&p_pItem->telemetryContext);
+
+    if ((p_pItem->context->iFlags & CONTEXT_FLAG_DEV_TOOL) == CONTEXT_FLAG_DEV_TOOL)
+        return Submission_Submit_DevMode(p_pItem, p_iFlags, p_pSf_Flags, p_pEnt_Flags);
 
     if ( (p_pItem->pEvent->pBlock->pParentId != NULL ) &&
             BlockId_IsEqual(p_pItem->pEvent->pBlock->pId, p_pItem->pEvent->pBlock->pParentId) )

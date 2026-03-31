@@ -70,6 +70,32 @@ int main(void)
 }
 ```
 
+## Tooling
+
+The API build now installs two helper binaries for nugget development and
+operation.
+
+`rzb-worker` loads a single nugget module through the existing `initNug()` /
+`shutdownNug()` interface and keeps it running with the normal Razorback
+runtime:
+
+```bash
+src/rzb-worker --debug --health-port=8080 /path/to/nugget.so
+```
+
+`rzb-dev` also loads a nugget through `initNug()` / `shutdownNug()`, but it
+enables an internal local-only dev mode first so the created context does not
+require broker connections or other external Razorback services. It runs one
+file through the nugget's inspection hook and prints the resulting judgments
+and submissions:
+
+```bash
+src/rzb-dev --type=image/svg+xml /path/to/nugget.so /path/to/input.file
+```
+
+If `--type` is omitted, `rzb-dev` will infer the datatype only when the nugget
+registers exactly one inspection datatype.
+
 ## Health Checks
 
 Razorback provides a small process-wide health subsystem for library consumers

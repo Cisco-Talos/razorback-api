@@ -15,18 +15,21 @@
 #  MA 02110-1301, USA.
 
 lib_LTLIBRARIES = librazorback_api.la
+bin_PROGRAMS = rzb-worker rzb-dev
 
 noinst_HEADERS = \
 api_internal.h \
 block_pool_private.h \
 command_and_control.h \
 connected_entity_private.h \
+dev_mode.h \
 fantasia.h \
 health_internal.h \
 init.h \
 inspection.h \
 judgment_private.h \
 local_cache.h \
+nugget_tool.h \
 messages/core.h \
 messages/cnc/core.h \
 runtime_config.h \
@@ -44,6 +47,7 @@ config_file.c \
 connected_entity.c \
 crypto.c \
 daemon.c \
+dev_mode.c \
 event.c \
 fantasia.c \
 hash.c \
@@ -100,6 +104,18 @@ transfer/http.c \
 transfer/ssh.c \
 uuids.c \
 telemetry_otel.cc
+
+rzb_worker_SOURCES = \
+rzb_worker.c \
+nugget_tool.c
+
+rzb_worker_LDADD = librazorback_api.la
+
+rzb_dev_SOURCES = \
+rzb_dev.c \
+nugget_tool.c
+
+rzb_dev_LDADD = librazorback_api.la
 
 #librazorback_api_la_CFLAGS = -DBUILDING_SO -I$(top_srcdir)/libssh/include -I$(top_srcdir)/include
 #librazorback_api_la_LDFLAGS = -version-info @APIVERSION@ @XCCFLAGS@ ../libssh/src/libssh.la
