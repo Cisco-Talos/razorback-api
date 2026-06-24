@@ -17,3 +17,6 @@
 [submodule "common_m4"]
 	path = common_m4
 	url = ../razorback-common-m4.git
+[submodule "schemas/razorback"]
+	path = schemas/razorback
+	url = git@github.com:Cisco-Talos/razorback-schemas.git

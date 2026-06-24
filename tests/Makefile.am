@@ -18,20 +18,21 @@
 noinst_PROGRAMS= logTest daemonTest configTest
 
 configTest_SOURCES = configTest.c
-configTest_LDADD = -L../src -lrazorback_api @LIBS@
+configTest_LDADD = -L../src -lrazorback_api @OPENTELEMETRY_CPP_LIBS@ @LIBS@
 
 logTest_SOURCES = logTest.c
-logTest_LDADD = -L../src -lrazorback_api @LIBS@
+logTest_LDADD = -L../src -lrazorback_api @OPENTELEMETRY_CPP_LIBS@ @LIBS@
 
 #mqTest_SOURCES = mqTest.c
 #mqTest_LDADD = -L../src -lrazorback_api 
 
 daemonTest_SOURCES = daemonTest.c
-daemonTest_LDADD = -L../src -lrazorback_api @LIBS@
+daemonTest_LDADD = -L../src -lrazorback_api @OPENTELEMETRY_CPP_LIBS@ @LIBS@
 
 if HAVE_CHECK
 check_PROGRAMS = test_hash test_block_id test_list test_string_list \
-	test_uuids test_config_file test_timer test_health
+	test_uuids test_config_file test_timer test_health test_message_body \
+	test_messages_next test_config_next test_schema_conformance
 TESTS = $(check_PROGRAMS)
 
 TESTS_DIR_CPPFLAGS = $(AM_CPPFLAGS) \
@@ -70,6 +71,34 @@ test_health_SOURCES = test_health.c test_runtime_support.c \
 	../src/list.c ../src/lock.c ../src/thread.c ../src/socket.c ../src/health.c
 test_health_CFLAGS = $(CHECK_CFLAGS)
 test_health_LDADD = $(CHECK_LIBS) @LIBS@
+
+MESSAGE_BODY_TEST_CPPFLAGS = $(AM_CPPFLAGS) \
+	-DRAZORBACK_SCHEMA_FIXTURE_DIR=\"$(abs_top_srcdir)/schemas/razorback/fixtures/messages\"
+
+test_message_body_SOURCES = test_message_body.c ../src/message_body.c
+test_message_body_CFLAGS = $(CHECK_CFLAGS)
+test_message_body_CPPFLAGS = $(MESSAGE_BODY_TEST_CPPFLAGS)
+test_message_body_LDADD = $(CHECK_LIBS) @LIBS@
+
+test_config_next_SOURCES = test_config_next.c ../src/config_next.c
+test_config_next_CFLAGS = $(CHECK_CFLAGS)
+test_config_next_LDADD = $(CHECK_LIBS) @LIBS@
+
+SCHEMA_CONFORMANCE_TEST_CPPFLAGS = $(AM_CPPFLAGS) \
+	-DRAZORBACK_REPO_ROOT=\"$(abs_top_srcdir)\"
+
+test_schema_conformance_SOURCES = test_schema_conformance.c
+test_schema_conformance_CFLAGS = $(CHECK_CFLAGS)
+test_schema_conformance_CPPFLAGS = $(SCHEMA_CONFORMANCE_TEST_CPPFLAGS)
+test_schema_conformance_LDADD = $(CHECK_LIBS) @LIBS@
+
+MESSAGES_NEXT_TEST_CPPFLAGS = $(AM_CPPFLAGS) \
+	-DRAZORBACK_SCHEMA_FIXTURE_ROOT=\"$(abs_top_srcdir)/schemas/razorback/fixtures\"
+
+test_messages_next_SOURCES = test_messages_next.c ../src/messages_next.c
+test_messages_next_CFLAGS = $(CHECK_CFLAGS)
+test_messages_next_CPPFLAGS = $(MESSAGES_NEXT_TEST_CPPFLAGS)
+test_messages_next_LDADD = $(CHECK_LIBS) @LIBS@
 
 if HAVE_JV
 check_PROGRAMS += test_json_buffer_primitives test_json_buffer_structs \

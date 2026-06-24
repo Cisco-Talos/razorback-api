@@ -43,6 +43,7 @@ block.c \
 block_pool.c \
 block_id.c \
 command_and_control.c \
+config_next.c \
 config_file.c \
 connected_entity.c \
 crypto.c \
@@ -61,6 +62,8 @@ lock.c \
 log.c \
 judgment.c \
 json_buffer.c \
+message_body.c \
+messages_next.c \
 metadata.c \
 messages/alert_child.c \
 messages/alert_primary.c \
@@ -109,13 +112,13 @@ rzb_worker_SOURCES = \
 rzb_worker.c \
 nugget_tool.c
 
-rzb_worker_LDADD = librazorback_api.la
+rzb_worker_LDADD = librazorback_api.la @OPENTELEMETRY_CPP_LIBS@
 
 rzb_dev_SOURCES = \
 rzb_dev.c \
 nugget_tool.c
 
-rzb_dev_LDADD = librazorback_api.la
+rzb_dev_LDADD = librazorback_api.la @OPENTELEMETRY_CPP_LIBS@
 
 #librazorback_api_la_CFLAGS = -DBUILDING_SO -I$(top_srcdir)/libssh/include -I$(top_srcdir)/include
 #librazorback_api_la_LDFLAGS = -version-info @APIVERSION@ @XCCFLAGS@ ../libssh/src/libssh.la

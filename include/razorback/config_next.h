@@ -16,33 +16,41 @@
  *  MA 02110-1301, USA.
  */
 
-/** @file razorback.h
- * Razorback API.
+/** @file config_next.h
+ * Dispatcher-next YAML/env configuration helper.
  */
-#ifndef RAZORBACK_H
-#define RAZORBACK_H
+#ifndef RAZORBACK_CONFIG_NEXT_H
+#define RAZORBACK_CONFIG_NEXT_H
 
 #include <razorback/types.h>
+#include <razorback/visibility.h>
 
-#include <razorback/block.h>
-#include <razorback/block_id.h>
-#include <razorback/block_pool.h>
-#include <razorback/config_next.h>
-#include <razorback/config_file.h>
-#include <razorback/daemon.h>
-#include <razorback/debug.h>
-#include <razorback/hash.h>
-#include <razorback/health.h>
-#include <razorback/log.h>
-#include <razorback/message_body.h>
-#include <razorback/messages_next.h>
-#include <razorback/messages.h>
-#include <razorback/ntlv.h>
-#include <razorback/queue.h>
-#include <razorback/queue_list.h>
-#include <razorback/socket.h>
-#include <razorback/telemetry.h>
-#include <razorback/thread.h>
-#include <razorback/uuids.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#endif //RAZORBACK_H
+enum RzbNextConfigType
+{
+    RZB_NEXT_CONFIG_STRING = 0,
+    RZB_NEXT_CONFIG_INT = 1,
+    RZB_NEXT_CONFIG_BOOL = 2
+};
+
+struct RzbNextConfigKey
+{
+    const char *key;
+    enum RzbNextConfigType type;
+    void *dest;
+};
+
+SO_PUBLIC extern bool RzbNextConfig_Load(
+    const char *baseFile,
+    const char *localFile,
+    const char *envPrefix,
+    const struct RzbNextConfigKey *keys
+);
+
+#ifdef __cplusplus
+}
+#endif
+#endif /* RAZORBACK_CONFIG_NEXT_H */

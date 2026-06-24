@@ -21,6 +21,7 @@ razorback/api.h \
 razorback/block.h \
 razorback/block_id.h \
 razorback/block_pool.h \
+razorback/config_next.h \
 razorback/config_file.h \
 razorback/connected_entity.h \
 razorback/daemon.h \
@@ -37,6 +38,8 @@ razorback/list.h \
 razorback/lock.h \
 razorback/log.h \
 razorback/message_formats.h \
+razorback/message_body.h \
+razorback/messages_next.h \
 razorback/messages.h \
 razorback/metadata.h \
 razorback/ntlv.h \
