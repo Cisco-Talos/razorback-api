@@ -54,7 +54,7 @@ void Telemetry_LogMessage(unsigned level, uint64_t component, const char *messag
 
 void Telemetry_RecordDispatcherWait(double durationSeconds,
                                     const char *outcome,
-                                    const char *phase,
+                                    const char *stage,
                                     const struct RazorbackContext *context);
 void Telemetry_RecordDispatcherSelection(const char *path,
                                          const char *selectedLocality,
@@ -83,7 +83,7 @@ void Telemetry_RecordInspectionDuration(double durationSeconds,
 void Telemetry_RecordInspectionResult(const char *reason,
                                       bool hasAlerts,
                                       const struct RazorbackContext *context);
-void Telemetry_RecordInspectionError(const char *phase,
+void Telemetry_RecordInspectionError(const char *stage,
                                      const char *errorClass,
                                      const struct RazorbackContext *context);
 void Telemetry_RecordShutdownRequeuedInspection(const struct RazorbackContext *context);

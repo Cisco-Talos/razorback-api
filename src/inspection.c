@@ -525,7 +525,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
     const char *processError = NULL;
     const char *runError = NULL;
     const char *resultReason = "error";
-    const char *errorPhase = NULL;
+    const char *errorStage = NULL;
     const char *errorClass = NULL;
     bool hasAlerts = false;
     double inspectionStartedAt = Telemetry_GetMonotonicTimeSeconds();
@@ -537,7 +537,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to wrong type %u",
                 __func__, message->type);
         processError = "unexpected inspection message type";
-        errorPhase = "validation";
+        errorStage = "validation";
         errorClass = "invalid_message";
         goto cleanup;
     }
@@ -547,7 +547,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to NULL payload",
                 __func__);
         processError = "inspection message missing payload";
-        errorPhase = "validation";
+        errorStage = "validation";
         errorClass = "invalid_message";
         goto cleanup;
     }
@@ -555,7 +555,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to NULL block",
                 __func__);
         processError = "inspection message missing block";
-        errorPhase = "validation";
+        errorStage = "validation";
         errorClass = "invalid_message";
         goto cleanup;
     }
@@ -563,7 +563,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed dispatch message due to NULL Hash",
                 __func__);
         processError = "inspection message missing block hash";
-        errorPhase = "validation";
+        errorStage = "validation";
         errorClass = "invalid_message";
         goto cleanup;
     }
@@ -597,7 +597,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
     if (transfered != TRANSFER_OK) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to transfer block giving up", __func__);
         processError = "failed to fetch block from dispatcher";
-        errorPhase = "transfer";
+        errorStage = "transfer";
         errorClass = "transfer_failed";
         goto cleanup;
     }
@@ -606,21 +606,21 @@ Inspection_Process_Message(Thread_t *p_pThread,
     if (l_pBlock->data.pointer == NULL || l_pBlock->data.fileName == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: No data block", __func__);
         processError = "inspection block has no local data";
-        errorPhase = "transfer";
+        errorStage = "transfer";
         errorClass = "missing_block_data";
         goto cleanup;
     }
     if ((l_pEventId = EventId_Clone(l_misMessage->eventId)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed create new event id", __func__);
         processError = "failed to clone event id";
-        errorPhase = "inspection";
+        errorStage = "inspection";
         errorClass = "clone_failed";
         goto cleanup;
     }
     if ((l_pClonedBlock = Block_Clone(l_pBlock)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed create new block", __func__);
         processError = "failed to clone inspection block";
-        errorPhase = "inspection";
+        errorStage = "inspection";
         errorClass = "clone_failed";
         goto cleanup;
     }
@@ -660,7 +660,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
     hasAlerts = (l_iResult == JUDGMENT_REASON_ALERT);
     if (l_iResult == JUDGMENT_REASON_ERROR || !runSuccess)
     {
-        errorPhase = "inspection";
+        errorStage = "inspection";
         errorClass = (l_iResult == JUDGMENT_REASON_ERROR) ? "judgment_error"
                                                           : "invalid_judgment";
     }
@@ -670,7 +670,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
         (l_iResult != JUDGMENT_REASON_DEFERRED)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Bad return from inspection", __func__);
         processError = "inspector returned invalid judgment";
-        errorPhase = "inspection";
+        errorStage = "inspection";
         errorClass = "invalid_judgment";
         goto cleanup;
     }
@@ -678,7 +678,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
     judgment = Judgment_Create(l_pEventId, l_pClonedBlock->pId);
     if (judgment == NULL) {
         processError = "failed to create judgment";
-        errorPhase = "submission";
+        errorStage = "submission";
         errorClass = "judgment_create_failed";
         goto cleanup;
     }
@@ -693,7 +693,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
     if ((l_mjsMessage = MessageJudgmentSubmission_Initialize(l_iResult, judgment)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to create message", __func__);
         processError = "failed to create judgment submission";
-        errorPhase = "submission";
+        errorStage = "submission";
         errorClass = "message_create_failed";
         judgment = NULL;
         goto cleanup;
@@ -703,7 +703,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
     if (!Queue_Put(p_pContext->inspector.judgmentQueue, l_mjsMessage)) {
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to send judgment submission", __func__);
         processError = "failed to send judgment submission";
-        errorPhase = "submission";
+        errorStage = "submission";
         errorClass = "send_failed";
         goto cleanup;
     }
@@ -732,8 +732,8 @@ cleanup:
         EventId_Destroy(l_pEventId);
     if (runSpan != NULL)
         Telemetry_EndSpan(runSpan, false, (runError != NULL) ? runError : processError);
-    if (errorPhase != NULL)
-        Telemetry_RecordInspectionError(errorPhase, errorClass, p_pContext);
+    if (errorStage != NULL)
+        Telemetry_RecordInspectionError(errorStage, errorClass, p_pContext);
     Telemetry_RecordInspectionResult(resultReason, hasAlerts, p_pContext);
     Telemetry_RecordInspectionDuration(Telemetry_GetMonotonicTimeSeconds() - inspectionStartedAt,
                                        resultReason,

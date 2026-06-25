@@ -508,7 +508,7 @@ CommandAndControl_SendBye (struct RazorbackContext *context) {
 
 static bool
 CommandAndControl_Register (struct RazorbackContext *p_pContext,
-                            const char *phase) {
+                            const char *stage) {
     struct Message *regReq;
     struct ConnectedEntity *dispatcher = NULL;
     double waitStartedAt;
@@ -529,7 +529,7 @@ CommandAndControl_Register (struct RazorbackContext *p_pContext,
     }
     Telemetry_RecordDispatcherWait(Telemetry_GetMonotonicTimeSeconds() - waitStartedAt,
                                    "available",
-                                   phase,
+                                   stage,
                                    p_pContext);
 
     if ((regReq = MessageRegistrationRequest_Initialize(

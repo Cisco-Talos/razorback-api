@@ -726,7 +726,7 @@ InitializeRazorbackStandardMetrics() noexcept
       "");
   metrics.inspectionErrors = Telemetry_CreateUInt64Counter(
       "rzb.inspection.errors.total",
-      "Inspection errors grouped by phase.",
+      "Inspection errors grouped by stage.",
       "");
   metrics.shutdownRequeuedInspections = Telemetry_CreateUInt64Counter(
       "rzb.shutdown.requeued.inspections.total",
@@ -1567,7 +1567,7 @@ Telemetry_GetMonotonicTimeSeconds(void)
 extern "C" void
 Telemetry_RecordDispatcherWait(double durationSeconds,
                                const char *outcome,
-                               const char *phase,
+                               const char *stage,
                                const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
@@ -1577,8 +1577,8 @@ Telemetry_RecordDispatcherWait(double durationSeconds,
 
   attributes[attributeCount++] = {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
                                   MetricLabelOrUnknown(outcome), 0, 0.0, false};
-  attributes[attributeCount++] = {"phase", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-                                  MetricLabelOrUnknown(phase), 0, 0.0, false};
+  attributes[attributeCount++] = {"stage", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(stage), 0, 0.0, false};
   attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
                                                  nullptr, &nuggetTypeName);
 
@@ -1753,7 +1753,7 @@ Telemetry_RecordInspectionResult(const char *reason,
 }
 
 extern "C" void
-Telemetry_RecordInspectionError(const char *phase,
+Telemetry_RecordInspectionError(const char *stage,
                                 const char *errorClass,
                                 const struct RazorbackContext *context)
 {
@@ -1762,8 +1762,8 @@ Telemetry_RecordInspectionError(const char *phase,
   char *nuggetTypeName = nullptr;
   size_t attributeCount = 0;
 
-  attributes[attributeCount++] = {"phase", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-                                  MetricLabelOrUnknown(phase), 0, 0.0, false};
+  attributes[attributeCount++] = {"stage", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(stage), 0, 0.0, false};
   attributes[attributeCount++] = {"error_class", TELEMETRY_METRIC_ATTRIBUTE_STRING,
                                   MetricLabelOrUnknown(errorClass), 0, 0.0, false};
   attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,

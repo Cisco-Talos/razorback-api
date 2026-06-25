@@ -133,7 +133,7 @@ mutate_fixture_schema(const char *fixture)
     return mutated;
 }
 
-START_TEST(test_messages_next_accepts_known_phase5_identities)
+START_TEST(test_messages_next_accepts_known_schema_identities)
 {
     static const struct MessageFixture fixtures[] = {
         { "messages", "claim_check_reference.valid.json" },
@@ -252,7 +252,7 @@ START_TEST(test_messages_next_rejects_unknown_or_bad_identity)
 }
 END_TEST
 
-START_TEST(test_messages_next_rejects_invalid_phase5_fixtures)
+START_TEST(test_messages_next_rejects_invalid_schema_fixtures)
 {
     static const struct MessageFixture fixtures[] = {
         { "messages", "claim_check_reference.invalid.json" },
@@ -288,7 +288,7 @@ START_TEST(test_messages_next_rejects_invalid_phase5_fixtures)
 }
 END_TEST
 
-START_TEST(test_messages_next_routes_match_phase5_topology)
+START_TEST(test_messages_next_routes_match_dispatcher_next_topology)
 {
     static const struct RouteFixture fixtures[] = {
         { "messages", "cnc_registration_request.valid.json", NULL,
@@ -358,7 +358,7 @@ START_TEST(test_messages_next_routes_match_phase5_topology)
 }
 END_TEST
 
-START_TEST(test_phase6_cnc_helpers_gate_registration_and_extract_timing)
+START_TEST(test_cnc_helpers_gate_registration_and_extract_timing)
 {
     char *hello;
     char *accepted;
@@ -438,14 +438,14 @@ messages_next_suite(void)
 
     suite = suite_create("messages_next");
     testcase = tcase_create("core");
-    tcase_add_test(testcase, test_messages_next_accepts_known_phase5_identities);
+    tcase_add_test(testcase, test_messages_next_accepts_known_schema_identities);
     tcase_add_test(testcase,
                    test_messages_next_rejects_identity_mutations_for_all_fixtures);
     tcase_add_test(testcase, test_messages_next_rejects_unknown_or_bad_identity);
-    tcase_add_test(testcase, test_messages_next_rejects_invalid_phase5_fixtures);
-    tcase_add_test(testcase, test_messages_next_routes_match_phase5_topology);
+    tcase_add_test(testcase, test_messages_next_rejects_invalid_schema_fixtures);
+    tcase_add_test(testcase, test_messages_next_routes_match_dispatcher_next_topology);
     tcase_add_test(testcase,
-                   test_phase6_cnc_helpers_gate_registration_and_extract_timing);
+                   test_cnc_helpers_gate_registration_and_extract_timing);
     tcase_add_test(testcase,
                    test_messages_next_cache_response_route_requires_requestor);
     tcase_add_test(testcase,

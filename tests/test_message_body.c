@@ -63,7 +63,7 @@ claim_check_template(void)
     );
 }
 
-START_TEST(test_message_body_default_policy_matches_phase5_threshold)
+START_TEST(test_message_body_default_policy_matches_messaging_threshold)
 {
     struct MessageBodyPolicy policy;
 
@@ -239,7 +239,7 @@ message_body_suite(void)
 
     suite = suite_create("message_body");
     testcase = tcase_create("core");
-    tcase_add_test(testcase, test_message_body_default_policy_matches_phase5_threshold);
+    tcase_add_test(testcase, test_message_body_default_policy_matches_messaging_threshold);
     tcase_add_test(testcase, test_message_body_keeps_small_payload_inline);
     tcase_add_test(testcase, test_message_body_compresses_medium_payload_inline);
     tcase_add_test(testcase, test_message_body_uses_claim_check_for_oversized_compressed_payload);
