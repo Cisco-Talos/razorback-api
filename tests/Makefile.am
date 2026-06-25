@@ -15,7 +15,7 @@
 #  MA 02110-1301, USA.
 
 #noinst_PROGRAMS= configTest logTest daemonTest
-noinst_PROGRAMS= logTest daemonTest configTest
+noinst_PROGRAMS= logTest daemonTest configTest smoke_source_next smoke_inspector_next
 
 configTest_SOURCES = configTest.c
 configTest_LDADD = -L../src -lrazorback_api @OPENTELEMETRY_CPP_LIBS@ @LIBS@
@@ -29,10 +29,29 @@ logTest_LDADD = -L../src -lrazorback_api @OPENTELEMETRY_CPP_LIBS@ @LIBS@
 daemonTest_SOURCES = daemonTest.c
 daemonTest_LDADD = -L../src -lrazorback_api @OPENTELEMETRY_CPP_LIBS@ @LIBS@
 
+SMOKE_NEXT_CPPFLAGS = $(AM_CPPFLAGS) \
+	-DRAZORBACK_SCHEMA_FIXTURE_ROOT=\"$(abs_top_srcdir)/schemas/razorback/fixtures\"
+
+smoke_source_next_SOURCES = smoke_source_next.c ../src/runtime_next.c \
+	../src/messages_next.c ../src/message_body.c
+smoke_source_next_CPPFLAGS = $(SMOKE_NEXT_CPPFLAGS)
+smoke_source_next_LDADD = @LIBS@
+
+smoke_inspector_next_SOURCES = smoke_inspector_next.c ../src/runtime_next.c \
+	../src/messages_next.c ../src/message_body.c
+smoke_inspector_next_CPPFLAGS = $(SMOKE_NEXT_CPPFLAGS)
+smoke_inspector_next_LDADD = @LIBS@
+
+.PHONY: smoke-dispatcher-next
+
+smoke-dispatcher-next: smoke_source_next smoke_inspector_next
+	./smoke_source_next
+	./smoke_inspector_next
+
 if HAVE_CHECK
 check_PROGRAMS = test_hash test_block_id test_list test_string_list \
 	test_uuids test_config_file test_timer test_health test_message_body \
-	test_messages_next test_config_next test_schema_conformance
+	test_messages_next test_config_next test_schema_conformance test_runtime_next
 TESTS = $(check_PROGRAMS)
 
 TESTS_DIR_CPPFLAGS = $(AM_CPPFLAGS) \
@@ -95,10 +114,17 @@ test_schema_conformance_LDADD = $(CHECK_LIBS) @LIBS@
 MESSAGES_NEXT_TEST_CPPFLAGS = $(AM_CPPFLAGS) \
 	-DRAZORBACK_SCHEMA_FIXTURE_ROOT=\"$(abs_top_srcdir)/schemas/razorback/fixtures\"
 
-test_messages_next_SOURCES = test_messages_next.c ../src/messages_next.c
+test_messages_next_SOURCES = test_messages_next.c ../src/messages_next.c \
+	../src/message_body.c
 test_messages_next_CFLAGS = $(CHECK_CFLAGS)
 test_messages_next_CPPFLAGS = $(MESSAGES_NEXT_TEST_CPPFLAGS)
 test_messages_next_LDADD = $(CHECK_LIBS) @LIBS@
+
+test_runtime_next_SOURCES = test_runtime_next.c ../src/runtime_next.c \
+	../src/messages_next.c ../src/message_body.c
+test_runtime_next_CFLAGS = $(CHECK_CFLAGS)
+test_runtime_next_CPPFLAGS = $(MESSAGES_NEXT_TEST_CPPFLAGS)
+test_runtime_next_LDADD = $(CHECK_LIBS) @LIBS@
 
 if HAVE_JV
 check_PROGRAMS += test_json_buffer_primitives test_json_buffer_structs \

@@ -47,6 +47,7 @@ razorback/nugget.h \
 razorback/queue.h \
 razorback/queue_list.h \
 razorback/response_queue.h \
+razorback/runtime_next.h \
 razorback/socket.h \
 razorback/string_list.h \
 razorback/submission.h \

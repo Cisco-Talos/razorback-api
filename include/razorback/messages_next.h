@@ -24,7 +24,9 @@
 
 #include <razorback/types.h>
 #include <razorback/visibility.h>
+#include <razorback/message_body.h>
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -65,6 +67,11 @@ extern "C" {
 #define RZB_NEXT_EXCHANGE_FILE_REMOVE "FILE_REMOVE"
 #define RZB_NEXT_QUEUE_FILE_REMOVE_RESULT "FILE_REMOVE.RESULT"
 
+#define RZB_NEXT_HEADER_SCHEMA_NAME "rzb-schema-name"
+#define RZB_NEXT_HEADER_SCHEMA_VERSION "rzb-schema-version"
+#define RZB_NEXT_HEADER_BODY_MODE "rzb-body-mode"
+#define RZB_NEXT_HEADER_CONTENT_ENCODING "content-encoding"
+
 enum RzbNextTransport
 {
     RZB_NEXT_TRANSPORT_RABBITMQ = 0,
@@ -78,6 +85,32 @@ struct RzbNextRoute
     char *routingKey;
 };
 
+struct RzbNextMessageHeader
+{
+    char *name;
+    char *value;
+};
+
+struct RzbNextPreparedRabbitMqMessage
+{
+    struct RzbNextRoute *route;
+    struct RzbNextMessageHeader *headers;
+    size_t headerCount;
+    uint8_t *body;
+    size_t bodySize;
+    char *contentType;
+    char *contentEncoding;
+    uint8_t *claimCheckBody;
+    size_t claimCheckBodySize;
+    struct ClaimCheckReference *claimCheckReference;
+};
+
+struct RzbNextDecodedRabbitMqMessage
+{
+    char *jsonMessage;
+    struct ClaimCheckReference *claimCheckReference;
+};
+
 SO_PUBLIC extern const char * RzbNextTransport_ToString(
     enum RzbNextTransport transport
 );
@@ -89,6 +122,22 @@ SO_PUBLIC extern bool RzbNextMessage_Route(
     const char *cacheRequestorUuid,
     struct RzbNextRoute **route
 );
+SO_PUBLIC extern bool RzbNextRabbitMq_PrepareMessage(
+    const char *jsonMessage,
+    const char *cacheRequestorUuid,
+    const struct MessageBodyPolicy *policy,
+    const struct ClaimCheckReference *claimCheckTemplate,
+    struct RzbNextPreparedRabbitMqMessage **prepared
+);
+SO_PUBLIC extern bool RzbNextRabbitMq_DecodeMessage(
+    const uint8_t *body,
+    size_t bodySize,
+    const struct RzbNextMessageHeader *headers,
+    size_t headerCount,
+    const uint8_t *claimCheckBody,
+    size_t claimCheckBodySize,
+    struct RzbNextDecodedRabbitMqMessage **decoded
+);
 SO_PUBLIC extern bool RzbNextCnc_IsReadyDispatcherHello(const char *jsonMessage);
 SO_PUBLIC extern bool RzbNextCnc_RegistrationAcceptedTiming(
     const char *jsonMessage,
@@ -99,6 +148,12 @@ SO_PUBLIC extern bool RzbNextCnc_RegistrationAcceptedTiming(
 SO_PUBLIC extern char * RzbNextCnc_DirectedCommandQueue(const char *nuggetUuid);
 SO_PUBLIC extern void RzbNext_FreeString(char *value);
 SO_PUBLIC extern void RzbNextRoute_Destroy(struct RzbNextRoute *route);
+SO_PUBLIC extern void RzbNextPreparedRabbitMqMessage_Destroy(
+    struct RzbNextPreparedRabbitMqMessage *prepared
+);
+SO_PUBLIC extern void RzbNextDecodedRabbitMqMessage_Destroy(
+    struct RzbNextDecodedRabbitMqMessage *decoded
+);
 
 #ifdef __cplusplus
 }

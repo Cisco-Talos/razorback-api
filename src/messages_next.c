@@ -56,6 +56,25 @@ static const struct KnownSchema KnownSchemas[] = {
 };
 
 static const char * RzbNext_GetString(json_object *object, const char *field);
+static uint8_t * RzbNext_CopyBytes(const uint8_t *value, size_t size);
+static bool RzbNextPrepared_AddHeader(
+    struct RzbNextPreparedRabbitMqMessage *prepared,
+    const char *name,
+    const char *value
+);
+static const char * RzbNextHeader_Value(
+    const struct RzbNextMessageHeader *headers,
+    size_t headerCount,
+    const char *name
+);
+static bool RzbNextDecoded_FromBytes(
+    const uint8_t *bytes,
+    size_t size,
+    const char *schemaName,
+    const char *schemaVersion,
+    struct ClaimCheckReference *claimCheckReference,
+    struct RzbNextDecodedRabbitMqMessage **decoded
+);
 
 static char *
 RzbNext_Strdup(const char *value)
@@ -104,6 +123,69 @@ RzbNext_Format3(const char *prefix, const char *middle, const char *suffix)
         return NULL;
     snprintf(formatted, length, "%s.%s.%s", prefix, middle, suffix);
     return formatted;
+}
+
+static uint8_t *
+RzbNext_CopyBytes(const uint8_t *value, size_t size)
+{
+    uint8_t *copy;
+
+    if (value == NULL && size > 0)
+        return NULL;
+    copy = malloc(size == 0 ? 1 : size);
+    if (copy == NULL)
+        return NULL;
+    if (size > 0)
+        memcpy(copy, value, size);
+    return copy;
+}
+
+static bool
+RzbNextPrepared_AddHeader(struct RzbNextPreparedRabbitMqMessage *prepared,
+                          const char *name, const char *value)
+{
+    struct RzbNextMessageHeader *headers;
+    char *nameCopy;
+    char *valueCopy;
+
+    if (prepared == NULL || name == NULL || value == NULL)
+        return false;
+    nameCopy = RzbNext_Strdup(name);
+    valueCopy = RzbNext_Strdup(value);
+    if (nameCopy == NULL || valueCopy == NULL) {
+        free(nameCopy);
+        free(valueCopy);
+        return false;
+    }
+    headers = realloc(prepared->headers,
+                      sizeof(*prepared->headers) * (prepared->headerCount + 1U));
+    if (headers == NULL) {
+        free(nameCopy);
+        free(valueCopy);
+        return false;
+    }
+    prepared->headers = headers;
+    prepared->headers[prepared->headerCount].name = nameCopy;
+    prepared->headers[prepared->headerCount].value = valueCopy;
+    prepared->headerCount++;
+    return true;
+}
+
+static const char *
+RzbNextHeader_Value(const struct RzbNextMessageHeader *headers,
+                    size_t headerCount, const char *name)
+{
+    size_t index;
+
+    if (headers == NULL || name == NULL)
+        return NULL;
+    for (index = 0; index < headerCount; index++) {
+        if (headers[index].name != NULL &&
+            strcmp(headers[index].name, name) == 0) {
+            return headers[index].value;
+        }
+    }
+    return NULL;
 }
 
 static bool
@@ -1830,6 +1912,175 @@ RzbNextMessage_Route(const char *jsonMessage, const char *cacheRequestorUuid,
 }
 
 SO_PUBLIC bool
+RzbNextRabbitMq_PrepareMessage(
+    const char *jsonMessage,
+    const char *cacheRequestorUuid,
+    const struct MessageBodyPolicy *policy,
+    const struct ClaimCheckReference *claimCheckTemplate,
+    struct RzbNextPreparedRabbitMqMessage **prepared)
+{
+    json_object *object;
+    const char *schemaName;
+    uint32_t schemaVersion;
+    char schemaVersionText[16];
+    struct RzbNextRoute *route = NULL;
+    struct EncodedMessageBody *encoded = NULL;
+    struct RzbNextPreparedRabbitMqMessage *result = NULL;
+    bool ok = false;
+
+    if (jsonMessage == NULL || prepared == NULL)
+        return false;
+    *prepared = NULL;
+    if (!RzbNextMessage_Route(jsonMessage, cacheRequestorUuid, &route))
+        return false;
+    if (route->transport != RZB_NEXT_TRANSPORT_RABBITMQ)
+        goto cleanup;
+
+    object = RzbNext_ParseJsonObject(jsonMessage);
+    if (object == NULL)
+        goto cleanup;
+    ok = RzbNext_GetIdentity(object, &schemaName, &schemaVersion) &&
+         RzbNext_IsKnownSchemaVersion(schemaName, schemaVersion) &&
+         RzbNext_ValidateObjectForSchema(object, schemaName);
+    json_object_put(object);
+    if (!ok)
+        goto cleanup;
+    ok = false;
+
+    if (!MessageBody_Encode(policy, (const uint8_t *)jsonMessage,
+                            strlen(jsonMessage), claimCheckTemplate, &encoded)) {
+        goto cleanup;
+    }
+
+    result = calloc(1, sizeof(*result));
+    if (result == NULL)
+        goto cleanup;
+    result->route = route;
+    route = NULL;
+    result->body = RzbNext_CopyBytes(encoded->transportBody,
+                                     encoded->transportBodySize);
+    result->bodySize = encoded->transportBodySize;
+    result->contentType = RzbNext_Strdup("application/json");
+    result->contentEncoding = RzbNext_Strdup(encoded->contentEncoding);
+    if (encoded->claimCheckBody != NULL) {
+        result->claimCheckBody = RzbNext_CopyBytes(encoded->claimCheckBody,
+                                                  encoded->claimCheckBodySize);
+        result->claimCheckBodySize = encoded->claimCheckBodySize;
+    }
+    if (encoded->claimCheckReference != NULL) {
+        result->claimCheckReference =
+            ClaimCheckReference_Clone(encoded->claimCheckReference);
+    }
+    snprintf(schemaVersionText, sizeof(schemaVersionText), "%u", schemaVersion);
+    if (result->body == NULL || result->contentType == NULL ||
+        (encoded->contentEncoding != NULL && result->contentEncoding == NULL) ||
+        (encoded->claimCheckBody != NULL && result->claimCheckBody == NULL) ||
+        (encoded->claimCheckReference != NULL &&
+         result->claimCheckReference == NULL) ||
+        !RzbNextPrepared_AddHeader(result, RZB_NEXT_HEADER_SCHEMA_NAME,
+                                   schemaName) ||
+        !RzbNextPrepared_AddHeader(result, RZB_NEXT_HEADER_SCHEMA_VERSION,
+                                   schemaVersionText) ||
+        !RzbNextPrepared_AddHeader(result, RZB_NEXT_HEADER_BODY_MODE,
+                                   MessageBodyMode_ToString(encoded->mode))) {
+        goto cleanup;
+    }
+    if (encoded->contentEncoding != NULL &&
+        !RzbNextPrepared_AddHeader(result, RZB_NEXT_HEADER_CONTENT_ENCODING,
+                                   encoded->contentEncoding)) {
+        goto cleanup;
+    }
+    *prepared = result;
+    result = NULL;
+    ok = true;
+
+cleanup:
+    RzbNextRoute_Destroy(route);
+    EncodedMessageBody_Destroy(encoded);
+    RzbNextPreparedRabbitMqMessage_Destroy(result);
+    return ok;
+}
+
+SO_PUBLIC bool
+RzbNextRabbitMq_DecodeMessage(
+    const uint8_t *body,
+    size_t bodySize,
+    const struct RzbNextMessageHeader *headers,
+    size_t headerCount,
+    const uint8_t *claimCheckBody,
+    size_t claimCheckBodySize,
+    struct RzbNextDecodedRabbitMqMessage **decoded)
+{
+    const char *schemaName;
+    const char *schemaVersion;
+    const char *bodyMode;
+    const char *contentEncoding;
+    uint8_t *decodedBytes = NULL;
+    size_t decodedSize = 0;
+    struct ClaimCheckReference *reference = NULL;
+    bool ok = false;
+
+    if (decoded == NULL || (body == NULL && bodySize > 0))
+        return false;
+    *decoded = NULL;
+    schemaName = RzbNextHeader_Value(headers, headerCount,
+                                     RZB_NEXT_HEADER_SCHEMA_NAME);
+    schemaVersion = RzbNextHeader_Value(headers, headerCount,
+                                        RZB_NEXT_HEADER_SCHEMA_VERSION);
+    bodyMode = RzbNextHeader_Value(headers, headerCount,
+                                   RZB_NEXT_HEADER_BODY_MODE);
+    contentEncoding = RzbNextHeader_Value(headers, headerCount,
+                                          RZB_NEXT_HEADER_CONTENT_ENCODING);
+    if (schemaName == NULL || schemaVersion == NULL || bodyMode == NULL)
+        return false;
+
+    if (strcmp(bodyMode, "inline") == 0) {
+        if (contentEncoding != NULL && contentEncoding[0] != '\0')
+            return false;
+        ok = MessageBody_DecodeInline(body, bodySize, NULL, &decodedBytes,
+                                      &decodedSize);
+    } else if (strcmp(bodyMode, "zlib") == 0) {
+        if (contentEncoding == NULL ||
+            strcmp(contentEncoding, MESSAGE_BODY_CONTENT_ENCODING_ZLIB) != 0) {
+            return false;
+        }
+        ok = MessageBody_DecodeInline(body, bodySize, contentEncoding,
+                                      &decodedBytes, &decodedSize);
+    } else if (strcmp(bodyMode, "claim_check") == 0) {
+        char *referenceJson;
+
+        if (contentEncoding != NULL && contentEncoding[0] != '\0')
+            return false;
+        referenceJson = calloc(bodySize + 1U, sizeof(char));
+        if (referenceJson == NULL)
+            return false;
+        if (bodySize > 0)
+            memcpy(referenceJson, body, bodySize);
+        reference = ClaimCheckReference_FromJson(referenceJson);
+        free(referenceJson);
+        if (reference == NULL || claimCheckBody == NULL)
+            goto cleanup;
+        ok = MessageBody_DecodeClaimCheck(claimCheckBody, claimCheckBodySize,
+                                          reference, &decodedBytes,
+                                          &decodedSize);
+    } else {
+        return false;
+    }
+
+    if (!ok)
+        goto cleanup;
+    ok = RzbNextDecoded_FromBytes(decodedBytes, decodedSize, schemaName,
+                                  schemaVersion, reference, decoded);
+    if (ok)
+        reference = NULL;
+
+cleanup:
+    free(decodedBytes);
+    ClaimCheckReference_Destroy(reference);
+    return ok;
+}
+
+SO_PUBLIC bool
 RzbNextCnc_IsReadyDispatcherHello(const char *jsonMessage)
 {
     json_object *object;
@@ -1911,6 +2162,70 @@ RzbNext_FreeString(char *value)
     free(value);
 }
 
+static bool
+RzbNextDecoded_FromBytes(
+    const uint8_t *bytes,
+    size_t size,
+    const char *schemaName,
+    const char *schemaVersion,
+    struct ClaimCheckReference *claimCheckReference,
+    struct RzbNextDecodedRabbitMqMessage **decoded)
+{
+    char *jsonMessage;
+    json_object *object;
+    const char *decodedSchemaName;
+    uint32_t decodedSchemaVersion;
+    char decodedSchemaVersionText[16];
+    struct RzbNextDecodedRabbitMqMessage *result;
+    bool valid;
+
+    if (decoded == NULL || schemaName == NULL || schemaVersion == NULL ||
+        (bytes == NULL && size > 0)) {
+        return false;
+    }
+    *decoded = NULL;
+    jsonMessage = calloc(size + 1U, sizeof(char));
+    if (jsonMessage == NULL)
+        return false;
+    if (size > 0)
+        memcpy(jsonMessage, bytes, size);
+
+    object = RzbNext_ParseJsonObject(jsonMessage);
+    if (object == NULL) {
+        free(jsonMessage);
+        return false;
+    }
+    valid = RzbNext_GetIdentity(object, &decodedSchemaName,
+                                &decodedSchemaVersion) &&
+            RzbNext_IsKnownSchemaVersion(decodedSchemaName,
+                                         decodedSchemaVersion) &&
+            RzbNext_ValidateObjectForSchema(object, decodedSchemaName);
+    if (!valid) {
+        json_object_put(object);
+        free(jsonMessage);
+        return false;
+    }
+    snprintf(decodedSchemaVersionText, sizeof(decodedSchemaVersionText), "%u",
+             decodedSchemaVersion);
+    if (strcmp(schemaName, decodedSchemaName) != 0 ||
+        strcmp(schemaVersion, decodedSchemaVersionText) != 0) {
+        json_object_put(object);
+        free(jsonMessage);
+        return false;
+    }
+    json_object_put(object);
+
+    result = calloc(1, sizeof(*result));
+    if (result == NULL) {
+        free(jsonMessage);
+        return false;
+    }
+    result->jsonMessage = jsonMessage;
+    result->claimCheckReference = claimCheckReference;
+    *decoded = result;
+    return true;
+}
+
 SO_PUBLIC void
 RzbNextRoute_Destroy(struct RzbNextRoute *route)
 {
@@ -1919,4 +2234,37 @@ RzbNextRoute_Destroy(struct RzbNextRoute *route)
     free(route->exchange);
     free(route->routingKey);
     free(route);
+}
+
+SO_PUBLIC void
+RzbNextPreparedRabbitMqMessage_Destroy(
+    struct RzbNextPreparedRabbitMqMessage *prepared)
+{
+    size_t index;
+
+    if (prepared == NULL)
+        return;
+    RzbNextRoute_Destroy(prepared->route);
+    for (index = 0; index < prepared->headerCount; index++) {
+        free(prepared->headers[index].name);
+        free(prepared->headers[index].value);
+    }
+    free(prepared->headers);
+    free(prepared->body);
+    free(prepared->contentType);
+    free(prepared->contentEncoding);
+    free(prepared->claimCheckBody);
+    ClaimCheckReference_Destroy(prepared->claimCheckReference);
+    free(prepared);
+}
+
+SO_PUBLIC void
+RzbNextDecodedRabbitMqMessage_Destroy(
+    struct RzbNextDecodedRabbitMqMessage *decoded)
+{
+    if (decoded == NULL)
+        return;
+    free(decoded->jsonMessage);
+    ClaimCheckReference_Destroy(decoded->claimCheckReference);
+    free(decoded);
 }

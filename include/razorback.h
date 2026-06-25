@@ -40,6 +40,7 @@
 #include <razorback/ntlv.h>
 #include <razorback/queue.h>
 #include <razorback/queue_list.h>
+#include <razorback/runtime_next.h>
 #include <razorback/socket.h>
 #include <razorback/telemetry.h>
 #include <razorback/thread.h>

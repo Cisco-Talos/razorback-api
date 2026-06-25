@@ -125,6 +125,11 @@ CommandAndControl_Start (struct RazorbackContext *p_pContext) {
         return true;
     }
 
+    rzb_log(LOG_ERR, LOG_C_CNC,
+            "%s: Legacy dispatcher C&C runtime was removed for dispatcher-next; "
+            "use RzbNextRuntime instead", __func__);
+    return false;
+
     if ((p_pContext->iFlags & CONTEXT_FLAG_STAND_ALONE) ==
         CONTEXT_FLAG_STAND_ALONE) {
         if (!sg_bQueueInitialized) {
@@ -177,6 +182,11 @@ CommandAndControl_Start (struct RazorbackContext *p_pContext) {
 
 void
 CommandAndControl_Shutdown(void) {
+   rzb_log(LOG_DEBUG, LOG_C_CNC,
+           "%s: Legacy dispatcher C&C runtime is disabled for dispatcher-next",
+           __func__);
+   return;
+
    // Shut down state tracking timer.
    ConnectedEntityList_Stop();
 
@@ -490,6 +500,11 @@ CommandAndControl_SendBye (struct RazorbackContext *context) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Context is NULL", __func__);
         return false;
     }
+
+    rzb_log(LOG_ERR, LOG_C_CNC,
+            "%s: Legacy dispatcher C&C runtime was removed for dispatcher-next; "
+            "use RzbNextRuntime shutdown instead", __func__);
+    return false;
 
     if ((bye = MessageBye_Initialize(
             context->uuidNuggetId)) == NULL) {

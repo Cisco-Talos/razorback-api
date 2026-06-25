@@ -94,6 +94,7 @@ nugget.c \
 queue.c \
 queue_list.c \
 response_queue.c \
+runtime_next.c \
 runtime_config.c \
 socket.c \
 string_list.c \

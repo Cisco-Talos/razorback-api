@@ -133,6 +133,19 @@ mutate_fixture_schema(const char *fixture)
     return mutated;
 }
 
+static const char *
+header_value(const struct RzbNextMessageHeader *headers, size_t headerCount,
+             const char *name)
+{
+    size_t index;
+
+    for (index = 0; index < headerCount; index++) {
+        if (strcmp(headers[index].name, name) == 0)
+            return headers[index].value;
+    }
+    return NULL;
+}
+
 START_TEST(test_messages_next_accepts_known_schema_identities)
 {
     static const struct MessageFixture fixtures[] = {
@@ -358,6 +371,143 @@ START_TEST(test_messages_next_routes_match_dispatcher_next_topology)
 }
 END_TEST
 
+START_TEST(test_rabbitmq_prepare_and_decode_inline_message)
+{
+    char *fixture = read_fixture("messages",
+                                 "cnc_registration_request.valid.json");
+    struct MessageBodyPolicy policy = { 4096 };
+    struct RzbNextPreparedRabbitMqMessage *prepared = NULL;
+    struct RzbNextDecodedRabbitMqMessage *decoded = NULL;
+
+    ck_assert(RzbNextRabbitMq_PrepareMessage(fixture, NULL, &policy, NULL,
+                                             &prepared));
+    ck_assert_ptr_ne(prepared, NULL);
+    ck_assert_str_eq(prepared->route->exchange, "");
+    ck_assert_str_eq(prepared->route->routingKey, RZB_NEXT_QUEUE_COMMAND);
+    ck_assert_str_eq(prepared->contentType, "application/json");
+    ck_assert_ptr_eq(prepared->contentEncoding, NULL);
+    ck_assert_str_eq(header_value(prepared->headers, prepared->headerCount,
+                                  RZB_NEXT_HEADER_SCHEMA_NAME),
+                     RZB_NEXT_SCHEMA_CNC_REGISTRATION_REQUEST);
+    ck_assert_str_eq(header_value(prepared->headers, prepared->headerCount,
+                                  RZB_NEXT_HEADER_SCHEMA_VERSION), "1");
+    ck_assert_str_eq(header_value(prepared->headers, prepared->headerCount,
+                                  RZB_NEXT_HEADER_BODY_MODE), "inline");
+    ck_assert_ptr_eq(header_value(prepared->headers, prepared->headerCount,
+                                  RZB_NEXT_HEADER_CONTENT_ENCODING), NULL);
+
+    ck_assert(RzbNextRabbitMq_DecodeMessage(prepared->body, prepared->bodySize,
+                                            prepared->headers,
+                                            prepared->headerCount, NULL, 0,
+                                            &decoded));
+    ck_assert_ptr_ne(decoded, NULL);
+    ck_assert_ptr_eq(decoded->claimCheckReference, NULL);
+    ck_assert_str_eq(decoded->jsonMessage, fixture);
+    ck_assert(RzbNextMessage_Validate(decoded->jsonMessage));
+
+    RzbNextDecodedRabbitMqMessage_Destroy(decoded);
+    RzbNextPreparedRabbitMqMessage_Destroy(prepared);
+    free(fixture);
+}
+END_TEST
+
+START_TEST(test_rabbitmq_prepare_and_decode_zlib_message)
+{
+    char *fixture = read_fixture("messages",
+                                 "analysis_result_envelope.valid.json");
+    struct MessageBodyPolicy policy = { 900 };
+    struct RzbNextPreparedRabbitMqMessage *prepared = NULL;
+    struct RzbNextDecodedRabbitMqMessage *decoded = NULL;
+
+    ck_assert(RzbNextRabbitMq_PrepareMessage(fixture, NULL, &policy, NULL,
+                                             &prepared));
+    ck_assert_ptr_ne(prepared, NULL);
+    ck_assert_str_eq(prepared->route->routingKey,
+                     RZB_NEXT_QUEUE_ANALYSIS_RESULT);
+    ck_assert_str_eq(header_value(prepared->headers, prepared->headerCount,
+                                  RZB_NEXT_HEADER_BODY_MODE), "zlib");
+    ck_assert_str_eq(header_value(prepared->headers, prepared->headerCount,
+                                  RZB_NEXT_HEADER_CONTENT_ENCODING),
+                     MESSAGE_BODY_CONTENT_ENCODING_ZLIB);
+    ck_assert_str_eq(prepared->contentEncoding,
+                     MESSAGE_BODY_CONTENT_ENCODING_ZLIB);
+
+    ck_assert(RzbNextRabbitMq_DecodeMessage(prepared->body, prepared->bodySize,
+                                            prepared->headers,
+                                            prepared->headerCount, NULL, 0,
+                                            &decoded));
+    ck_assert_str_eq(decoded->jsonMessage, fixture);
+    ck_assert_ptr_eq(decoded->claimCheckReference, NULL);
+
+    RzbNextDecodedRabbitMqMessage_Destroy(decoded);
+    RzbNextPreparedRabbitMqMessage_Destroy(prepared);
+    free(fixture);
+}
+END_TEST
+
+START_TEST(test_rabbitmq_prepare_and_decode_claim_check_message)
+{
+    char *fixture = read_fixture("messages",
+                                 "analysis_result_envelope.valid.json");
+    struct MessageBodyPolicy policy = { 32 };
+    struct ClaimCheckReference *template = NULL;
+    struct RzbNextPreparedRabbitMqMessage *prepared = NULL;
+    struct RzbNextDecodedRabbitMqMessage *decoded = NULL;
+
+    template = ClaimCheckReference_Create(
+        "https://objects.example.invalid/messages/payload.zlib?signature=redacted",
+        "2026-06-18T00:00:00.000Z",
+        "razorback-claim-check",
+        "messages/payload.zlib",
+        "application/json",
+        RZB_NEXT_SCHEMA_ANALYSIS_RESULT,
+        RZB_NEXT_SCHEMA_VERSION
+    );
+    ck_assert_ptr_ne(template, NULL);
+
+    ck_assert(RzbNextRabbitMq_PrepareMessage(fixture, NULL, &policy, template,
+                                             &prepared));
+    ck_assert_ptr_ne(prepared, NULL);
+    ck_assert_str_eq(header_value(prepared->headers, prepared->headerCount,
+                                  RZB_NEXT_HEADER_BODY_MODE), "claim_check");
+    ck_assert_ptr_eq(header_value(prepared->headers, prepared->headerCount,
+                                  RZB_NEXT_HEADER_CONTENT_ENCODING), NULL);
+    ck_assert_ptr_ne(prepared->claimCheckBody, NULL);
+    ck_assert_ptr_ne(prepared->claimCheckReference, NULL);
+    ck_assert_str_eq(prepared->claimCheckReference->schemaName,
+                     RZB_NEXT_SCHEMA_ANALYSIS_RESULT);
+
+    ck_assert(RzbNextRabbitMq_DecodeMessage(
+        prepared->body, prepared->bodySize, prepared->headers,
+        prepared->headerCount, prepared->claimCheckBody,
+        prepared->claimCheckBodySize, &decoded));
+    ck_assert_str_eq(decoded->jsonMessage, fixture);
+    ck_assert_ptr_ne(decoded->claimCheckReference, NULL);
+    ck_assert_str_eq(decoded->claimCheckReference->schemaName,
+                     RZB_NEXT_SCHEMA_ANALYSIS_RESULT);
+
+    RzbNextDecodedRabbitMqMessage_Destroy(decoded);
+    RzbNextPreparedRabbitMqMessage_Destroy(prepared);
+    ClaimCheckReference_Destroy(template);
+    free(fixture);
+}
+END_TEST
+
+START_TEST(test_rabbitmq_prepare_rejects_kafka_routed_message)
+{
+    char *fixture = read_fixture("search_export",
+                                 "search_export_record.valid.json");
+    struct MessageBodyPolicy policy = { 4096 };
+    struct RzbNextPreparedRabbitMqMessage *prepared = NULL;
+
+    ck_assert(!RzbNextRabbitMq_PrepareMessage(fixture, NULL, &policy, NULL,
+                                              &prepared));
+    ck_assert_ptr_eq(prepared, NULL);
+
+    free(fixture);
+}
+END_TEST
+
 START_TEST(test_cnc_helpers_gate_registration_and_extract_timing)
 {
     char *hello;
@@ -444,6 +594,10 @@ messages_next_suite(void)
     tcase_add_test(testcase, test_messages_next_rejects_unknown_or_bad_identity);
     tcase_add_test(testcase, test_messages_next_rejects_invalid_schema_fixtures);
     tcase_add_test(testcase, test_messages_next_routes_match_dispatcher_next_topology);
+    tcase_add_test(testcase, test_rabbitmq_prepare_and_decode_inline_message);
+    tcase_add_test(testcase, test_rabbitmq_prepare_and_decode_zlib_message);
+    tcase_add_test(testcase, test_rabbitmq_prepare_and_decode_claim_check_message);
+    tcase_add_test(testcase, test_rabbitmq_prepare_rejects_kafka_routed_message);
     tcase_add_test(testcase,
                    test_cnc_helpers_gate_registration_and_extract_timing);
     tcase_add_test(testcase,
