@@ -1595,6 +1595,40 @@ RzbNext_GetVersion(json_object *object, const char *field, uint32_t *version)
 }
 
 static bool
+RzbNext_GetUint64(json_object *object, const char *field, uint64_t *number)
+{
+    json_object *value;
+    int64_t parsed;
+
+    if (number == NULL)
+        return false;
+    if (!json_object_object_get_ex(object, field, &value))
+        return false;
+    if (json_object_get_type(value) != json_type_int)
+        return false;
+    parsed = json_object_get_int64(value);
+    if (parsed < 0)
+        return false;
+    *number = (uint64_t)parsed;
+    return true;
+}
+
+static bool
+RzbNext_GetBool(json_object *object, const char *field, bool *boolean)
+{
+    json_object *value;
+
+    if (boolean == NULL)
+        return false;
+    if (!json_object_object_get_ex(object, field, &value))
+        return false;
+    if (json_object_get_type(value) != json_type_boolean)
+        return false;
+    *boolean = json_object_get_boolean(value) ? true : false;
+    return true;
+}
+
+static bool
 RzbNext_GetIdentity(json_object *object, const char **schemaName,
                     uint32_t *schemaVersion)
 {
@@ -1793,6 +1827,88 @@ RzbNextMessage_Route(const char *jsonMessage, const char *cacheRequestorUuid,
         return false;
     *route = RzbNextRoute_Create(transport, exchange, routingKey);
     return *route != NULL;
+}
+
+SO_PUBLIC bool
+RzbNextCnc_IsReadyDispatcherHello(const char *jsonMessage)
+{
+    json_object *object;
+    json_object *reasons;
+    const char *schemaName;
+    const char *availability;
+    uint32_t schemaVersion;
+    bool ready;
+    bool valid;
+
+    object = RzbNext_ParseJsonObject(jsonMessage);
+    if (object == NULL)
+        return false;
+    valid = RzbNext_GetIdentity(object, &schemaName, &schemaVersion) &&
+            strcmp(schemaName, RZB_NEXT_SCHEMA_CNC_DISPATCHER_HELLO) == 0 &&
+            RzbNext_IsKnownSchemaVersion(schemaName, schemaVersion) &&
+            RzbNext_ValidateObjectForSchema(object, schemaName) &&
+            RzbNext_GetBool(object, "ready", &ready) &&
+            ready &&
+            (availability = RzbNext_GetString(object, "availability")) != NULL &&
+            strcmp(availability, "ready") == 0 &&
+            json_object_object_get_ex(object, "dependency_reason_codes",
+                                      &reasons) &&
+            json_object_get_type(reasons) == json_type_array &&
+            json_object_array_length(reasons) == 0;
+    json_object_put(object);
+    return valid;
+}
+
+SO_PUBLIC bool
+RzbNextCnc_RegistrationAcceptedTiming(
+    const char *jsonMessage,
+    uint64_t *livenessInterval,
+    uint64_t *livenessFreshnessWindow,
+    uint64_t *livenessClockSkewTolerance)
+{
+    json_object *object;
+    const char *schemaName;
+    uint32_t schemaVersion;
+    uint64_t interval;
+    uint64_t freshness;
+    uint64_t skew;
+    bool valid;
+
+    if (livenessInterval == NULL || livenessFreshnessWindow == NULL ||
+        livenessClockSkewTolerance == NULL) {
+        return false;
+    }
+    object = RzbNext_ParseJsonObject(jsonMessage);
+    if (object == NULL)
+        return false;
+    valid = RzbNext_GetIdentity(object, &schemaName, &schemaVersion) &&
+            strcmp(schemaName, RZB_NEXT_SCHEMA_CNC_REGISTRATION_ACCEPTED) == 0 &&
+            RzbNext_IsKnownSchemaVersion(schemaName, schemaVersion) &&
+            RzbNext_ValidateObjectForSchema(object, schemaName) &&
+            RzbNext_GetUint64(object, "liveness_interval", &interval) &&
+            RzbNext_GetUint64(object, "liveness_freshness_window", &freshness) &&
+            RzbNext_GetUint64(object, "liveness_clock_skew_tolerance", &skew);
+    json_object_put(object);
+    if (!valid)
+        return false;
+    *livenessInterval = interval;
+    *livenessFreshnessWindow = freshness;
+    *livenessClockSkewTolerance = skew;
+    return true;
+}
+
+SO_PUBLIC char *
+RzbNextCnc_DirectedCommandQueue(const char *nuggetUuid)
+{
+    if (!RzbNext_IsUuid(nuggetUuid))
+        return NULL;
+    return RzbNext_Format2(RZB_NEXT_QUEUE_DIRECTED_COMMAND_PREFIX, nuggetUuid);
+}
+
+SO_PUBLIC void
+RzbNext_FreeString(char *value)
+{
+    free(value);
 }
 
 SO_PUBLIC void

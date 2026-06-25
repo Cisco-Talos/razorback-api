@@ -25,6 +25,8 @@
 #include <razorback/types.h>
 #include <razorback/visibility.h>
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -87,6 +89,15 @@ SO_PUBLIC extern bool RzbNextMessage_Route(
     const char *cacheRequestorUuid,
     struct RzbNextRoute **route
 );
+SO_PUBLIC extern bool RzbNextCnc_IsReadyDispatcherHello(const char *jsonMessage);
+SO_PUBLIC extern bool RzbNextCnc_RegistrationAcceptedTiming(
+    const char *jsonMessage,
+    uint64_t *livenessInterval,
+    uint64_t *livenessFreshnessWindow,
+    uint64_t *livenessClockSkewTolerance
+);
+SO_PUBLIC extern char * RzbNextCnc_DirectedCommandQueue(const char *nuggetUuid);
+SO_PUBLIC extern void RzbNext_FreeString(char *value);
 SO_PUBLIC extern void RzbNextRoute_Destroy(struct RzbNextRoute *route);
 
 #ifdef __cplusplus

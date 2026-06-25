@@ -25,6 +25,7 @@
 #include <json-c/json.h>
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -357,6 +358,50 @@ START_TEST(test_messages_next_routes_match_phase5_topology)
 }
 END_TEST
 
+START_TEST(test_phase6_cnc_helpers_gate_registration_and_extract_timing)
+{
+    char *hello;
+    char *accepted;
+    char *directedQueue;
+    uint64_t interval = 0;
+    uint64_t freshness = 0;
+    uint64_t skew = 0;
+    static const char notReadyHello[] =
+        "{"
+        "\"schema_name\":\"razorback.cnc.dispatcher_hello\","
+        "\"schema_version\":1,"
+        "\"dispatcher_id\":\"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa\","
+        "\"created_at\":\"2026-06-17T21:00:00.000Z\","
+        "\"started_at\":\"2026-06-17T20:59:00.000Z\","
+        "\"ready\":false,"
+        "\"availability\":\"starting\","
+        "\"dependency_reason_codes\":[\"starting\"]"
+        "}";
+
+    hello = read_fixture("messages", "cnc_dispatcher_hello.valid.json");
+    accepted = read_fixture("messages", "cnc_registration_accepted.valid.json");
+
+    ck_assert(RzbNextCnc_IsReadyDispatcherHello(hello));
+    ck_assert(!RzbNextCnc_IsReadyDispatcherHello(notReadyHello));
+    ck_assert(RzbNextCnc_RegistrationAcceptedTiming(accepted, &interval,
+                                                    &freshness, &skew));
+    ck_assert_uint_eq(interval, 10);
+    ck_assert_uint_eq(freshness, 30);
+    ck_assert_uint_eq(skew, 5);
+
+    directedQueue = RzbNextCnc_DirectedCommandQueue(
+        "22222222-2222-4222-8222-222222222222");
+    ck_assert_ptr_ne(directedQueue, NULL);
+    ck_assert_str_eq(directedQueue,
+                     "COMMAND.22222222-2222-4222-8222-222222222222");
+    RzbNext_FreeString(directedQueue);
+    ck_assert_ptr_eq(RzbNextCnc_DirectedCommandQueue("not-a-uuid"), NULL);
+
+    free(accepted);
+    free(hello);
+}
+END_TEST
+
 START_TEST(test_messages_next_cache_response_route_requires_requestor)
 {
     char *fixture;
@@ -399,6 +444,8 @@ messages_next_suite(void)
     tcase_add_test(testcase, test_messages_next_rejects_unknown_or_bad_identity);
     tcase_add_test(testcase, test_messages_next_rejects_invalid_phase5_fixtures);
     tcase_add_test(testcase, test_messages_next_routes_match_phase5_topology);
+    tcase_add_test(testcase,
+                   test_phase6_cnc_helpers_gate_registration_and_extract_timing);
     tcase_add_test(testcase,
                    test_messages_next_cache_response_route_requires_requestor);
     tcase_add_test(testcase,
