@@ -94,6 +94,17 @@ RzbNext_Strdup(const char *value)
 }
 
 static char *
+RzbNext_JsonToOwnedString(json_object *object)
+{
+    const char *jsonText;
+
+    if (object == NULL)
+        return NULL;
+    jsonText = json_object_to_json_string_ext(object, JSON_C_TO_STRING_PLAIN);
+    return RzbNext_Strdup(jsonText);
+}
+
+static char *
 RzbNext_Format2(const char *prefix, const char *value)
 {
     char *formatted;
@@ -1382,6 +1393,257 @@ RzbNext_ValidateAnalysisResult(json_object *object)
 }
 
 static bool
+RzbNextAnalysisResult_AddString(json_object *object, const char *field,
+                                const char *value)
+{
+    json_object *stringValue;
+
+    if (object == NULL || field == NULL || value == NULL)
+        return false;
+    stringValue = json_object_new_string(value);
+    if (stringValue == NULL)
+        return false;
+    json_object_object_add(object, field, stringValue);
+    return true;
+}
+
+static bool
+RzbNextAnalysisResult_AddOptionalJson(json_object *object, const char *field,
+                                      const char *jsonText,
+                                      enum json_type expectedType)
+{
+    json_object *value;
+
+    if (jsonText == NULL)
+        return true;
+    value = json_tokener_parse(jsonText);
+    if (value == NULL || json_object_get_type(value) != expectedType) {
+        json_object_put(value);
+        return false;
+    }
+    json_object_object_add(object, field, value);
+    return true;
+}
+
+static json_object *
+RzbNextAnalysisResult_ParseInspectionWork(const char *inspectionWorkJson)
+{
+    json_object *work;
+    json_object *version;
+    const char *schemaName;
+
+    if (inspectionWorkJson == NULL)
+        return NULL;
+    work = json_tokener_parse(inspectionWorkJson);
+    if (work == NULL || json_object_get_type(work) != json_type_object)
+        goto error;
+    schemaName = RzbNext_GetString(work, "schema_name");
+    version = RzbNext_GetTyped(work, "schema_version", json_type_int);
+    if (schemaName == NULL ||
+        strcmp(schemaName, RZB_NEXT_SCHEMA_INSPECTION_WORK) != 0 ||
+        version == NULL ||
+        json_object_get_int64(version) != RZB_NEXT_SCHEMA_VERSION ||
+        !RzbNext_ValidateInspectionWork(work)) {
+        goto error;
+    }
+    return work;
+
+error:
+    if (work != NULL)
+        json_object_put(work);
+    return NULL;
+}
+
+static json_object *
+RzbNextAnalysisResult_Common(json_object *work, const char *inspectorUuid,
+                             const char *status, const char *createdAt)
+{
+    json_object *result;
+    json_object *schemaVersion;
+    json_object *block;
+    json_object *event;
+    const char *inspectionId;
+    const char *eventId;
+    const char *appType;
+
+    if (work == NULL || !RzbNext_IsUuid(inspectorUuid) ||
+        !RzbNext_IsTimestamp(createdAt)) {
+        return NULL;
+    }
+
+    inspectionId = RzbNext_GetString(work, "inspection_id");
+    appType = RzbNext_GetString(work, "app_type");
+    block = RzbNext_GetTyped(work, "block", json_type_object);
+    event = RzbNext_GetTyped(work, "event", json_type_object);
+    eventId = RzbNext_GetString(event, "event_id");
+    if (inspectionId == NULL || appType == NULL || block == NULL ||
+        eventId == NULL) {
+        return NULL;
+    }
+
+    result = json_object_new_object();
+    schemaVersion = json_object_new_int((int)RZB_NEXT_SCHEMA_VERSION);
+    if (result == NULL || schemaVersion == NULL) {
+        if (result != NULL)
+            json_object_put(result);
+        if (schemaVersion != NULL)
+            json_object_put(schemaVersion);
+        return NULL;
+    }
+
+    json_object_object_add(result, "schema_version", schemaVersion);
+    json_object_object_add(result, "block", json_object_get(block));
+    if (!RzbNextAnalysisResult_AddString(result, "schema_name",
+                                         RZB_NEXT_SCHEMA_ANALYSIS_RESULT) ||
+        !RzbNextAnalysisResult_AddString(result, "inspection_id",
+                                         inspectionId) ||
+        !RzbNextAnalysisResult_AddString(result, "event_id", eventId) ||
+        !RzbNextAnalysisResult_AddString(result, "inspector_id",
+                                         inspectorUuid) ||
+        !RzbNextAnalysisResult_AddString(result, "app_type", appType) ||
+        !RzbNextAnalysisResult_AddString(result, "result_status", status) ||
+        !RzbNextAnalysisResult_AddString(result, "created_at", createdAt)) {
+        json_object_put(result);
+        return NULL;
+    }
+    return result;
+}
+
+char *
+RzbNextAnalysisResult_BuildCompleted(const char *inspectionWorkJson,
+                                     const char *inspectorUuid,
+                                     const char *createdAt,
+                                     const char *blockMetadataUpdatesJson,
+                                     const char *metadataJson,
+                                     const char *tagMutationsJson,
+                                     const char *alertsJson)
+{
+    json_object *work;
+    json_object *result;
+    char *jsonText = NULL;
+
+    work = RzbNextAnalysisResult_ParseInspectionWork(inspectionWorkJson);
+    result = RzbNextAnalysisResult_Common(work, inspectorUuid, "completed",
+                                          createdAt);
+    if (result == NULL)
+        goto cleanup;
+    if (!RzbNextAnalysisResult_AddOptionalJson(
+            result, "block_metadata_updates", blockMetadataUpdatesJson,
+            json_type_array) ||
+        !RzbNextAnalysisResult_AddOptionalJson(result, "metadata",
+                                              metadataJson,
+                                              json_type_array) ||
+        !RzbNextAnalysisResult_AddOptionalJson(result, "tag_mutations",
+                                              tagMutationsJson,
+                                              json_type_object) ||
+        !RzbNextAnalysisResult_AddOptionalJson(result, "alerts", alertsJson,
+                                              json_type_array) ||
+        !RzbNext_ValidateAnalysisResult(result)) {
+        goto cleanup;
+    }
+    jsonText = RzbNext_JsonToOwnedString(result);
+
+cleanup:
+    if (result != NULL)
+        json_object_put(result);
+    if (work != NULL)
+        json_object_put(work);
+    return jsonText;
+}
+
+char *
+RzbNextAnalysisResult_BuildError(const char *inspectionWorkJson,
+                                 const char *inspectorUuid,
+                                 const char *category, const char *code,
+                                 const char *message,
+                                 const char *detailsJson,
+                                 const char *createdAt)
+{
+    json_object *work;
+    json_object *result;
+    json_object *error;
+    char *jsonText = NULL;
+
+    work = RzbNextAnalysisResult_ParseInspectionWork(inspectionWorkJson);
+    result = RzbNextAnalysisResult_Common(work, inspectorUuid, "error",
+                                          createdAt);
+    error = json_object_new_object();
+    if (result == NULL || error == NULL)
+        goto cleanup;
+    if (!RzbNextAnalysisResult_AddString(error, "category", category) ||
+        !RzbNextAnalysisResult_AddString(error, "code", code) ||
+        !RzbNextAnalysisResult_AddString(error, "message", message) ||
+        !RzbNextAnalysisResult_AddOptionalJson(error, "details",
+                                              detailsJson,
+                                              json_type_object)) {
+        goto cleanup;
+    }
+    json_object_object_add(result, "error", error);
+    error = NULL;
+    if (!RzbNext_ValidateAnalysisResult(result))
+        goto cleanup;
+    jsonText = RzbNext_JsonToOwnedString(result);
+
+cleanup:
+    if (error != NULL)
+        json_object_put(error);
+    if (result != NULL)
+        json_object_put(result);
+    if (work != NULL)
+        json_object_put(work);
+    return jsonText;
+}
+
+char *
+RzbNextAnalysisResult_BuildDeferred(const char *inspectionWorkJson,
+                                    const char *inspectorUuid,
+                                    const char *reasonCode,
+                                    const char *message,
+                                    const char *pollAfter,
+                                    const char *detailsJson,
+                                    const char *createdAt)
+{
+    json_object *work;
+    json_object *result;
+    json_object *deferred;
+    char *jsonText = NULL;
+
+    work = RzbNextAnalysisResult_ParseInspectionWork(inspectionWorkJson);
+    result = RzbNextAnalysisResult_Common(work, inspectorUuid, "deferred",
+                                          createdAt);
+    deferred = json_object_new_object();
+    if (result == NULL || deferred == NULL)
+        goto cleanup;
+    if (!RzbNextAnalysisResult_AddString(deferred, "reason_code",
+                                         reasonCode) ||
+        !RzbNextAnalysisResult_AddString(deferred, "message", message) ||
+        !RzbNextAnalysisResult_AddOptionalJson(deferred, "details",
+                                              detailsJson,
+                                              json_type_object)) {
+        goto cleanup;
+    }
+    if (pollAfter != NULL &&
+        !RzbNextAnalysisResult_AddString(deferred, "poll_after",
+                                         pollAfter)) {
+        goto cleanup;
+    }
+    json_object_object_add(result, "deferred", deferred);
+    deferred = NULL;
+    if (!RzbNext_ValidateAnalysisResult(result))
+        goto cleanup;
+    jsonText = RzbNext_JsonToOwnedString(result);
+
+cleanup:
+    if (deferred != NULL)
+        json_object_put(deferred);
+    if (result != NULL)
+        json_object_put(result);
+    if (work != NULL)
+        json_object_put(work);
+    return jsonText;
+}
+
+static bool
 RzbNext_ValidateCacheRequest(json_object *object)
 {
     static const char * const fields[] = {
@@ -2002,7 +2264,8 @@ cleanup:
 }
 
 SO_PUBLIC bool
-RzbNextRabbitMq_DecodeMessage(
+RzbNextRabbitMq_DecodeMessageWithPolicy(
+    const struct MessageBodyPolicy *policy,
     const uint8_t *body,
     size_t bodySize,
     const struct RzbNextMessageHeader *headers,
@@ -2037,15 +2300,16 @@ RzbNextRabbitMq_DecodeMessage(
     if (strcmp(bodyMode, "inline") == 0) {
         if (contentEncoding != NULL && contentEncoding[0] != '\0')
             return false;
-        ok = MessageBody_DecodeInline(body, bodySize, NULL, &decodedBytes,
-                                      &decodedSize);
+        ok = MessageBody_DecodeInlineWithPolicy(policy, body, bodySize, NULL,
+                                                &decodedBytes, &decodedSize);
     } else if (strcmp(bodyMode, "zlib") == 0) {
         if (contentEncoding == NULL ||
             strcmp(contentEncoding, MESSAGE_BODY_CONTENT_ENCODING_ZLIB) != 0) {
             return false;
         }
-        ok = MessageBody_DecodeInline(body, bodySize, contentEncoding,
-                                      &decodedBytes, &decodedSize);
+        ok = MessageBody_DecodeInlineWithPolicy(policy, body, bodySize,
+                                                contentEncoding, &decodedBytes,
+                                                &decodedSize);
     } else if (strcmp(bodyMode, "claim_check") == 0) {
         char *referenceJson;
 
@@ -2060,9 +2324,10 @@ RzbNextRabbitMq_DecodeMessage(
         free(referenceJson);
         if (reference == NULL || claimCheckBody == NULL)
             goto cleanup;
-        ok = MessageBody_DecodeClaimCheck(claimCheckBody, claimCheckBodySize,
-                                          reference, &decodedBytes,
-                                          &decodedSize);
+        ok = MessageBody_DecodeClaimCheckWithPolicy(policy, claimCheckBody,
+                                                    claimCheckBodySize,
+                                                    reference, &decodedBytes,
+                                                    &decodedSize);
     } else {
         return false;
     }
@@ -2078,6 +2343,23 @@ cleanup:
     free(decodedBytes);
     ClaimCheckReference_Destroy(reference);
     return ok;
+}
+
+SO_PUBLIC bool
+RzbNextRabbitMq_DecodeMessage(
+    const uint8_t *body,
+    size_t bodySize,
+    const struct RzbNextMessageHeader *headers,
+    size_t headerCount,
+    const uint8_t *claimCheckBody,
+    size_t claimCheckBodySize,
+    struct RzbNextDecodedRabbitMqMessage **decoded)
+{
+    return RzbNextRabbitMq_DecodeMessageWithPolicy(NULL, body, bodySize,
+                                                   headers, headerCount,
+                                                   claimCheckBody,
+                                                   claimCheckBodySize,
+                                                   decoded);
 }
 
 SO_PUBLIC bool

@@ -38,6 +38,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/time.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -51,6 +52,14 @@
 #define RZB_SMOKE_DEFAULT_KEYCLOAK_PASSWORD "razorback-smoke"
 #define RZB_SMOKE_DEFAULT_LOCALITY "default"
 #define RZB_SMOKE_DEFAULT_SECONDS 25
+#define RZB_SMOKE_OPERATIONAL_BLOCK_SIZE 4096ULL
+#define RZB_SMOKE_OPERATIONAL_BLOCK_DATA_TYPE "application/pdf"
+
+#if defined(__GNUC__)
+#define RZB_SMOKE_UNUSED __attribute__((unused))
+#else
+#define RZB_SMOKE_UNUSED
+#endif
 
 enum RzbSmokeRole
 {
@@ -85,6 +94,7 @@ struct RzbSmokeBroker
     amqp_channel_t channel;
     char *helloQueue;
     char *directedQueue;
+    char *workQueue;
 };
 
 struct RzbSmokeReport
@@ -94,10 +104,28 @@ struct RzbSmokeReport
     bool livenessPublished;
     bool byePublished;
     bool liveStateSeen;
+    bool blockSubmissionPublished;
+    bool blockUpdatePublished;
+    bool inspectionWorkReceived;
+    bool analysisResultPublished;
+    bool activeInspectionSeen;
+    bool blockSeen;
+};
+
+struct RzbSmokeOperation
+{
+    char *eventId;
+    char *updateId;
+    char *inspectionId;
+    char *sha256;
+    const char *dataType;
+    unsigned long long size;
+    const char *inspectorAppType;
 };
 
 static bool RzbSmoke_LiveEnabled(void);
-static bool RzbSmoke_RunLive(enum RzbSmokeRole role);
+static bool RZB_SMOKE_UNUSED RzbSmoke_RunLive(enum RzbSmokeRole role);
+static bool RZB_SMOKE_UNUSED RzbSmoke_RunLiveOperational(void);
 
 static const char *
 RzbSmoke_Env(const char *name, const char *fallback)
@@ -200,6 +228,39 @@ RzbSmoke_Uuid(void)
 }
 
 static char *
+RzbSmoke_RandomSha256(void)
+{
+    char *first = RzbSmoke_Uuid();
+    char *second = RzbSmoke_Uuid();
+    char *sha = calloc(65U, sizeof(char));
+    size_t out = 0;
+    const char *parts[2];
+    size_t part;
+
+    if (first == NULL || second == NULL || sha == NULL)
+        goto cleanup;
+    parts[0] = first;
+    parts[1] = second;
+    for (part = 0; part < 2U; part++) {
+        const char *cursor;
+
+        for (cursor = parts[part]; *cursor != '\0' && out < 64U; cursor++) {
+            if (*cursor != '-')
+                sha[out++] = *cursor;
+        }
+    }
+    if (out != 64U) {
+        free(sha);
+        sha = NULL;
+    }
+
+cleanup:
+    free(first);
+    free(second);
+    return sha;
+}
+
+static char *
 RzbSmoke_Timestamp(void)
 {
     time_t now = time(NULL);
@@ -212,6 +273,70 @@ RzbSmoke_Timestamp(void)
     strftime(text, 25U, "%Y-%m-%dT%H:%M:%S", &tmValue);
     strcat(text, ".000Z");
     return text;
+}
+
+static bool
+RzbSmoke_OperationInit(const struct RzbSmokeConfig *inspector,
+                       struct RzbSmokeOperation *operation)
+{
+    memset(operation, 0, sizeof(*operation));
+    operation->eventId = RzbSmoke_Uuid();
+    operation->updateId = RzbSmoke_Uuid();
+    operation->sha256 = RzbSmoke_RandomSha256();
+    operation->dataType = RZB_SMOKE_OPERATIONAL_BLOCK_DATA_TYPE;
+    operation->size = RZB_SMOKE_OPERATIONAL_BLOCK_SIZE;
+    operation->inspectorAppType = inspector->appType;
+    return operation->eventId != NULL && operation->updateId != NULL &&
+           operation->sha256 != NULL;
+}
+
+static void
+RzbSmoke_OperationClear(struct RzbSmokeOperation *operation)
+{
+    if (operation == NULL)
+        return;
+    free(operation->eventId);
+    free(operation->updateId);
+    free(operation->inspectionId);
+    free(operation->sha256);
+    memset(operation, 0, sizeof(*operation));
+}
+
+static bool
+RzbSmoke_WriteOperationReport(const struct RzbSmokeOperation *operation,
+                              const char *sdkName)
+{
+    const char *path = getenv("RZB_SMOKE_OPERATION_REPORT");
+    FILE *file;
+
+    if (path == NULL || path[0] == '\0')
+        return true;
+    file = fopen(path, "w");
+    if (file == NULL)
+        return false;
+    fprintf(file,
+            "{\n"
+            "  \"block_key\": \"%s:%llu\",\n"
+            "  \"data_type\": \"%s\",\n"
+            "  \"event_id\": \"%s\",\n"
+            "  \"inspector_app_type\": \"%s\",\n",
+            operation->sha256, operation->size, operation->dataType,
+            operation->eventId, operation->inspectorAppType);
+    if (operation->inspectionId != NULL) {
+        fprintf(file, "  \"inspection_id\": \"%s\",\n",
+                operation->inspectionId);
+    }
+    fprintf(file,
+            "  \"sdk\": \"%s\",\n"
+            "  \"sha256\": \"%s\",\n"
+            "  \"size\": %llu,\n"
+            "  \"update_id\": \"%s\"\n"
+            "}\n",
+            sdkName, operation->sha256, operation->size,
+            operation->updateId);
+    if (fclose(file) != 0)
+        return false;
+    return true;
 }
 
 static void
@@ -854,6 +979,112 @@ RzbSmoke_ApiByeCleanup(const struct RzbSmokeConfig *config, const char *bearer)
 }
 
 static bool
+RzbSmoke_ActiveInspectionPresent(const struct RzbSmokeConfig *source,
+                                 const char *bearer,
+                                 struct RzbSmokeOperation *operation,
+                                 bool *present)
+{
+    char *eventId = RzbSmoke_QueryEncode(operation->eventId, false);
+    char *appType = RzbSmoke_QueryEncode(operation->inspectorAppType, false);
+    char *url = RzbSmoke_Format(
+        "%s/api/v1/inspections/active?event_id=%s&app_type=%s&limit=100",
+        source->apiUrl, eventId, appType);
+    char expectedBlockKey[96];
+    struct RzbSmokeHttpResponse response;
+    json_object *root;
+    json_object *data;
+    size_t index;
+    size_t count;
+    bool ok = false;
+
+    *present = false;
+    free(eventId);
+    free(appType);
+    if (url == NULL)
+        return false;
+    snprintf(expectedBlockKey, sizeof(expectedBlockKey), "%s:%llu",
+             operation->sha256, operation->size);
+    if (!RzbSmoke_HttpRequest("GET", url, bearer, NULL, NULL, &response)) {
+        free(url);
+        return false;
+    }
+    free(url);
+    if (response.status != 200)
+        goto cleanup;
+    root = RzbSmoke_HttpJson(&response);
+    if (root == NULL)
+        goto cleanup;
+    if (!json_object_object_get_ex(root, "data", &data) ||
+        json_object_get_type(data) != json_type_array) {
+        json_object_put(root);
+        goto cleanup;
+    }
+    count = json_object_array_length(data);
+    for (index = 0; index < count; index++) {
+        json_object *row = json_object_array_get_idx(data, index);
+        const char *eventIdText = NULL;
+        const char *inspectionIdText = NULL;
+        const char *appTypeText = NULL;
+        const char *blockKey = NULL;
+        const char *status = NULL;
+
+        if (row != NULL &&
+            RzbSmoke_JsonString(row, "event_id", &eventIdText) &&
+            strcmp(eventIdText, operation->eventId) == 0 &&
+            RzbSmoke_JsonString(row, "inspection_id", &inspectionIdText) &&
+            RzbSmoke_JsonString(row, "app_type", &appTypeText) &&
+            strcmp(appTypeText, operation->inspectorAppType) == 0 &&
+            RzbSmoke_JsonString(row, "block_key", &blockKey) &&
+            strcmp(blockKey, expectedBlockKey) == 0 &&
+            RzbSmoke_JsonString(row, "status", &status) &&
+            (strcmp(status, "pending") == 0 ||
+             strcmp(status, "running") == 0 ||
+             strcmp(status, "deferred") == 0)) {
+            if (operation->inspectionId == NULL)
+                operation->inspectionId = RzbSmoke_Strdup(inspectionIdText);
+            *present = true;
+            break;
+        }
+    }
+    ok = true;
+    json_object_put(root);
+
+cleanup:
+    RzbSmoke_HttpResponseClear(&response);
+    return ok;
+}
+
+static bool
+RzbSmoke_BlockPresent(const struct RzbSmokeConfig *source, const char *bearer,
+                      const struct RzbSmokeOperation *operation, bool *present)
+{
+    char *sha = RzbSmoke_QueryEncode(operation->sha256, true);
+    char *url = RzbSmoke_Format("%s/api/v1/blocks/sha256/%s/%llu",
+                                source->apiUrl, sha, operation->size);
+    struct RzbSmokeHttpResponse response;
+    bool ok;
+
+    *present = false;
+    free(sha);
+    if (url == NULL)
+        return false;
+    ok = RzbSmoke_HttpRequest("GET", url, bearer, NULL, NULL, &response);
+    free(url);
+    if (!ok)
+        return false;
+    if (response.status == 200) {
+        *present = true;
+        ok = true;
+    } else if (response.status == 404) {
+        ok = true;
+    } else {
+        ok = false;
+    }
+    RzbSmoke_HttpResponseClear(&response);
+    return ok;
+}
+
+static bool
 RzbSmoke_CheckRpc(amqp_connection_state_t connection, const char *operation)
 {
     amqp_rpc_reply_t reply = amqp_get_rpc_reply(connection);
@@ -913,6 +1144,7 @@ RzbSmoke_BrokerClose(struct RzbSmokeBroker *broker)
     amqp_destroy_connection(broker->connection);
     free(broker->helloQueue);
     free(broker->directedQueue);
+    free(broker->workQueue);
     memset(broker, 0, sizeof(*broker));
 }
 
@@ -928,9 +1160,12 @@ RzbSmoke_CopyBytesString(amqp_bytes_t bytes)
 }
 
 static bool
-RzbSmoke_DeclareTopology(struct RzbSmokeBroker *broker, const char *nuggetUuid)
+RzbSmoke_DeclareTopology(struct RzbSmokeBroker *broker,
+                         const struct RzbSmokeConfig *config)
 {
     amqp_queue_declare_ok_t *hello;
+    amqp_table_entry_t quorumEntry;
+    amqp_table_t quorumArgs;
 
     amqp_exchange_declare(
         broker->connection, broker->channel,
@@ -946,7 +1181,7 @@ RzbSmoke_DeclareTopology(struct RzbSmokeBroker *broker, const char *nuggetUuid)
         return false;
     }
     broker->helloQueue = RzbSmoke_CopyBytesString(hello->queue);
-    broker->directedQueue = RzbNextCnc_DirectedCommandQueue(nuggetUuid);
+    broker->directedQueue = RzbNextCnc_DirectedCommandQueue(config->nuggetUuid);
     if (broker->helloQueue == NULL || broker->directedQueue == NULL)
         return false;
     amqp_queue_bind(broker->connection, broker->channel,
@@ -958,7 +1193,25 @@ RzbSmoke_DeclareTopology(struct RzbSmokeBroker *broker, const char *nuggetUuid)
     amqp_queue_declare(broker->connection, broker->channel,
                        amqp_cstring_bytes(broker->directedQueue), 0, 0, 1, 1,
                        amqp_empty_table);
-    return RzbSmoke_CheckRpc(broker->connection, "directed_queue_declare");
+    if (!RzbSmoke_CheckRpc(broker->connection, "directed_queue_declare"))
+        return false;
+    if (config->role != RZB_SMOKE_ROLE_INSPECTOR)
+        return true;
+
+    broker->workQueue = RzbSmoke_Format("%s.%s",
+                                        RZB_NEXT_QUEUE_INSPECTOR_PREFIX,
+                                        config->appType);
+    if (broker->workQueue == NULL)
+        return false;
+    quorumEntry.key = amqp_cstring_bytes("x-queue-type");
+    quorumEntry.value.kind = AMQP_FIELD_KIND_UTF8;
+    quorumEntry.value.value.bytes = amqp_cstring_bytes("quorum");
+    quorumArgs.num_entries = 1;
+    quorumArgs.entries = &quorumEntry;
+    amqp_queue_declare(broker->connection, broker->channel,
+                       amqp_cstring_bytes(broker->workQueue), 0, 1, 0, 0,
+                       quorumArgs);
+    return RzbSmoke_CheckRpc(broker->connection, "inspector_work_queue_declare");
 }
 
 static bool
@@ -997,7 +1250,14 @@ RzbSmoke_StartConsumers(struct RzbSmokeBroker *broker)
     amqp_basic_consume(broker->connection, broker->channel,
                        amqp_cstring_bytes(broker->directedQueue),
                        amqp_empty_bytes, 0, 0, 1, amqp_empty_table);
-    return RzbSmoke_CheckRpc(broker->connection, "directed_consume");
+    if (!RzbSmoke_CheckRpc(broker->connection, "directed_consume"))
+        return false;
+    if (broker->workQueue == NULL)
+        return true;
+    amqp_basic_consume(broker->connection, broker->channel,
+                       amqp_cstring_bytes(broker->workQueue),
+                       amqp_empty_bytes, 0, 0, 1, amqp_empty_table);
+    return RzbSmoke_CheckRpc(broker->connection, "inspector_work_consume");
 }
 
 static struct RzbNextMessageHeader *
@@ -1180,6 +1440,92 @@ RzbSmoke_RegistrationRequest(RzbNextRuntime_t *runtime,
     return message;
 }
 
+static char *
+RzbSmoke_BlockSubmission(const struct RzbSmokeConfig *config,
+                         const struct RzbSmokeOperation *operation,
+                         const char *createdAt)
+{
+    return RzbSmoke_Format(
+        "{"
+        "\"schema_name\":\"%s\","
+        "\"schema_version\":1,"
+        "\"event_id\":\"%s\","
+        "\"source_nugget_uuid\":\"%s\","
+        "\"block\":{"
+        "\"sha256\":\"%s\","
+        "\"size\":%llu,"
+        "\"data_type\":\"%s\""
+        "},"
+        "\"stored\":true,"
+        "\"event_metadata\":[{"
+        "\"name\":\"filename\","
+        "\"type\":\"string\","
+        "\"value\":\"c-sdk-smoke-%s.pdf\""
+        "}],"
+        "\"created_at\":\"%s\""
+        "}",
+        RZB_NEXT_SCHEMA_BLOCK_SUBMISSION, operation->eventId,
+        config->nuggetUuid, operation->sha256, operation->size,
+        operation->dataType, operation->eventId, createdAt);
+}
+
+static char *
+RzbSmoke_BlockUpdate(const struct RzbSmokeConfig *config,
+                     const struct RzbSmokeOperation *operation,
+                     const char *createdAt)
+{
+    return RzbSmoke_Format(
+        "{"
+        "\"schema_name\":\"%s\","
+        "\"schema_version\":1,"
+        "\"update_id\":\"%s\","
+        "\"source_nugget_uuid\":\"%s\","
+        "\"block\":{"
+        "\"sha256\":\"%s\","
+        "\"size\":%llu,"
+        "\"data_type\":\"%s\""
+        "},"
+        "\"metadata_updates\":[{"
+        "\"name\":\"filename\","
+        "\"type\":\"string\","
+        "\"created_at\":\"%s\","
+        "\"value\":\"c-sdk-smoke-update-%s.pdf\""
+        "}],"
+        "\"created_at\":\"%s\""
+        "}",
+        RZB_NEXT_SCHEMA_BLOCK_UPDATE, operation->updateId,
+        config->nuggetUuid, operation->sha256, operation->size,
+        operation->dataType, createdAt, operation->updateId, createdAt);
+}
+
+static bool
+RzbSmoke_PublishOperationalMessages(struct RzbSmokeBroker *broker,
+                                    const struct RzbSmokeConfig *config,
+                                    const struct RzbSmokeOperation *operation,
+                                    struct RzbSmokeReport *report)
+{
+    char *createdAt = RzbSmoke_Timestamp();
+    char *submission = NULL;
+    char *update = NULL;
+    bool ok = false;
+
+    if (createdAt == NULL)
+        return false;
+    submission = RzbSmoke_BlockSubmission(config, operation, createdAt);
+    update = RzbSmoke_BlockUpdate(config, operation, createdAt);
+    ok = submission != NULL && update != NULL &&
+         RzbSmoke_Publish(broker, submission, 0U) &&
+         RzbSmoke_Publish(broker, update, 0U);
+    if (ok) {
+        report->blockSubmissionPublished = true;
+        report->blockUpdatePublished = true;
+    }
+    free(createdAt);
+    free(submission);
+    free(update);
+    return ok;
+}
+
 static const char *
 RzbSmoke_SchemaName(const char *jsonMessage)
 {
@@ -1197,8 +1543,69 @@ RzbSmoke_SchemaName(const char *jsonMessage)
 }
 
 static bool
+RzbSmoke_HandleInspectionWork(const struct RzbSmokeConfig *config,
+                              const struct RzbSmokeOperation *operation,
+                              const char *jsonMessage,
+                              struct RzbSmokeBroker *broker,
+                              struct RzbSmokeReport *report)
+{
+    json_object *root;
+    json_object *event;
+    json_object *block;
+    json_object *sizeObject;
+    const char *eventId = NULL;
+    const char *appType = NULL;
+    const char *workKind = NULL;
+    const char *sha256 = NULL;
+    const char *dataType = NULL;
+    char *createdAt = NULL;
+    char *result = NULL;
+    bool matched = false;
+    bool ok = false;
+
+    if (operation == NULL || config->role != RZB_SMOKE_ROLE_INSPECTOR)
+        return false;
+    root = json_tokener_parse(jsonMessage);
+    if (root == NULL)
+        return false;
+    ok = RzbSmoke_JsonString(root, "app_type", &appType) &&
+         strcmp(appType, config->appType) == 0 &&
+         RzbSmoke_JsonString(root, "work_kind", &workKind) &&
+         strcmp(workKind, "inspect") == 0 &&
+         json_object_object_get_ex(root, "event", &event) &&
+         RzbSmoke_JsonString(event, "event_id", &eventId) &&
+         strcmp(eventId, operation->eventId) == 0 &&
+         json_object_object_get_ex(root, "block", &block) &&
+         RzbSmoke_JsonString(block, "sha256", &sha256) &&
+         strcmp(sha256, operation->sha256) == 0 &&
+         RzbSmoke_JsonString(block, "data_type", &dataType) &&
+         strcmp(dataType, operation->dataType) == 0 &&
+         json_object_object_get_ex(block, "size", &sizeObject) &&
+         (unsigned long long)json_object_get_int64(sizeObject) ==
+             operation->size;
+    matched = ok;
+    if (ok) {
+        createdAt = RzbSmoke_Timestamp();
+        result = RzbNextAnalysisResult_BuildCompleted(
+            jsonMessage, config->nuggetUuid, createdAt, NULL,
+            "[{\"name\":\"smoke_result\",\"type\":\"string\",\"value\":\"completed\"}]",
+            NULL, NULL);
+        ok = result != NULL && RzbSmoke_Publish(broker, result, 0U);
+    }
+    if (ok) {
+        report->inspectionWorkReceived = true;
+        report->analysisResultPublished = true;
+    }
+    free(createdAt);
+    free(result);
+    json_object_put(root);
+    return matched ? ok : true;
+}
+
+static bool
 RzbSmoke_HandleMessage(RzbNextRuntime_t *runtime,
                        const struct RzbSmokeConfig *config,
+                       const struct RzbSmokeOperation *operation,
                        struct RzbSmokeBroker *broker, const char *jsonMessage,
                        struct RzbSmokeReport *report)
 {
@@ -1267,6 +1674,9 @@ RzbSmoke_HandleMessage(RzbNextRuntime_t *runtime,
             report->registrationPublished = false;
         return true;
     }
+    if (strcmp(schemaName, RZB_NEXT_SCHEMA_INSPECTION_WORK) == 0)
+        return RzbSmoke_HandleInspectionWork(config, operation, jsonMessage,
+                                             broker, report);
     return false;
 }
 
@@ -1293,7 +1703,27 @@ RzbSmoke_PublishLiveness(RzbNextRuntime_t *runtime,
 }
 
 static bool
+RzbSmoke_ReportComplete(const struct RzbSmokeConfig *config,
+                        const struct RzbSmokeOperation *operation,
+                        const struct RzbSmokeReport *report)
+{
+    if (report->deliveries == 0 || !report->registrationPublished ||
+        !report->livenessPublished || !report->byePublished ||
+        !report->liveStateSeen) {
+        return false;
+    }
+    if (operation == NULL)
+        return true;
+    if (config->role == RZB_SMOKE_ROLE_INSPECTOR)
+        return report->inspectionWorkReceived && report->analysisResultPublished;
+    return report->blockSubmissionPublished && report->blockUpdatePublished &&
+           report->blockSeen;
+}
+
+static bool
 RzbSmoke_RunBrokerLoop(const struct RzbSmokeConfig *config, const char *bearer,
+                       const struct RzbSmokeConfig *peerConfig,
+                       struct RzbSmokeOperation *operation,
                        struct RzbSmokeBroker *broker, unsigned long runSeconds,
                        struct RzbSmokeReport *report)
 {
@@ -1302,6 +1732,7 @@ RzbSmoke_RunBrokerLoop(const struct RzbSmokeConfig *config, const char *bearer,
     time_t deadline = time(NULL) + (time_t)runSeconds;
     time_t nextLiveness = 0;
     time_t nextApiCheck = 0;
+    time_t nextOperationalCheck = 0;
     bool ok = false;
 
     if (runtime == NULL)
@@ -1312,8 +1743,8 @@ RzbSmoke_RunBrokerLoop(const struct RzbSmokeConfig *config, const char *bearer,
 
         if (jsonMessage != NULL) {
             report->deliveries++;
-            if (!RzbSmoke_HandleMessage(runtime, config, broker, jsonMessage,
-                                        report)) {
+            if (!RzbSmoke_HandleMessage(runtime, config, operation, broker,
+                                        jsonMessage, report)) {
                 free(jsonMessage);
                 goto cleanup;
             }
@@ -1330,6 +1761,44 @@ RzbSmoke_RunBrokerLoop(const struct RzbSmokeConfig *config, const char *bearer,
             report->liveStateSeen = RzbSmoke_ApiLiveState(config, bearer);
             nextApiCheck = time(NULL) + 1;
         }
+        if (operation != NULL &&
+            config->role == RZB_SMOKE_ROLE_SOURCE &&
+            RzbNextRuntime_State(runtime) == RZB_NEXT_RUNTIME_READY &&
+            report->liveStateSeen && time(NULL) >= nextOperationalCheck) {
+            bool peerReady = true;
+
+            if (peerConfig != NULL)
+                peerReady = RzbSmoke_ApiLiveState(peerConfig, bearer);
+            if (!report->blockSubmissionPublished && peerReady) {
+                if (!RzbSmoke_PublishOperationalMessages(broker, config,
+                                                         operation, report))
+                    goto cleanup;
+            }
+            if (report->blockSubmissionPublished &&
+                !report->activeInspectionSeen) {
+                bool present = false;
+
+                if (RzbSmoke_ActiveInspectionPresent(config, bearer,
+                                                     operation, &present) &&
+                    present) {
+                    report->activeInspectionSeen = true;
+                }
+            }
+            if (report->blockSubmissionPublished && !report->blockSeen) {
+                bool present = false;
+
+                if (RzbSmoke_BlockPresent(config, bearer, operation,
+                                          &present) &&
+                    present) {
+                    report->blockSeen = true;
+                }
+            }
+            nextOperationalCheck = time(NULL) + 1;
+        }
+        if (operation != NULL && RzbSmoke_ReportComplete(config, operation,
+                                                        report)) {
+            break;
+        }
     }
     if (!report->byePublished) {
         char *createdAt = RzbSmoke_Timestamp();
@@ -1344,19 +1813,25 @@ RzbSmoke_RunBrokerLoop(const struct RzbSmokeConfig *config, const char *bearer,
         free(createdAt);
         free(bye);
     }
-    ok = report->deliveries > 0 && report->registrationPublished &&
-         report->livenessPublished && report->byePublished &&
-         report->liveStateSeen;
+    ok = RzbSmoke_ReportComplete(config, operation, report);
     if (!ok) {
         fprintf(stderr,
                 "dispatcher-next C %s live smoke incomplete: "
                 "deliveries=%zu registration=%s liveness=%s bye=%s "
-                "api_live_state=%s\n",
+                "api_live_state=%s block_submission=%s block_update=%s "
+                "inspection_work=%s analysis_result=%s "
+                "active_inspection=%s block_seen=%s\n",
                 config->label, report->deliveries,
                 report->registrationPublished ? "true" : "false",
                 report->livenessPublished ? "true" : "false",
                 report->byePublished ? "true" : "false",
-                report->liveStateSeen ? "true" : "false");
+                report->liveStateSeen ? "true" : "false",
+                report->blockSubmissionPublished ? "true" : "false",
+                report->blockUpdatePublished ? "true" : "false",
+                report->inspectionWorkReceived ? "true" : "false",
+                report->analysisResultPublished ? "true" : "false",
+                report->activeInspectionSeen ? "true" : "false",
+                report->blockSeen ? "true" : "false");
     }
 
 cleanup:
@@ -1365,19 +1840,69 @@ cleanup:
 }
 
 static bool
-RzbSmoke_RunLive(enum RzbSmokeRole role)
+RzbSmoke_RunLiveConfigured(const struct RzbSmokeConfig *config,
+                           const char *bearer,
+                           const struct RzbSmokeConfig *peerConfig,
+                           struct RzbSmokeOperation *operation)
 {
-    struct RzbSmokeConfig config;
     struct RzbSmokeBroker broker;
     struct RzbSmokeReport report;
-    char *bearer;
     unsigned long runSeconds;
     unsigned long cleanupSeconds;
     time_t cleanupDeadline;
     bool cleaned = false;
 
-    RzbSmoke_DefaultConfig(role, &config);
     memset(&report, 0, sizeof(report));
+    if (!RzbSmoke_BrokerConnect(config->rabbitmqUrl, &broker)) {
+        fprintf(stderr, "dispatcher-next C %s live smoke broker connect failed\n",
+                config->label);
+        return false;
+    }
+    if (!RzbSmoke_DeclareTopology(&broker, config) ||
+        !RzbSmoke_DuplicateDirectedQueueRejected(config) ||
+        !RzbSmoke_StartConsumers(&broker)) {
+        fprintf(stderr, "dispatcher-next C %s live smoke topology failed\n",
+                config->label);
+        RzbSmoke_BrokerClose(&broker);
+        return false;
+    }
+    runSeconds = RzbSmoke_EnvSeconds("RZB_SMOKE_LIVE_SECONDS",
+                                     RZB_SMOKE_DEFAULT_SECONDS);
+    if (!RzbSmoke_RunBrokerLoop(config, bearer, peerConfig, operation,
+                                &broker, runSeconds, &report)) {
+        fprintf(stderr, "dispatcher-next C %s live smoke loop failed\n",
+                config->label);
+        RzbSmoke_BrokerClose(&broker);
+        return false;
+    }
+    RzbSmoke_BrokerClose(&broker);
+    cleanupSeconds = RzbSmoke_EnvSeconds("RZB_SMOKE_BYE_CLEANUP_SECONDS", 10);
+    cleanupDeadline = time(NULL) + (time_t)cleanupSeconds;
+    while (time(NULL) <= cleanupDeadline) {
+        if (RzbSmoke_ApiByeCleanup(config, bearer)) {
+            cleaned = true;
+            break;
+        }
+        sleep(1);
+    }
+    if (!cleaned) {
+        fprintf(stderr, "dispatcher-next C %s live smoke BYE cleanup failed\n",
+                config->label);
+        return false;
+    }
+    printf("dispatcher-next C %s live smoke client passed after %lus\n",
+           config->label, runSeconds);
+    return true;
+}
+
+static bool RZB_SMOKE_UNUSED
+RzbSmoke_RunLive(enum RzbSmokeRole role)
+{
+    struct RzbSmokeConfig config;
+    char *bearer;
+    bool ok;
+
+    RzbSmoke_DefaultConfig(role, &config);
     bearer = RzbSmoke_BearerToken();
     if (!RzbSmoke_EnvFalse("RZB_SMOKE_API_AUTH") && bearer == NULL) {
         fprintf(stderr, "dispatcher-next C %s live smoke could not get token\n",
@@ -1390,50 +1915,72 @@ RzbSmoke_RunLive(enum RzbSmokeRole role)
         free(bearer);
         return false;
     }
-    if (!RzbSmoke_BrokerConnect(config.rabbitmqUrl, &broker)) {
-        fprintf(stderr, "dispatcher-next C %s live smoke broker connect failed\n",
-                config.label);
-        free(bearer);
+    ok = RzbSmoke_RunLiveConfigured(&config, bearer, NULL, NULL);
+    free(bearer);
+    return ok;
+}
+
+static bool RZB_SMOKE_UNUSED
+RzbSmoke_RunLiveOperational(void)
+{
+    struct RzbSmokeConfig source;
+    struct RzbSmokeConfig inspector;
+    struct RzbSmokeOperation operation;
+    char *bearer;
+    pid_t child;
+    int status = 0;
+    bool sourceOk;
+    bool childOk;
+
+    RzbSmoke_DefaultConfig(RZB_SMOKE_ROLE_SOURCE, &source);
+    RzbSmoke_DefaultConfig(RZB_SMOKE_ROLE_INSPECTOR, &inspector);
+    if (!RzbSmoke_OperationInit(&inspector, &operation))
+        return false;
+    bearer = RzbSmoke_BearerToken();
+    if (!RzbSmoke_EnvFalse("RZB_SMOKE_API_AUTH") && bearer == NULL) {
+        fprintf(stderr, "dispatcher-next C operational live smoke could not get token\n");
+        RzbSmoke_OperationClear(&operation);
         return false;
     }
-    if (!RzbSmoke_DeclareTopology(&broker, config.nuggetUuid) ||
-        !RzbSmoke_DuplicateDirectedQueueRejected(&config) ||
-        !RzbSmoke_StartConsumers(&broker)) {
-        fprintf(stderr, "dispatcher-next C %s live smoke topology failed\n",
-                config.label);
-        RzbSmoke_BrokerClose(&broker);
+    if (!RzbSmoke_EnsureCatalog(&source, bearer) ||
+        !RzbSmoke_EnsureCatalog(&inspector, bearer)) {
+        fprintf(stderr, "dispatcher-next C operational live smoke catalog setup failed\n");
         free(bearer);
+        RzbSmoke_OperationClear(&operation);
         return false;
     }
-    runSeconds = RzbSmoke_EnvSeconds("RZB_SMOKE_LIVE_SECONDS",
-                                     RZB_SMOKE_DEFAULT_SECONDS);
-    if (!RzbSmoke_RunBrokerLoop(&config, bearer, &broker, runSeconds,
-                                &report)) {
-        fprintf(stderr, "dispatcher-next C %s live smoke loop failed\n",
-                config.label);
-        RzbSmoke_BrokerClose(&broker);
+    child = fork();
+    if (child < 0) {
         free(bearer);
+        RzbSmoke_OperationClear(&operation);
         return false;
     }
-    RzbSmoke_BrokerClose(&broker);
-    cleanupSeconds = RzbSmoke_EnvSeconds("RZB_SMOKE_BYE_CLEANUP_SECONDS", 10);
-    cleanupDeadline = time(NULL) + (time_t)cleanupSeconds;
-    while (time(NULL) <= cleanupDeadline) {
-        if (RzbSmoke_ApiByeCleanup(&config, bearer)) {
-            cleaned = true;
-            break;
-        }
-        sleep(1);
+    if (child == 0) {
+        bool ok = RzbSmoke_RunLiveConfigured(&inspector, bearer, NULL,
+                                             &operation);
+
+        free(bearer);
+        RzbSmoke_OperationClear(&operation);
+        _exit(ok ? 0 : 1);
+    }
+    sourceOk = RzbSmoke_RunLiveConfigured(&source, bearer, &inspector,
+                                          &operation);
+    if (waitpid(child, &status, 0) < 0)
+        childOk = false;
+    else
+        childOk = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    if (sourceOk && childOk) {
+        if (!RzbSmoke_WriteOperationReport(&operation, "c"))
+            sourceOk = false;
+    }
+    if (sourceOk && childOk) {
+        printf("dispatcher-next C operational live smoke passed for event %s "
+               "and block %s:%llu\n",
+               operation.eventId, operation.sha256, operation.size);
     }
     free(bearer);
-    if (!cleaned) {
-        fprintf(stderr, "dispatcher-next C %s live smoke BYE cleanup failed\n",
-                config.label);
-        return false;
-    }
-    printf("dispatcher-next C %s live smoke client passed after %lus\n",
-           config.label, runSeconds);
-    return true;
+    RzbSmoke_OperationClear(&operation);
+    return sourceOk && childOk;
 }
 
 #endif /* RAZORBACK_TESTS_SMOKE_LIVE_NEXT_H */

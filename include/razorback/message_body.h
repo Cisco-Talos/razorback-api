@@ -32,6 +32,7 @@ extern "C" {
 #endif
 
 #define MESSAGE_BODY_DEFAULT_MAX_INLINE_BYTES 921600U
+#define MESSAGE_BODY_DEFAULT_MAX_EXPANDED_BYTES 268435456U
 #define MESSAGE_BODY_CONTENT_ENCODING_ZLIB "zlib"
 #define MESSAGE_BODY_CLAIM_CHECK_REFERENCE_SCHEMA_NAME "razorback.messages.claim_check_reference"
 #define MESSAGE_BODY_CLAIM_CHECK_REFERENCE_SCHEMA_VERSION 1U
@@ -46,6 +47,7 @@ enum MessageBodyMode
 struct MessageBodyPolicy
 {
     size_t maxInlineBytes;
+    size_t maxExpandedBytes;
 };
 
 struct ClaimCheckReference
@@ -113,7 +115,23 @@ SO_PUBLIC extern bool MessageBody_DecodeInline(
     uint8_t **decoded,
     size_t *decodedSize
 );
+SO_PUBLIC extern bool MessageBody_DecodeInlineWithPolicy(
+    const struct MessageBodyPolicy *policy,
+    const uint8_t *body,
+    size_t bodySize,
+    const char *contentEncoding,
+    uint8_t **decoded,
+    size_t *decodedSize
+);
 SO_PUBLIC extern bool MessageBody_DecodeClaimCheck(
+    const uint8_t *compressedBody,
+    size_t compressedBodySize,
+    const struct ClaimCheckReference *reference,
+    uint8_t **decoded,
+    size_t *decodedSize
+);
+SO_PUBLIC extern bool MessageBody_DecodeClaimCheckWithPolicy(
+    const struct MessageBodyPolicy *policy,
     const uint8_t *compressedBody,
     size_t compressedBodySize,
     const struct ClaimCheckReference *reference,

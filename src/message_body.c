@@ -54,6 +54,22 @@ MessageBody_StringIsEmpty(const char *value)
     return value == NULL || value[0] == '\0';
 }
 
+static struct MessageBodyPolicy
+MessageBody_EffectivePolicy(const struct MessageBodyPolicy *policy)
+{
+    struct MessageBodyPolicy effectivePolicy;
+
+    effectivePolicy.maxInlineBytes = MESSAGE_BODY_DEFAULT_MAX_INLINE_BYTES;
+    effectivePolicy.maxExpandedBytes = MESSAGE_BODY_DEFAULT_MAX_EXPANDED_BYTES;
+    if (policy == NULL)
+        return effectivePolicy;
+    if (policy->maxInlineBytes > 0)
+        effectivePolicy.maxInlineBytes = policy->maxInlineBytes;
+    if (policy->maxExpandedBytes > 0)
+        effectivePolicy.maxExpandedBytes = policy->maxExpandedBytes;
+    return effectivePolicy;
+}
+
 static bool
 MessageBody_IsSha256Hex(const char *value)
 {
@@ -158,6 +174,7 @@ MessageBody_ZlibCompress(const uint8_t *body, size_t bodySize,
 
 static bool
 MessageBody_ZlibDecompressUnknown(const uint8_t *body, size_t bodySize,
+                                  size_t maxExpandedSize,
                                   uint8_t **decoded, size_t *decodedSize)
 {
     z_stream stream;
@@ -172,9 +189,14 @@ MessageBody_ZlibDecompressUnknown(const uint8_t *body, size_t bodySize,
     if (inflateInit(&stream) != Z_OK)
         return false;
 
+    if (maxExpandedSize == 0)
+        return false;
+
     outputSize = (bodySize * 4) + 1024;
     if (outputSize < 1024)
         outputSize = 1024;
+    if (outputSize > maxExpandedSize)
+        outputSize = maxExpandedSize;
     output = malloc(outputSize);
     if (output == NULL) {
         inflateEnd(&stream);
@@ -189,11 +211,13 @@ MessageBody_ZlibDecompressUnknown(const uint8_t *body, size_t bodySize,
             uint8_t *grown;
             size_t grownSize = outputSize * 2;
 
-            if (grownSize <= outputSize) {
+            if (outputSize >= maxExpandedSize || grownSize <= outputSize) {
                 free(output);
                 inflateEnd(&stream);
                 return false;
             }
+            if (grownSize > maxExpandedSize)
+                grownSize = maxExpandedSize;
             grown = realloc(output, grownSize);
             if (grown == NULL) {
                 free(output);
@@ -207,6 +231,11 @@ MessageBody_ZlibDecompressUnknown(const uint8_t *body, size_t bodySize,
         stream.next_out = output + stream.total_out;
         stream.avail_out = (uInt)(outputSize - stream.total_out);
         result = inflate(&stream, Z_NO_FLUSH);
+        if (stream.total_out > maxExpandedSize) {
+            free(output);
+            inflateEnd(&stream);
+            return false;
+        }
         if (result == Z_STREAM_END)
             break;
         if (result != Z_OK) {
@@ -224,7 +253,9 @@ MessageBody_ZlibDecompressUnknown(const uint8_t *body, size_t bodySize,
 
 static bool
 MessageBody_ZlibDecompressExpected(const uint8_t *body, size_t bodySize,
-                                   uint64_t expectedSize, uint8_t **decoded,
+                                   uint64_t expectedSize,
+                                   size_t maxExpandedSize,
+                                   uint8_t **decoded,
                                    size_t *decodedSize)
 {
     uint8_t *output;
@@ -233,6 +264,8 @@ MessageBody_ZlibDecompressExpected(const uint8_t *body, size_t bodySize,
 
     if (bodySize > ULONG_MAX || expectedSize > ULONG_MAX ||
         expectedSize > SIZE_MAX)
+        return false;
+    if (expectedSize > maxExpandedSize)
         return false;
 
     outputSize = (uLongf)expectedSize;
@@ -270,6 +303,7 @@ MessageBodyPolicy_Default(void)
     struct MessageBodyPolicy policy;
 
     policy.maxInlineBytes = MESSAGE_BODY_DEFAULT_MAX_INLINE_BYTES;
+    policy.maxExpandedBytes = MESSAGE_BODY_DEFAULT_MAX_EXPANDED_BYTES;
     return policy;
 }
 
@@ -621,7 +655,7 @@ MessageBody_Encode(const struct MessageBodyPolicy *policy, const uint8_t *body,
         return false;
     *encoded = NULL;
 
-    effectivePolicy = (policy != NULL) ? *policy : MessageBodyPolicy_Default();
+    effectivePolicy = MessageBody_EffectivePolicy(policy);
     result = calloc(1, sizeof(*result));
     if (result == NULL)
         return false;
@@ -699,16 +733,22 @@ MessageBody_Encode(const struct MessageBodyPolicy *policy, const uint8_t *body,
 }
 
 SO_PUBLIC bool
-MessageBody_DecodeInline(const uint8_t *body, size_t bodySize,
-                         const char *contentEncoding, uint8_t **decoded,
-                         size_t *decodedSize)
+MessageBody_DecodeInlineWithPolicy(const struct MessageBodyPolicy *policy,
+                                   const uint8_t *body, size_t bodySize,
+                                   const char *contentEncoding,
+                                   uint8_t **decoded, size_t *decodedSize)
 {
+    struct MessageBodyPolicy effectivePolicy;
+
     if (decoded == NULL || decodedSize == NULL || (body == NULL && bodySize > 0))
         return false;
     *decoded = NULL;
     *decodedSize = 0;
+    effectivePolicy = MessageBody_EffectivePolicy(policy);
 
     if (contentEncoding == NULL || contentEncoding[0] == '\0') {
+        if (bodySize > effectivePolicy.maxExpandedBytes)
+            return false;
         *decoded = malloc(bodySize == 0 ? 1 : bodySize);
         if (*decoded == NULL)
             return false;
@@ -720,15 +760,30 @@ MessageBody_DecodeInline(const uint8_t *body, size_t bodySize,
 
     if (strcmp(contentEncoding, MESSAGE_BODY_CONTENT_ENCODING_ZLIB) != 0)
         return false;
-    return MessageBody_ZlibDecompressUnknown(body, bodySize, decoded, decodedSize);
+    return MessageBody_ZlibDecompressUnknown(body, bodySize,
+                                             effectivePolicy.maxExpandedBytes,
+                                             decoded, decodedSize);
 }
 
 SO_PUBLIC bool
-MessageBody_DecodeClaimCheck(const uint8_t *compressedBody,
-                             size_t compressedBodySize,
-                             const struct ClaimCheckReference *reference,
-                             uint8_t **decoded, size_t *decodedSize)
+MessageBody_DecodeInline(const uint8_t *body, size_t bodySize,
+                         const char *contentEncoding, uint8_t **decoded,
+                         size_t *decodedSize)
 {
+    return MessageBody_DecodeInlineWithPolicy(NULL, body, bodySize,
+                                              contentEncoding, decoded,
+                                              decodedSize);
+}
+
+SO_PUBLIC bool
+MessageBody_DecodeClaimCheckWithPolicy(const struct MessageBodyPolicy *policy,
+                                       const uint8_t *compressedBody,
+                                       size_t compressedBodySize,
+                                       const struct ClaimCheckReference *reference,
+                                       uint8_t **decoded,
+                                       size_t *decodedSize)
+{
+    struct MessageBodyPolicy effectivePolicy;
     char *sha256;
     bool ok;
 
@@ -737,9 +792,12 @@ MessageBody_DecodeClaimCheck(const uint8_t *compressedBody,
         return false;
     *decoded = NULL;
     *decodedSize = 0;
+    effectivePolicy = MessageBody_EffectivePolicy(policy);
 
     if (!ClaimCheckReference_Validate(reference) ||
         reference->storedCompressedSize != compressedBodySize)
+        return false;
+    if (reference->uncompressedSize > effectivePolicy.maxExpandedBytes)
         return false;
 
     sha256 = MessageBody_Sha256Hex(compressedBody, compressedBodySize);
@@ -752,7 +810,19 @@ MessageBody_DecodeClaimCheck(const uint8_t *compressedBody,
 
     return MessageBody_ZlibDecompressExpected(compressedBody, compressedBodySize,
                                               reference->uncompressedSize,
+                                              effectivePolicy.maxExpandedBytes,
                                               decoded, decodedSize);
+}
+
+SO_PUBLIC bool
+MessageBody_DecodeClaimCheck(const uint8_t *compressedBody,
+                             size_t compressedBodySize,
+                             const struct ClaimCheckReference *reference,
+                             uint8_t **decoded, size_t *decodedSize)
+{
+    return MessageBody_DecodeClaimCheckWithPolicy(NULL, compressedBody,
+                                                  compressedBodySize, reference,
+                                                  decoded, decodedSize);
 }
 
 SO_PUBLIC void

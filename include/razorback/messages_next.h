@@ -138,6 +138,16 @@ SO_PUBLIC extern bool RzbNextRabbitMq_DecodeMessage(
     size_t claimCheckBodySize,
     struct RzbNextDecodedRabbitMqMessage **decoded
 );
+SO_PUBLIC extern bool RzbNextRabbitMq_DecodeMessageWithPolicy(
+    const struct MessageBodyPolicy *policy,
+    const uint8_t *body,
+    size_t bodySize,
+    const struct RzbNextMessageHeader *headers,
+    size_t headerCount,
+    const uint8_t *claimCheckBody,
+    size_t claimCheckBodySize,
+    struct RzbNextDecodedRabbitMqMessage **decoded
+);
 SO_PUBLIC extern bool RzbNextCnc_IsReadyDispatcherHello(const char *jsonMessage);
 SO_PUBLIC extern bool RzbNextCnc_RegistrationAcceptedTiming(
     const char *jsonMessage,
@@ -146,6 +156,33 @@ SO_PUBLIC extern bool RzbNextCnc_RegistrationAcceptedTiming(
     uint64_t *livenessClockSkewTolerance
 );
 SO_PUBLIC extern char * RzbNextCnc_DirectedCommandQueue(const char *nuggetUuid);
+SO_PUBLIC extern char * RzbNextAnalysisResult_BuildCompleted(
+    const char *inspectionWorkJson,
+    const char *inspectorUuid,
+    const char *createdAt,
+    const char *blockMetadataUpdatesJson,
+    const char *metadataJson,
+    const char *tagMutationsJson,
+    const char *alertsJson
+);
+SO_PUBLIC extern char * RzbNextAnalysisResult_BuildError(
+    const char *inspectionWorkJson,
+    const char *inspectorUuid,
+    const char *category,
+    const char *code,
+    const char *message,
+    const char *detailsJson,
+    const char *createdAt
+);
+SO_PUBLIC extern char * RzbNextAnalysisResult_BuildDeferred(
+    const char *inspectionWorkJson,
+    const char *inspectorUuid,
+    const char *reasonCode,
+    const char *message,
+    const char *pollAfter,
+    const char *detailsJson,
+    const char *createdAt
+);
 SO_PUBLIC extern void RzbNext_FreeString(char *value);
 SO_PUBLIC extern void RzbNextRoute_Destroy(struct RzbNextRoute *route);
 SO_PUBLIC extern void RzbNextPreparedRabbitMqMessage_Destroy(

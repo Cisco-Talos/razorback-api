@@ -56,7 +56,9 @@ tests/test_messages_next
 tests/test_runtime_next
 tests/test_schema_conformance
 tests/smoke_inspector_next
+tests/smoke_operational_next
 tests/smoke_source_next
+tests/.smoke-operation.json
 tests/test_json_buffer_primitives
 tests/test_json_buffer_structs
 tests/test_json_buffer_invalid

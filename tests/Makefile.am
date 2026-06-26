@@ -15,7 +15,8 @@
 #  MA 02110-1301, USA.
 
 #noinst_PROGRAMS= configTest logTest daemonTest
-noinst_PROGRAMS= logTest daemonTest configTest smoke_source_next smoke_inspector_next
+noinst_PROGRAMS= logTest daemonTest configTest smoke_source_next smoke_inspector_next \
+	smoke_operational_next
 
 configTest_SOURCES = configTest.c
 configTest_LDADD = -L../src -lrazorback_api @OPENTELEMETRY_CPP_LIBS@ @LIBS@
@@ -42,11 +43,28 @@ smoke_inspector_next_SOURCES = smoke_inspector_next.c ../src/runtime_next.c \
 smoke_inspector_next_CPPFLAGS = $(SMOKE_NEXT_CPPFLAGS)
 smoke_inspector_next_LDADD = @LIBS@
 
+smoke_operational_next_SOURCES = smoke_operational_next.c ../src/runtime_next.c \
+	../src/messages_next.c ../src/message_body.c
+smoke_operational_next_CPPFLAGS = $(SMOKE_NEXT_CPPFLAGS)
+smoke_operational_next_LDADD = @LIBS@
+
 .PHONY: smoke-dispatcher-next
 
-smoke-dispatcher-next: smoke_source_next smoke_inspector_next
-	./smoke_source_next
-	./smoke_inspector_next
+PYTHON ?= python3
+RZB_SMOKE_OPERATION_REPORT ?= .smoke-operation.json
+SMOKE_COMPOSE ?= docker compose -f ../../docker/compose.yaml -f ../../docker/compose.smoke.yaml
+SMOKE_OPERATION_REPORT_CONTAINER ?= /tmp/razorback-smoke-operation.json
+
+smoke-dispatcher-next: smoke_source_next smoke_inspector_next smoke_operational_next
+	if test "$$RZB_SMOKE_LIVE" = "1"; then \
+		RZB_SMOKE_OPERATION_REPORT="$(RZB_SMOKE_OPERATION_REPORT)" ./smoke_operational_next || exit $$?; \
+		if test "$$RZB_SMOKE_ASSERT_KAFKA" != "0"; then \
+			$(SMOKE_COMPOSE) run --rm --no-deps --build --entrypoint python -v "$(abspath $(RZB_SMOKE_OPERATION_REPORT)):$(SMOKE_OPERATION_REPORT_CONTAINER):ro" smoke /smoke/search_export_probe.py --report "$(SMOKE_OPERATION_REPORT_CONTAINER)"; \
+		fi; \
+	else \
+		./smoke_source_next; \
+		./smoke_inspector_next; \
+	fi
 
 if HAVE_CHECK
 check_PROGRAMS = test_hash test_block_id test_list test_string_list \

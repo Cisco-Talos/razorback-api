@@ -146,6 +146,16 @@ header_value(const struct RzbNextMessageHeader *headers, size_t headerCount,
     return NULL;
 }
 
+static const char *
+json_string_field(json_object *object, const char *field)
+{
+    json_object *value;
+
+    ck_assert(json_object_object_get_ex(object, field, &value));
+    ck_assert_int_eq(json_object_get_type(value), json_type_string);
+    return json_object_get_string(value);
+}
+
 START_TEST(test_messages_next_accepts_known_schema_identities)
 {
     static const struct MessageFixture fixtures[] = {
@@ -185,6 +195,81 @@ START_TEST(test_messages_next_accepts_known_schema_identities)
 
     ck_assert(RzbNextMessage_IsKnownSchema(RZB_NEXT_SCHEMA_ANALYSIS_RESULT));
     ck_assert(!RzbNextMessage_IsKnownSchema("razorback.messages.analysis_result"));
+}
+END_TEST
+
+START_TEST(test_analysis_result_helpers_build_from_inspection_work)
+{
+    char *work;
+    char *completed;
+    char *error;
+    char *deferred;
+    struct RzbNextRoute *route = NULL;
+    json_object *completedObject;
+    json_object *errorObject;
+    json_object *deferredObject;
+    const char *inspectorUuid = "22222222-2222-4222-8222-222222222222";
+    const char *createdAt = "2026-06-17T21:06:00.000Z";
+
+    work = read_fixture("messages", "inspection_work.valid.json");
+    completed = RzbNextAnalysisResult_BuildCompleted(
+        work, inspectorUuid, createdAt, NULL, NULL,
+        "{\"set_system_tags\":[\"SUSPICIOUS\"]}", NULL);
+    ck_assert_ptr_ne(completed, NULL);
+    ck_assert(RzbNextMessage_Validate(completed));
+    ck_assert(RzbNextMessage_Route(completed, NULL, &route));
+    ck_assert_str_eq(route->routingKey, RZB_NEXT_QUEUE_ANALYSIS_RESULT);
+    RzbNextRoute_Destroy(route);
+    route = NULL;
+
+    completedObject = json_tokener_parse(completed);
+    ck_assert_ptr_ne(completedObject, NULL);
+    ck_assert_str_eq(json_string_field(completedObject, "schema_name"),
+                     RZB_NEXT_SCHEMA_ANALYSIS_RESULT);
+    ck_assert_str_eq(json_string_field(completedObject, "inspection_id"),
+                     "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+    ck_assert_str_eq(json_string_field(completedObject, "event_id"),
+                     "88888888-8888-4888-8888-888888888888");
+    ck_assert_str_eq(json_string_field(completedObject, "inspector_id"),
+                     inspectorUuid);
+    ck_assert_str_eq(json_string_field(completedObject, "app_type"),
+                     "pdf_inspector");
+    ck_assert_str_eq(json_string_field(completedObject, "result_status"),
+                     "completed");
+    json_object_put(completedObject);
+
+    error = RzbNextAnalysisResult_BuildError(
+        work, inspectorUuid, "inspector_failed", "inspector_failed",
+        "inspector failed", "{\"retryable\":false}", createdAt);
+    ck_assert_ptr_ne(error, NULL);
+    ck_assert(RzbNextMessage_Validate(error));
+    errorObject = json_tokener_parse(error);
+    ck_assert_ptr_ne(errorObject, NULL);
+    ck_assert_str_eq(json_string_field(errorObject, "result_status"),
+                     "error");
+    json_object_put(errorObject);
+
+    deferred = RzbNextAnalysisResult_BuildDeferred(
+        work, inspectorUuid, "external_scan_pending",
+        "external scan pending", "2026-06-17T21:07:00.000Z", NULL,
+        createdAt);
+    ck_assert_ptr_ne(deferred, NULL);
+    ck_assert(RzbNextMessage_Validate(deferred));
+    deferredObject = json_tokener_parse(deferred);
+    ck_assert_ptr_ne(deferredObject, NULL);
+    ck_assert_str_eq(json_string_field(deferredObject, "result_status"),
+                     "deferred");
+    json_object_put(deferredObject);
+
+    ck_assert_ptr_eq(RzbNextAnalysisResult_BuildCompleted(
+                         work, "not-a-uuid", createdAt, NULL, NULL, NULL,
+                         NULL),
+                     NULL);
+
+    RzbNext_FreeString(deferred);
+    RzbNext_FreeString(error);
+    RzbNext_FreeString(completed);
+    free(work);
 }
 END_TEST
 
@@ -375,10 +460,11 @@ START_TEST(test_rabbitmq_prepare_and_decode_inline_message)
 {
     char *fixture = read_fixture("messages",
                                  "cnc_registration_request.valid.json");
-    struct MessageBodyPolicy policy = { 4096 };
+    struct MessageBodyPolicy policy = MessageBodyPolicy_Default();
     struct RzbNextPreparedRabbitMqMessage *prepared = NULL;
     struct RzbNextDecodedRabbitMqMessage *decoded = NULL;
 
+    policy.maxInlineBytes = 4096;
     ck_assert(RzbNextRabbitMq_PrepareMessage(fixture, NULL, &policy, NULL,
                                              &prepared));
     ck_assert_ptr_ne(prepared, NULL);
@@ -415,10 +501,11 @@ START_TEST(test_rabbitmq_prepare_and_decode_zlib_message)
 {
     char *fixture = read_fixture("messages",
                                  "analysis_result_envelope.valid.json");
-    struct MessageBodyPolicy policy = { 900 };
+    struct MessageBodyPolicy policy = MessageBodyPolicy_Default();
     struct RzbNextPreparedRabbitMqMessage *prepared = NULL;
     struct RzbNextDecodedRabbitMqMessage *decoded = NULL;
 
+    policy.maxInlineBytes = 900;
     ck_assert(RzbNextRabbitMq_PrepareMessage(fixture, NULL, &policy, NULL,
                                              &prepared));
     ck_assert_ptr_ne(prepared, NULL);
@@ -449,11 +536,12 @@ START_TEST(test_rabbitmq_prepare_and_decode_claim_check_message)
 {
     char *fixture = read_fixture("messages",
                                  "analysis_result_envelope.valid.json");
-    struct MessageBodyPolicy policy = { 32 };
+    struct MessageBodyPolicy policy = MessageBodyPolicy_Default();
     struct ClaimCheckReference *template = NULL;
     struct RzbNextPreparedRabbitMqMessage *prepared = NULL;
     struct RzbNextDecodedRabbitMqMessage *decoded = NULL;
 
+    policy.maxInlineBytes = 32;
     template = ClaimCheckReference_Create(
         "https://objects.example.invalid/messages/payload.zlib?signature=redacted",
         "2026-06-18T00:00:00.000Z",
@@ -497,9 +585,10 @@ START_TEST(test_rabbitmq_prepare_rejects_kafka_routed_message)
 {
     char *fixture = read_fixture("search_export",
                                  "search_export_record.valid.json");
-    struct MessageBodyPolicy policy = { 4096 };
+    struct MessageBodyPolicy policy = MessageBodyPolicy_Default();
     struct RzbNextPreparedRabbitMqMessage *prepared = NULL;
 
+    policy.maxInlineBytes = 4096;
     ck_assert(!RzbNextRabbitMq_PrepareMessage(fixture, NULL, &policy, NULL,
                                               &prepared));
     ck_assert_ptr_eq(prepared, NULL);
@@ -594,6 +683,8 @@ messages_next_suite(void)
     tcase_add_test(testcase, test_messages_next_rejects_unknown_or_bad_identity);
     tcase_add_test(testcase, test_messages_next_rejects_invalid_schema_fixtures);
     tcase_add_test(testcase, test_messages_next_routes_match_dispatcher_next_topology);
+    tcase_add_test(testcase,
+                   test_analysis_result_helpers_build_from_inspection_work);
     tcase_add_test(testcase, test_rabbitmq_prepare_and_decode_inline_message);
     tcase_add_test(testcase, test_rabbitmq_prepare_and_decode_zlib_message);
     tcase_add_test(testcase, test_rabbitmq_prepare_and_decode_claim_check_message);

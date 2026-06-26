@@ -70,16 +70,20 @@ START_TEST(test_message_body_default_policy_matches_messaging_threshold)
     policy = MessageBodyPolicy_Default();
     ck_assert_uint_eq(policy.maxInlineBytes,
                       MESSAGE_BODY_DEFAULT_MAX_INLINE_BYTES);
+    ck_assert_uint_eq(policy.maxExpandedBytes,
+                      MESSAGE_BODY_DEFAULT_MAX_EXPANDED_BYTES);
     ck_assert_uint_eq(policy.maxInlineBytes, 921600U);
+    ck_assert_uint_eq(policy.maxExpandedBytes, 268435456U);
 }
 END_TEST
 
 START_TEST(test_message_body_keeps_small_payload_inline)
 {
     const uint8_t body[] = "small";
-    struct MessageBodyPolicy policy = { 32 };
+    struct MessageBodyPolicy policy = MessageBodyPolicy_Default();
     struct EncodedMessageBody *encoded = NULL;
 
+    policy.maxInlineBytes = 32;
     ck_assert(MessageBody_Encode(&policy, body, sizeof(body) - 1, NULL,
                                  &encoded));
     ck_assert_ptr_ne(encoded, NULL);
@@ -97,11 +101,12 @@ END_TEST
 START_TEST(test_message_body_compresses_medium_payload_inline)
 {
     uint8_t body[1024];
-    struct MessageBodyPolicy policy = { 128 };
+    struct MessageBodyPolicy policy = MessageBodyPolicy_Default();
     struct EncodedMessageBody *encoded = NULL;
     uint8_t *decoded = NULL;
     size_t decodedSize = 0;
 
+    policy.maxInlineBytes = 128;
     memset(body, 'a', sizeof(body));
     ck_assert(MessageBody_Encode(&policy, body, sizeof(body), NULL, &encoded));
     ck_assert_ptr_ne(encoded, NULL);
@@ -124,10 +129,38 @@ START_TEST(test_message_body_compresses_medium_payload_inline)
 }
 END_TEST
 
+START_TEST(test_message_body_rejects_zlib_expanded_body_over_policy_limit)
+{
+    uint8_t body[1024];
+    struct MessageBodyPolicy policy = MessageBodyPolicy_Default();
+    struct MessageBodyPolicy decodePolicy = MessageBodyPolicy_Default();
+    struct EncodedMessageBody *encoded = NULL;
+    uint8_t *decoded = NULL;
+    size_t decodedSize = 0;
+
+    policy.maxInlineBytes = 128;
+    decodePolicy.maxExpandedBytes = 512;
+    memset(body, 'a', sizeof(body));
+    ck_assert(MessageBody_Encode(&policy, body, sizeof(body), NULL, &encoded));
+    ck_assert_ptr_ne(encoded, NULL);
+    ck_assert_int_eq(encoded->mode, MESSAGE_BODY_MODE_ZLIB);
+    ck_assert(!MessageBody_DecodeInlineWithPolicy(&decodePolicy,
+                                                  encoded->transportBody,
+                                                  encoded->transportBodySize,
+                                                  encoded->contentEncoding,
+                                                  &decoded,
+                                                  &decodedSize));
+    ck_assert_ptr_eq(decoded, NULL);
+    ck_assert_uint_eq(decodedSize, 0U);
+
+    EncodedMessageBody_Destroy(encoded);
+}
+END_TEST
+
 START_TEST(test_message_body_uses_claim_check_for_oversized_compressed_payload)
 {
     uint8_t body[4096];
-    struct MessageBodyPolicy policy = { 32 };
+    struct MessageBodyPolicy policy = MessageBodyPolicy_Default();
     struct ClaimCheckReference *template = NULL;
     struct ClaimCheckReference *reference = NULL;
     struct EncodedMessageBody *encoded = NULL;
@@ -135,6 +168,7 @@ START_TEST(test_message_body_uses_claim_check_for_oversized_compressed_payload)
     size_t decodedSize = 0;
     size_t index;
 
+    policy.maxInlineBytes = 32;
     for (index = 0; index < sizeof(body); index++)
         body[index] = (uint8_t)((index * 31U + 17U) % 251U);
 
@@ -179,13 +213,54 @@ START_TEST(test_message_body_uses_claim_check_for_oversized_compressed_payload)
 }
 END_TEST
 
+START_TEST(test_message_body_rejects_claim_check_expanded_body_over_policy_limit)
+{
+    uint8_t body[4096];
+    struct MessageBodyPolicy policy = MessageBodyPolicy_Default();
+    struct MessageBodyPolicy decodePolicy = MessageBodyPolicy_Default();
+    struct ClaimCheckReference *template = NULL;
+    struct ClaimCheckReference *reference = NULL;
+    struct EncodedMessageBody *encoded = NULL;
+    uint8_t *decoded = NULL;
+    size_t decodedSize = 0;
+    size_t index;
+
+    policy.maxInlineBytes = 32;
+    decodePolicy.maxExpandedBytes = 128;
+    for (index = 0; index < sizeof(body); index++)
+        body[index] = (uint8_t)((index * 31U + 17U) % 251U);
+
+    template = claim_check_template();
+    ck_assert_ptr_ne(template, NULL);
+    ck_assert(MessageBody_Encode(&policy, body, sizeof(body), template,
+                                 &encoded));
+    ck_assert_ptr_ne(encoded, NULL);
+    ck_assert_int_eq(encoded->mode, MESSAGE_BODY_MODE_CLAIM_CHECK);
+    reference = ClaimCheckReference_FromJson((char *)encoded->transportBody);
+    ck_assert_ptr_ne(reference, NULL);
+    ck_assert(!MessageBody_DecodeClaimCheckWithPolicy(&decodePolicy,
+                                                      encoded->claimCheckBody,
+                                                      encoded->claimCheckBodySize,
+                                                      reference,
+                                                      &decoded,
+                                                      &decodedSize));
+    ck_assert_ptr_eq(decoded, NULL);
+    ck_assert_uint_eq(decodedSize, 0U);
+
+    ClaimCheckReference_Destroy(reference);
+    EncodedMessageBody_Destroy(encoded);
+    ClaimCheckReference_Destroy(template);
+}
+END_TEST
+
 START_TEST(test_message_body_rejects_oversized_claim_check_without_template)
 {
     uint8_t body[4096];
-    struct MessageBodyPolicy policy = { 32 };
+    struct MessageBodyPolicy policy = MessageBodyPolicy_Default();
     struct EncodedMessageBody *encoded = NULL;
     size_t index;
 
+    policy.maxInlineBytes = 32;
     for (index = 0; index < sizeof(body); index++)
         body[index] = (uint8_t)((index * 31U + 17U) % 251U);
 
@@ -242,7 +317,9 @@ message_body_suite(void)
     tcase_add_test(testcase, test_message_body_default_policy_matches_messaging_threshold);
     tcase_add_test(testcase, test_message_body_keeps_small_payload_inline);
     tcase_add_test(testcase, test_message_body_compresses_medium_payload_inline);
+    tcase_add_test(testcase, test_message_body_rejects_zlib_expanded_body_over_policy_limit);
     tcase_add_test(testcase, test_message_body_uses_claim_check_for_oversized_compressed_payload);
+    tcase_add_test(testcase, test_message_body_rejects_claim_check_expanded_body_over_policy_limit);
     tcase_add_test(testcase, test_message_body_rejects_oversized_claim_check_without_template);
     tcase_add_test(testcase, test_message_body_claim_check_fixture_round_trip);
     tcase_add_test(testcase, test_message_body_rejects_invalid_claim_check_fixture);
