@@ -21,18 +21,17 @@
 #include "api_internal.h"
 #include "dev_mode.h"
 #include "nugget_tool.h"
-#include "transfer/core.h"
 
 #include <razorback/api.h>
 #include <razorback/block.h>
 #include <razorback/block_pool.h>
+#include <razorback/fileserver.h>
 #include <razorback/judgment.h>
 #include <razorback/list.h>
 #include <razorback/log.h>
 #include <razorback/metadata.h>
 #include <razorback/ntlv.h>
 #include <razorback/thread.h>
-#include <razorback/transfer.h>
 #include <razorback/uuids.h>
 
 #include <getopt.h>
@@ -362,7 +361,7 @@ RzbDev_InspectThread(Thread_t *thread)
     if (fileName == NULL)
         goto cleanup;
 
-    if (!Transfer_Prepare_File(block, fileName, false)) {
+    if (!RzbNextFileserver_AttachFileToBlock(block, fileName, false)) {
         fileName = NULL;
         RzbDev_ClearFailedPreparedFile(block);
         rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to prepare file-backed block", __func__);
@@ -380,7 +379,7 @@ cleanup:
     free(fileName);
     if (block != NULL) {
         if (filePrepared)
-            Transfer_Free(block, NULL);
+            RzbNextFileserver_FreeBlockData(block);
         Block_Destroy(block);
     }
     if (threadInitialized &&

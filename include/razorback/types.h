@@ -248,14 +248,6 @@ struct DeferredList
 #define JUDGMENT_REASON_PENDING     4   ///< Inspection result current pending (@note This is never sent in a message, it is the state the dispatcher stores for an inspection record.)
 /// @}
 
-/** Transfer protocols
- * @{
- */
-#define TRANSFER_METHOD_FILE    0   ///< Transfer to block store shared file system
-#define TRANSFER_METHOD_SSH     1   ///< Transfer via SSH+SFTP
-#define TRANSFER_METHOD_HTTP    2   ///< Transfer via HTTP
-/// @}
-
 /** Submission types.
  * @{
  */

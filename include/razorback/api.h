@@ -252,12 +252,6 @@ SO_PUBLIC extern bool Razorback_Output_Launch(
     struct RazorbackOutputHooks *hooks
 );
 
-/**
- * Get the transfer server protocol.
- * @return The password.
- */
-SO_PUBLIC extern char * Razorback_Get_Transfer_Password(void);
-
 /* Make APIs standardized while keeping function naming convention */
 #define RZB_Register_Collector          Razorback_Init_Collection_Context
 #define RZB_DataBlock_Create            BlockPool_CreateItem

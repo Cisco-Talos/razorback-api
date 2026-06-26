@@ -102,7 +102,4 @@ RZB_Init_API(void)
     }
     atexit(Submission_Shutdown_Global);
     Message_Init();
-    if (!Transfer_Init()) {
-        exit(1);
-    }
 }

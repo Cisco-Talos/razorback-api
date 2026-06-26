@@ -55,6 +55,7 @@ tests/test_message_body
 tests/test_messages_next
 tests/test_runtime_next
 tests/test_schema_conformance
+tests/test_fileserver
 tests/smoke_inspector_next
 tests/smoke_operational_next
 tests/smoke_source_next

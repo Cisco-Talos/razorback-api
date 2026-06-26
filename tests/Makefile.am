@@ -69,7 +69,8 @@ smoke-dispatcher-next: smoke_source_next smoke_inspector_next smoke_operational_
 if HAVE_CHECK
 check_PROGRAMS = test_hash test_block_id test_list test_string_list \
 	test_uuids test_config_file test_timer test_health test_message_body \
-	test_messages_next test_config_next test_schema_conformance test_runtime_next
+	test_messages_next test_config_next test_schema_conformance test_runtime_next \
+	test_fileserver
 TESTS = $(check_PROGRAMS)
 
 TESTS_DIR_CPPFLAGS = $(AM_CPPFLAGS) \
@@ -78,6 +79,11 @@ TESTS_DIR_CPPFLAGS = $(AM_CPPFLAGS) \
 test_hash_SOURCES = test_hash.c test_support.c ../src/hash.c
 test_hash_CFLAGS = $(CHECK_CFLAGS)
 test_hash_LDADD = $(CHECK_LIBS) @LIBS@
+
+test_fileserver_SOURCES = test_fileserver.c test_support.c ../src/hash.c \
+	../src/fileserver.c
+test_fileserver_CFLAGS = $(CHECK_CFLAGS)
+test_fileserver_LDADD = $(CHECK_LIBS) @LIBS@
 
 test_block_id_SOURCES = test_block_id.c test_support.c ../src/hash.c ../src/block_id.c
 test_block_id_CFLAGS = $(CHECK_CFLAGS)

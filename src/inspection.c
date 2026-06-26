@@ -30,13 +30,12 @@
 #include <razorback/event.h>
 #include <razorback/ntlv.h>
 #include <razorback/block.h>
+#include <razorback/fileserver.h>
 #include <razorback/queue.h>
 #include <razorback/inspector_queue.h>
 #include <razorback/judgment.h>
 #include "judgment_private.h"
 #include "command_and_control.h"
-#include "transfer/core.h"
-#include "connected_entity_private.h"
 #include "runtime_config.h"
 #include "telemetry.h"
 #include <errno.h>
@@ -515,8 +514,8 @@ Inspection_Process_Message(Thread_t *p_pThread,
     struct EventId *l_pEventId = NULL;
     uint8_t l_iResult = JUDGMENT_REASON_ERROR;
     struct Judgment *judgment = NULL;
-    enum TransferStatus transfered = TRANSFER_FAIL_LOCAL;
-    int transferTries = 0;
+    RzbNextFileserverClient_t *fileserver = NULL;
+    enum RzbNextFileserverStatus fetchStatus = RZB_NEXT_FILESERVER_LOCAL_ERROR;
     struct TelemetrySpan *inspectSpan = NULL;
     struct TelemetrySpan *runSpan = NULL;
     bool processSuccess = false;
@@ -573,30 +572,16 @@ Inspection_Process_Message(Thread_t *p_pThread,
                                               TELEMETRY_SPAN_KIND_INTERNAL);
     Telemetry_AddBlockAttributes(inspectSpan, l_pBlock);
 
-    while (transferTries < 20) {
-        struct ConnectedEntity *dispatcher = ConnectedEntityList_GetDispatcher();
-
-        if (dispatcher == NULL) {
-            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to find usable dispatcher", __func__);
-            transferTries++;
-            break;
-        }
-
-        transfered = Transfer_Fetch(l_pBlock, dispatcher);
-        if (transfered == TRANSFER_FAIL_DISPATCHER) {
-            rzb_log(LOG_ERR, LOG_C_CORE, "%s: Marking dispatcher unusable", __func__);
-            ConnectedEntityList_MarkDispatcherUnusable(dispatcher->uuidNuggetId);
-        }
-        ConnectedEntity_Destroy(dispatcher);
-        if (transfered == TRANSFER_OK)
-            break;
-
-        transferTries++;
-    }
-
-    if (transfered != TRANSFER_OK) {
-        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to transfer block giving up", __func__);
-        processError = "failed to fetch block from dispatcher";
+    fileserver = RzbNextFileserverClient_Create(NULL, 0, 0);
+    if (fileserver != NULL)
+        fetchStatus = RzbNextFileserver_FetchBlock(fileserver, l_pBlock);
+    RzbNextFileserverClient_Destroy(fileserver);
+    fileserver = NULL;
+    if (fetchStatus != RZB_NEXT_FILESERVER_OK) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Failed to fetch block from fileserver, status=%d",
+                __func__, fetchStatus);
+        processError = "failed to fetch block from fileserver";
         errorStage = "transfer";
         errorClass = "transfer_failed";
         goto cleanup;
@@ -683,7 +668,7 @@ Inspection_Process_Message(Thread_t *p_pThread,
         goto cleanup;
     }
 
-    Transfer_Free(l_pClonedBlock, NULL);
+    RzbNextFileserver_FreeBlockData(l_pClonedBlock);
     l_pClonedBlock->data.pointer = NULL;
     l_pClonedBlock->data.file = NULL;
     l_pClonedBlock->data.fileName = NULL;
@@ -717,14 +702,14 @@ cleanup:
     if (judgment != NULL)
         Judgment_Destroy(judgment);
     if (l_pClonedBlock != NULL) {
-        Transfer_Free(l_pClonedBlock, NULL);
+        RzbNextFileserver_FreeBlockData(l_pClonedBlock);
         l_pClonedBlock->data.pointer = NULL;
         l_pClonedBlock->data.file = NULL;
         l_pClonedBlock->data.fileName = NULL;
         Block_Destroy(l_pClonedBlock);
     }
     if (destroyOriginalBlock && l_pBlock != NULL) {
-        Transfer_Free(l_pBlock, NULL);
+        RzbNextFileserver_FreeBlockData(l_pBlock);
         l_misMessage->pBlock = NULL;
         Block_Destroy(l_pBlock);
     }

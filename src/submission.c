@@ -25,6 +25,7 @@
 #include <razorback/api.h>
 #include <razorback/block.h>
 #include <razorback/block_id.h>
+#include <razorback/fileserver.h>
 #include <razorback/queue.h>
 #include <razorback/block_id.h>
 #include <razorback/thread_pool.h>
@@ -34,8 +35,6 @@
 #include "dev_mode.h"
 #include "submission_private.h"
 #include "local_cache.h"
-#include "connected_entity_private.h"
-#include "transfer/core.h"
 #include "runtime_config.h"
 #include "telemetry.h"
 #include <string.h>
@@ -905,9 +904,8 @@ Submission_SubmitThread(Thread_t *p_pThread)
     struct Message *message;
     struct RazorbackContext *itemContext = NULL;
     uint8_t storedLocality = 0;
-    struct ConnectedEntity *dispatcher = NULL;
-    enum TransferStatus transfered = TRANSFER_FAIL_LOCAL;
-    int transferTries = 0;
+    RzbNextFileserverClient_t *fileserver = NULL;
+    enum RzbNextFileserverStatus storeStatus = RZB_NEXT_FILESERVER_LOCAL_ERROR;
     uint32_t reason = 0;
     struct BlockPoolItem *item = NULL;
     struct Queue *queue = NULL;
@@ -929,9 +927,9 @@ Submission_SubmitThread(Thread_t *p_pThread)
 
     while (true)
     {
-        transfered = TRANSFER_FAIL_LOCAL;
-        transferTries = 0;
         item = List_Pop_Ex(submitQueue, SUBMISSION_QUEUE_POP_TIMEOUT_MS);
+        storeStatus = RZB_NEXT_FILESERVER_LOCAL_ERROR;
+        fileserver = NULL;
         if (item == NULL)
         {
             if (Thread_IsStopped(p_pThread) &&
@@ -976,33 +974,17 @@ Submission_SubmitThread(Thread_t *p_pThread)
         }
         else
         {
-            while (transferTries < 20)
+            fileserver = RzbNextFileserverClient_Create(NULL, 0, 0);
+            if (fileserver != NULL)
+                storeStatus = RzbNextFileserver_StoreBlockPoolItem(fileserver, item);
+            RzbNextFileserverClient_Destroy(fileserver);
+            fileserver = NULL;
+            if (storeStatus != RZB_NEXT_FILESERVER_OK)
             {
-                dispatcher = ConnectedEntityList_GetDispatcher();
-                rzb_log(LOG_ERR,LOG_C_CORE, "%s: %z", __func__, dispatcher);
-                if (dispatcher == NULL)
-                {
-                    rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to find usable dispatcher", __func__);
-                    transfered = TRANSFER_FAIL_LOCAL;
-                    itemError = "failed to find usable dispatcher";
-                    transferTries++;
-                    break;
-                }
-                transfered = Transfer_Store(item, dispatcher);
-                if (transfered == TRANSFER_FAIL_DISPATCHER)
-                {
-                    rzb_log(LOG_ERR,LOG_C_CORE, "%s: Marking dispatcher unusable", __func__);
-                    ConnectedEntityList_MarkDispatcherUnusable(dispatcher->uuidNuggetId);
-                }
-                if (transfered == TRANSFER_OK)
-                    break;
-                else
-                    transferTries++;
-            }
-            if (transfered != TRANSFER_OK)
-            {
-                rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to transfer block giving up", __func__);
-                itemError = "failed to transfer block";
+                rzb_log(LOG_ERR, LOG_C_CORE,
+                        "%s: Failed to store block in fileserver, status=%d",
+                        __func__, storeStatus);
+                itemError = "failed to store block in fileserver";
                 reasonLabel = Submission_Reason_Label(SUBMISSION_REASON_REQUESTED);
                 submitOutcome = "store_failed";
                 BlockPool_SetStatus(item, BLOCK_POOL_STATUS_ERROR);
@@ -1019,11 +1001,9 @@ Submission_SubmitThread(Thread_t *p_pThread)
                 BlockPool_DestroyItem(item);
                 continue;
             }
-            storedLocality = dispatcher->locality;
+            storedLocality = itemContext != NULL ? itemContext->locality : 0;
             reason = SUBMISSION_REASON_REQUESTED;
             reasonLabel = Submission_Reason_Label(reason);
-            rzb_log(LOG_ERR,LOG_C_CORE, "%s: %z", __func__, dispatcher);
-            ConnectedEntity_Destroy(dispatcher);
         }
 
         if ((message = MessageBlockSubmission_Initialize( item->pEvent, reason, storedLocality)) == NULL)

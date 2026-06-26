@@ -34,8 +34,7 @@ messages/core.h \
 messages/cnc/core.h \
 runtime_config.h \
 submission_private.h \
-telemetry.h \
-transfer/core.h
+telemetry.h
 
 librazorback_api_la_SOURCES = \
 api.c \
@@ -51,6 +50,7 @@ daemon.c \
 dev_mode.c \
 event.c \
 fantasia.c \
+fileserver.c \
 hash.c \
 health.c \
 init.c \
@@ -102,10 +102,6 @@ submission.c \
 thread.c \
 thread_pool.c \
 timer.c \
-transfer/core.c \
-transfer/file.c \
-transfer/http.c \
-transfer/ssh.c \
 uuids.c \
 telemetry_otel.cc
 
@@ -121,13 +117,10 @@ nugget_tool.c
 
 rzb_dev_LDADD = librazorback_api.la @OPENTELEMETRY_CPP_LIBS@
 
-#librazorback_api_la_CFLAGS = -DBUILDING_SO -I$(top_srcdir)/libssh/include -I$(top_srcdir)/include
-#librazorback_api_la_LDFLAGS = -version-info @APIVERSION@ @XCCFLAGS@ ../libssh/src/libssh.la
 librazorback_api_la_CFLAGS = -DBUILDING_SO -I$(top_srcdir)/include
 librazorback_api_la_LDFLAGS = -version-info @APIVERSION@ @XCCFLAGS@ -Wl,--disable-new-dtags -Wl,-rpath,'$$ORIGIN'
 librazorback_api_la_LIBADD = @OPENTELEMETRY_CPP_LIBS@
 librazorback_api_la_CPPFLAGS = $(AM_CPPFLAGS) @OPENTELEMETRY_CPP_CFLAGS@
 
-#AM_CPPFLAGS = -I$(srcdir) -I$(top_srcdir)/libssh/include -I$(top_srcdir)/include @extra_incl@
 AM_CPPFLAGS = -I$(srcdir)  -I$(top_srcdir)/include @extra_incl@
  

@@ -28,6 +28,7 @@ razorback/daemon.h \
 razorback/debug.h \
 razorback/event.h \
 razorback/file.h \
+razorback/fileserver.h \
 razorback.h \
 razorback/hash.h \
 razorback/health.h \
@@ -55,7 +56,6 @@ razorback/telemetry.h \
 razorback/thread.h \
 razorback/thread_pool.h \
 razorback/timer.h \
-razorback/transfer.h \
 razorback/types.h \
 razorback/uuids.h \
 razorback/visibility.h

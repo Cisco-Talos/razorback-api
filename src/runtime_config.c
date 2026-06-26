@@ -40,9 +40,6 @@ static conf_int_t sg_iMaxBlockSize;
 static conf_int_t sg_iHelloTime;
 static conf_int_t sg_iDeadTime;
 
-static char *sg_sTransferPassword;
-static char *sg_sTransferMode;
-
 // Message Queue Stuff
 static char *sg_sMqHost;
 static conf_int_t sg_iMqPort;
@@ -294,18 +291,6 @@ Config_getLogFile(void)
     return log_file;
 }
 
-char *
-Config_getTransferMode(void)
-{
-    return sg_sTransferMode;
-}
-
-SO_PUBLIC char *
-Razorback_Get_Transfer_Password()
-{
-    return sg_sTransferPassword;
-}
-
 static RZBConfCallBack hashCallback = {
     &parseHashType
 };
@@ -351,9 +336,6 @@ static RZBConfKey_t global_config[] = {
         &sg_iHashType, &hashCallback},
     {"Global.HelloTime", RZB_CONF_KEY_TYPE_INT, &sg_iHelloTime, NULL},
     {"Global.DeadTime", RZB_CONF_KEY_TYPE_INT, &sg_iDeadTime, NULL},
-    {"Global.TransferPassword", RZB_CONF_KEY_TYPE_STRING, &sg_sTransferPassword, NULL},
-    {"Global.TransferMode", RZB_CONF_KEY_TYPE_STRING, &sg_sTransferMode, NULL},
-
     // Local Cache Items
     {"Cache.GoodLimit", RZB_CONF_KEY_TYPE_INT, &sg_iCacheGoodLimit, NULL},
     {"Cache.BadLimit", RZB_CONF_KEY_TYPE_INT, &sg_iCacheBadLimit, NULL},

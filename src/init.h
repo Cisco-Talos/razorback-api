@@ -49,9 +49,6 @@ bool Magic_Init(void);
 //messages/core.c
 bool Message_Init(void);
 
-//transfer/core.c
-bool Transfer_Init(void);
-
 #ifdef __cplusplus
 }
 #endif
