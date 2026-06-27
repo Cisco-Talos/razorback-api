@@ -75,6 +75,7 @@ static bool RzbNextDecoded_FromBytes(
     struct ClaimCheckReference *claimCheckReference,
     struct RzbNextDecodedRabbitMqMessage **decoded
 );
+static bool RzbNext_StringArrayContains(json_object *array, const char *needle);
 
 static char *
 RzbNext_Strdup(const char *value)
@@ -528,6 +529,29 @@ RzbNext_StringArrayValid(json_object *array, bool (*validator)(const char *),
         }
     }
     return true;
+}
+
+static bool
+RzbNext_StringArrayContains(json_object *array, const char *needle)
+{
+    size_t count;
+    size_t index;
+
+    if (array == NULL || needle == NULL ||
+        !json_object_is_type(array, json_type_array))
+        return false;
+    count = json_object_array_length(array);
+    for (index = 0; index < count; index++) {
+        json_object *item = json_object_array_get_idx(array, index);
+        const char *value;
+
+        if (item == NULL || !json_object_is_type(item, json_type_string))
+            continue;
+        value = json_object_get_string(item);
+        if (value != NULL && strcmp(value, needle) == 0)
+            return true;
+    }
+    return false;
 }
 
 static bool
@@ -1717,7 +1741,11 @@ RzbNext_ValidateFileRemoveRequest(json_object *object)
 {
     static const char * const fields[] = {
         "schema_name", "schema_version", "request_id", "block",
-        "reason_code", "created_at"
+        "source_workflow", "source_transition_id", "reason_code", "created_at"
+    };
+    static const char * const sourceWorkflows[] = {
+        "block_update", "state_reconciliation", "operator_replay",
+        "test_fixture"
     };
     static const char * const reasons[] = {
         "administrative_removal", "retention_expired",
@@ -1729,6 +1757,11 @@ RzbNext_ValidateFileRemoveRequest(json_object *object)
            RzbNext_RequireString(object, "request_id", RzbNext_IsUuid) &&
            RzbNext_ValidateBlock(RzbNext_GetTyped(object, "block",
                                                  json_type_object), true) &&
+           RzbNext_RequireEnum(object, "source_workflow", sourceWorkflows,
+                               sizeof(sourceWorkflows) /
+                               sizeof(sourceWorkflows[0])) &&
+           RzbNext_RequireString(object, "source_transition_id",
+                                 RzbNext_IsPrintableId) &&
            RzbNext_RequireEnum(object, "reason_code", reasons,
                                sizeof(reasons) / sizeof(reasons[0])) &&
            RzbNext_RequireString(object, "created_at", RzbNext_IsTimestamp);
@@ -2082,6 +2115,48 @@ RzbNextMessage_Validate(const char *jsonMessage)
     return valid;
 }
 
+SO_PUBLIC enum RzbNextCacheSubmitDecision
+RzbNextCache_SubmitDecision(const char *jsonMessage)
+{
+    json_object *object;
+    const char *schemaName;
+    uint32_t schemaVersion;
+    json_object *foundObject;
+    json_object *systemTags;
+    bool found;
+    bool dirty;
+    bool notStored;
+
+    object = RzbNext_ParseJsonObject(jsonMessage);
+    if (object == NULL)
+        return RZB_NEXT_CACHE_INVALID_REQUEST;
+    if (!RzbNext_GetIdentity(object, &schemaName, &schemaVersion) ||
+        strcmp(schemaName, RZB_NEXT_SCHEMA_CACHE_RESPONSE) != 0 ||
+        !RzbNext_IsKnownSchemaVersion(schemaName, schemaVersion) ||
+        !RzbNext_ValidateObjectForSchema(object, schemaName)) {
+        json_object_put(object);
+        return RZB_NEXT_CACHE_INVALID_REQUEST;
+    }
+
+    foundObject = RzbNext_GetTyped(object, "found", json_type_boolean);
+    found = json_object_get_boolean(foundObject) ? true : false;
+    if (!found) {
+        json_object_put(object);
+        return RZB_NEXT_CACHE_SUBMIT_NEW;
+    }
+
+    systemTags = RzbNext_GetTyped(object, "system_tags", json_type_array);
+    dirty = RzbNext_StringArrayContains(systemTags, "DIRTY");
+    notStored = RzbNext_StringArrayContains(systemTags, "NOT_STORED");
+    json_object_put(object);
+
+    if (dirty && notStored)
+        return RZB_NEXT_CACHE_RESTORE_AND_SUBMIT_FOR_REINSPECTION;
+    if (dirty)
+        return RZB_NEXT_CACHE_SUBMIT_FOR_REINSPECTION;
+    return RZB_NEXT_CACHE_SKIP_KNOWN;
+}
+
 SO_PUBLIC bool
 RzbNextMessage_Route(const char *jsonMessage, const char *cacheRequestorUuid,
                      struct RzbNextRoute **route)
@@ -2155,7 +2230,7 @@ RzbNextMessage_Route(const char *jsonMessage, const char *cacheRequestorUuid,
         }
     } else if (strcmp(schemaName, RZB_NEXT_SCHEMA_FILE_REMOVE_REQUEST) == 0) {
         exchange = RZB_NEXT_EXCHANGE_FILE_REMOVE;
-        routingKey = RzbNext_Strdup("");
+        routingKey = RzbNext_Strdup(RZB_NEXT_QUEUE_FILE_REMOVE_FILE_STORE);
     } else if (strcmp(schemaName, RZB_NEXT_SCHEMA_FILE_REMOVE_RESULT) == 0) {
         routingKey = RzbNext_Strdup(RZB_NEXT_QUEUE_FILE_REMOVE_RESULT);
     } else if (strcmp(schemaName, RZB_NEXT_SCHEMA_SEARCH_EXPORT) == 0) {

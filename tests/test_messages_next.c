@@ -424,7 +424,8 @@ START_TEST(test_messages_next_routes_match_dispatcher_next_topology)
           RZB_NEXT_TRANSPORT_RABBITMQ,
           RZB_NEXT_EXCHANGE_CATALOG_INVALIDATION, "catalog.app_type.updated" },
         { "messages", "file_remove_request.valid.json", NULL,
-          RZB_NEXT_TRANSPORT_RABBITMQ, RZB_NEXT_EXCHANGE_FILE_REMOVE, "" },
+          RZB_NEXT_TRANSPORT_RABBITMQ, RZB_NEXT_EXCHANGE_FILE_REMOVE,
+          RZB_NEXT_QUEUE_FILE_REMOVE_FILE_STORE },
         { "messages", "file_remove_result.valid.json", NULL,
           RZB_NEXT_TRANSPORT_RABBITMQ, "", RZB_NEXT_QUEUE_FILE_REMOVE_RESULT },
         { "search_export", "search_export_record.valid.json", NULL,
@@ -655,6 +656,52 @@ START_TEST(test_messages_next_cache_response_route_requires_requestor)
 }
 END_TEST
 
+START_TEST(test_messages_next_cache_submit_decision_maps_response_tags)
+{
+    char *fixture;
+    json_object *object;
+    json_object *tags;
+    char *mutated;
+
+    fixture = read_fixture("messages", "cache_response.valid.json");
+    ck_assert_int_eq(RzbNextCache_SubmitDecision("not-json"),
+                     RZB_NEXT_CACHE_INVALID_REQUEST);
+    ck_assert_int_eq(RzbNextCache_SubmitDecision(fixture),
+                     RZB_NEXT_CACHE_SKIP_KNOWN);
+
+    object = json_tokener_parse(fixture);
+    ck_assert_ptr_ne(object, NULL);
+    json_object_object_add(object, "found", json_object_new_boolean(false));
+    tags = json_object_new_array();
+    json_object_object_add(object, "system_tags", tags);
+    mutated = copy_json_string(object);
+    ck_assert_int_eq(RzbNextCache_SubmitDecision(mutated),
+                     RZB_NEXT_CACHE_SUBMIT_NEW);
+    free(mutated);
+
+    json_object_object_add(object, "found", json_object_new_boolean(true));
+    tags = json_object_new_array();
+    json_object_array_add(tags, json_object_new_string("DIRTY"));
+    json_object_object_add(object, "system_tags", tags);
+    mutated = copy_json_string(object);
+    ck_assert_int_eq(RzbNextCache_SubmitDecision(mutated),
+                     RZB_NEXT_CACHE_SUBMIT_FOR_REINSPECTION);
+    free(mutated);
+
+    tags = json_object_new_array();
+    json_object_array_add(tags, json_object_new_string("DIRTY"));
+    json_object_array_add(tags, json_object_new_string("NOT_STORED"));
+    json_object_object_add(object, "system_tags", tags);
+    mutated = copy_json_string(object);
+    ck_assert_int_eq(RzbNextCache_SubmitDecision(mutated),
+                     RZB_NEXT_CACHE_RESTORE_AND_SUBMIT_FOR_REINSPECTION);
+    free(mutated);
+
+    json_object_put(object);
+    free(fixture);
+}
+END_TEST
+
 START_TEST(test_messages_next_route_rejects_structurally_invalid_messages)
 {
     char *fixture;
@@ -693,6 +740,8 @@ messages_next_suite(void)
                    test_cnc_helpers_gate_registration_and_extract_timing);
     tcase_add_test(testcase,
                    test_messages_next_cache_response_route_requires_requestor);
+    tcase_add_test(testcase,
+                   test_messages_next_cache_submit_decision_maps_response_tags);
     tcase_add_test(testcase,
                    test_messages_next_route_rejects_structurally_invalid_messages);
     suite_add_tcase(suite, testcase);

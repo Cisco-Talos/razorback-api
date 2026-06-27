@@ -65,6 +65,10 @@ extern "C" {
 #define RZB_NEXT_QUEUE_CACHE_RESPONSE_PREFIX "CACHE_RESPONSE"
 #define RZB_NEXT_EXCHANGE_CATALOG_INVALIDATION "CATALOG.INVALIDATION"
 #define RZB_NEXT_EXCHANGE_FILE_REMOVE "FILE_REMOVE"
+#define RZB_NEXT_QUEUE_FILE_REMOVE_FILE_STORE "FILE_REMOVE.FILE_STORE"
+#define RZB_NEXT_EXCHANGE_FILE_REMOVE_VARNISH "FILE_REMOVE.VARNISH"
+#define RZB_NEXT_QUEUE_FILE_REMOVE_VARNISH "FILE_REMOVE.VARNISH.INVALIDATE"
+#define RZB_NEXT_ROUTING_KEY_FILE_REMOVE_VARNISH "file_store.removed"
 #define RZB_NEXT_QUEUE_FILE_REMOVE_RESULT "FILE_REMOVE.RESULT"
 
 #define RZB_NEXT_HEADER_SCHEMA_NAME "rzb-schema-name"
@@ -76,6 +80,17 @@ enum RzbNextTransport
 {
     RZB_NEXT_TRANSPORT_RABBITMQ = 0,
     RZB_NEXT_TRANSPORT_KAFKA = 1
+};
+
+enum RzbNextCacheSubmitDecision
+{
+    RZB_NEXT_CACHE_SUBMIT_NEW = 0,
+    RZB_NEXT_CACHE_SKIP_KNOWN = 1,
+    RZB_NEXT_CACHE_SUBMIT_FOR_REINSPECTION = 2,
+    RZB_NEXT_CACHE_RESTORE_AND_SUBMIT_FOR_REINSPECTION = 3,
+    RZB_NEXT_CACHE_TIMEOUT = 4,
+    RZB_NEXT_CACHE_BACKEND_UNAVAILABLE = 5,
+    RZB_NEXT_CACHE_INVALID_REQUEST = 6
 };
 
 struct RzbNextRoute
@@ -121,6 +136,9 @@ SO_PUBLIC extern bool RzbNextMessage_Route(
     const char *jsonMessage,
     const char *cacheRequestorUuid,
     struct RzbNextRoute **route
+);
+SO_PUBLIC extern enum RzbNextCacheSubmitDecision RzbNextCache_SubmitDecision(
+    const char *jsonMessage
 );
 SO_PUBLIC extern bool RzbNextRabbitMq_PrepareMessage(
     const char *jsonMessage,
