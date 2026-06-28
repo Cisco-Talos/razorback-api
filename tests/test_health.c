@@ -353,20 +353,23 @@ START_TEST(test_health_livez_and_startupz)
                         "GET /livez HTTP/1.1\r\n",
                         response, sizeof(response));
     ck_assert_ptr_nonnull(strstr(response, "HTTP/1.1 200 OK"));
-    ck_assert_ptr_nonnull(strstr(response, "\r\n\r\nok\n"));
+    ck_assert_ptr_nonnull(strstr(response, "\"service\":{\"name\":\"razorback-c-sdk-component\""));
+    ck_assert_ptr_nonnull(strstr(response, "\"live\":true"));
 
     health_test_request(port,
                         "GET /startupz HTTP/1.1\r\n",
                         response, sizeof(response));
     ck_assert_ptr_nonnull(strstr(response, "HTTP/1.1 503 Service Unavailable"));
-    ck_assert_ptr_nonnull(strstr(response, "\r\n\r\nunhealthy\n"));
+    ck_assert_ptr_nonnull(strstr(response, "\"status\":\"not_ready\""));
+    ck_assert_ptr_nonnull(strstr(response, "\"startup_ready\":false"));
+    ck_assert_ptr_nonnull(strstr(response, "\"c_sdk_process_starting\""));
 
     Razorback_Health_SetStartupComplete(true);
     health_test_request(port,
                         "GET /startupz HTTP/1.1\r\n",
                         response, sizeof(response));
     ck_assert_ptr_nonnull(strstr(response, "HTTP/1.1 200 OK"));
-    ck_assert_ptr_nonnull(strstr(response, "\r\n\r\nok\n"));
+    ck_assert_ptr_nonnull(strstr(response, "\"startup_ready\":true"));
 }
 END_TEST
 
@@ -391,7 +394,8 @@ START_TEST(test_health_readyz_requires_context_when_configured)
                         "GET /readyz HTTP/1.1\r\n",
                         response, sizeof(response));
     ck_assert_ptr_nonnull(strstr(response, "HTTP/1.1 200 OK"));
-    ck_assert_ptr_nonnull(strstr(response, "\r\n\r\nok\n"));
+    ck_assert_ptr_nonnull(strstr(response, "\"ready\":true"));
+    ck_assert_ptr_nonnull(strstr(response, "\"workflows\":{\"c_sdk_process\":{\"state\":\"running\""));
 
     health_test_reset_contexts();
     health_test_destroy_context(&context);
@@ -468,14 +472,18 @@ START_TEST(test_healthz_reports_aggregate_json)
                         "GET /healthz HTTP/1.1\r\n",
                         response, sizeof(response));
     ck_assert_ptr_nonnull(strstr(response, "HTTP/1.1 200 OK"));
-    ck_assert_ptr_nonnull(strstr(response, "{\"live\":true,\"ready\":true,\"startup\":true}\n"));
+    ck_assert_ptr_nonnull(strstr(response, "\"status\":\"ok\""));
+    ck_assert_ptr_nonnull(strstr(response, "\"ready\":true"));
+    ck_assert_ptr_nonnull(strstr(response, "\"startup\":true"));
 
     Razorback_Health_SetStartupComplete(false);
     health_test_request(port,
                         "GET /healthz HTTP/1.1\r\n",
                         response, sizeof(response));
     ck_assert_ptr_nonnull(strstr(response, "HTTP/1.1 503 Service Unavailable"));
-    ck_assert_ptr_nonnull(strstr(response, "{\"live\":true,\"ready\":false,\"startup\":false}\n"));
+    ck_assert_ptr_nonnull(strstr(response, "\"status\":\"not_ready\""));
+    ck_assert_ptr_nonnull(strstr(response, "\"ready\":false"));
+    ck_assert_ptr_nonnull(strstr(response, "\"startup\":false"));
 }
 END_TEST
 
@@ -494,7 +502,7 @@ START_TEST(test_health_slow_client_does_not_block_listener)
                         "GET /livez HTTP/1.1\r\n",
                         response, sizeof(response));
     ck_assert_ptr_nonnull(strstr(response, "HTTP/1.1 200 OK"));
-    ck_assert_ptr_nonnull(strstr(response, "\r\n\r\nok\n"));
+    ck_assert_ptr_nonnull(strstr(response, "\"live\":true"));
 
     close(slowClient);
 }
@@ -530,7 +538,7 @@ START_TEST(test_health_start_rejects_concurrent_restart_during_stop)
                         "GET /livez HTTP/1.1\r\n",
                         response, sizeof(response));
     ck_assert_ptr_nonnull(strstr(response, "HTTP/1.1 200 OK"));
-    ck_assert_ptr_nonnull(strstr(response, "\r\n\r\nok\n"));
+    ck_assert_ptr_nonnull(strstr(response, "\"live\":true"));
 
     close(slowClient);
 }

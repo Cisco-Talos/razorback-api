@@ -33,17 +33,20 @@ daemonTest_LDADD = -L../src -lrazorback_api @OPENTELEMETRY_CPP_LIBS@ @LIBS@
 SMOKE_NEXT_CPPFLAGS = $(AM_CPPFLAGS) \
 	-DRAZORBACK_SCHEMA_FIXTURE_ROOT=\"$(abs_top_srcdir)/schemas/razorback/fixtures\"
 
-smoke_source_next_SOURCES = smoke_source_next.c ../src/runtime_next.c \
+smoke_source_next_SOURCES = smoke_source_next.c test_telemetry_stubs.c \
+	../src/runtime_next.c \
 	../src/messages_next.c ../src/message_body.c
 smoke_source_next_CPPFLAGS = $(SMOKE_NEXT_CPPFLAGS)
 smoke_source_next_LDADD = @LIBS@
 
-smoke_inspector_next_SOURCES = smoke_inspector_next.c ../src/runtime_next.c \
+smoke_inspector_next_SOURCES = smoke_inspector_next.c test_telemetry_stubs.c \
+	../src/runtime_next.c \
 	../src/messages_next.c ../src/message_body.c
 smoke_inspector_next_CPPFLAGS = $(SMOKE_NEXT_CPPFLAGS)
 smoke_inspector_next_LDADD = @LIBS@
 
-smoke_operational_next_SOURCES = smoke_operational_next.c ../src/runtime_next.c \
+smoke_operational_next_SOURCES = smoke_operational_next.c test_telemetry_stubs.c \
+	../src/runtime_next.c \
 	../src/messages_next.c ../src/message_body.c
 smoke_operational_next_CPPFLAGS = $(SMOKE_NEXT_CPPFLAGS)
 smoke_operational_next_LDADD = @LIBS@
@@ -144,7 +147,8 @@ test_messages_next_CFLAGS = $(CHECK_CFLAGS)
 test_messages_next_CPPFLAGS = $(MESSAGES_NEXT_TEST_CPPFLAGS)
 test_messages_next_LDADD = $(CHECK_LIBS) @LIBS@
 
-test_runtime_next_SOURCES = test_runtime_next.c ../src/runtime_next.c \
+test_runtime_next_SOURCES = test_runtime_next.c test_telemetry_stubs.c \
+	../src/runtime_next.c \
 	../src/messages_next.c ../src/message_body.c
 test_runtime_next_CFLAGS = $(CHECK_CFLAGS)
 test_runtime_next_CPPFLAGS = $(MESSAGES_NEXT_TEST_CPPFLAGS)

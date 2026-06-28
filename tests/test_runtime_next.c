@@ -22,6 +22,7 @@
 
 #include <razorback/runtime_next.h>
 #include <razorback/messages_next.h>
+#include <razorback/telemetry.h>
 
 #include <json-c/json.h>
 
@@ -308,6 +309,23 @@ START_TEST(test_runtime_create_enforces_single_context_and_generates_process_uui
     assert_valid_uuid(generatedProcessUuid);
     ck_assert_str_ne(generatedProcessUuid, PROCESS_UUID);
     RzbNextRuntime_Destroy(runtime);
+}
+END_TEST
+
+START_TEST(test_runtime_common_metric_names_are_stable)
+{
+    ck_assert_str_eq(RAZORBACK_RUNTIME_DEPENDENCY_STATE_METRIC,
+                     "razorback.runtime.dependency.state");
+    ck_assert_str_eq(RAZORBACK_RUNTIME_WORKFLOW_STATE_METRIC,
+                     "razorback.runtime.workflow.state");
+    ck_assert_str_eq(RAZORBACK_RUNTIME_READINESS_STATE_METRIC,
+                     "razorback.runtime.readiness.state");
+    ck_assert_str_eq(RAZORBACK_RUNTIME_STARTUP_DURATION_METRIC,
+                     "razorback.runtime.startup.duration");
+    ck_assert_str_eq(RAZORBACK_RUNTIME_SHUTDOWN_DRAIN_DURATION_METRIC,
+                     "razorback.runtime.shutdown.drain.duration");
+    ck_assert_str_eq(RAZORBACK_RUNTIME_TELEMETRY_FLUSH_OUTCOME_METRIC,
+                     "razorback.runtime.telemetry.flush.outcome");
 }
 END_TEST
 
@@ -707,6 +725,7 @@ runtime_next_suite(void)
     testcase = tcase_create("core");
     tcase_add_test(testcase,
                    test_runtime_create_enforces_single_context_and_generates_process_uuid);
+    tcase_add_test(testcase, test_runtime_common_metric_names_are_stable);
     tcase_add_test(testcase, test_runtime_health_and_dispatcher_hello_gate);
     tcase_add_test(testcase,
                    test_registration_acceptance_liveness_pause_go_and_bye);

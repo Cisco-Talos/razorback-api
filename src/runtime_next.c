@@ -20,6 +20,7 @@
 
 #include <razorback/runtime_next.h>
 #include <razorback/messages_next.h>
+#include <razorback/telemetry.h>
 
 #include <json.h>
 #include <stdlib.h>
@@ -27,10 +28,16 @@
 #include <stdio.h>
 #include <uuid/uuid.h>
 
+#define RZB_NEXT_RUNTIME_SERVICE_NAME "razorback-c-sdk-component"
+#define RZB_NEXT_RUNTIME_WORKFLOW_NAME "component_runtime"
+#define RZB_NEXT_RUNTIME_DEPENDENCY_NAME "component_dependencies"
+
 struct RzbNextRuntime
 {
     char *nuggetUuid;
     char *processUuid;
+    double startedAt;
+    bool startupMetricRecorded;
     char *inFlightRequestId;
     char *acceptedRequestId;
     char *registrationGeneration;
@@ -65,6 +72,23 @@ static bool RzbNextRuntime_RequireRequest(const RzbNextRuntime_t *runtime,
                                           const char *actual);
 static const char *RzbNextRuntime_Availability(
     const RzbNextRuntime_t *runtime
+);
+static const char *RzbNextRuntime_WorkflowState(
+    const RzbNextRuntime_t *runtime
+);
+static const char *RzbNextRuntime_WorkflowReasonCode(
+    const RzbNextRuntime_t *runtime
+);
+static const char *RzbNextRuntime_ReadinessReasonCode(
+    const RzbNextRuntime_t *runtime
+);
+static void RzbNextRuntime_RecordStateMetrics(
+    const RzbNextRuntime_t *runtime
+);
+static void RzbNextRuntime_RecordStartupDurationOnce(
+    RzbNextRuntime_t *runtime,
+    const char *outcome,
+    const char *reasonCode
 );
 static char *RzbNextRuntime_RenderJson(json_object *object);
 static void RzbNextRuntime_RecordCallbackFailure(
@@ -235,6 +259,107 @@ RzbNextRuntime_Availability(const RzbNextRuntime_t *runtime)
     }
 }
 
+static const char *
+RzbNextRuntime_WorkflowState(const RzbNextRuntime_t *runtime)
+{
+    if (runtime == NULL)
+        return "failed";
+    if (runtime->dependencyPaused &&
+        (runtime->state == RZB_NEXT_RUNTIME_READY ||
+         runtime->state == RZB_NEXT_RUNTIME_PAUSED)) {
+        return "paused_dependency";
+    }
+    switch (runtime->state) {
+    case RZB_NEXT_RUNTIME_READY:
+        return "running";
+    case RZB_NEXT_RUNTIME_WAITING_FOR_DISPATCHER:
+    case RZB_NEXT_RUNTIME_REGISTERING:
+    case RZB_NEXT_RUNTIME_PAUSED:
+        return "paused_registration";
+    case RZB_NEXT_RUNTIME_DRAINING:
+        return "draining";
+    case RZB_NEXT_RUNTIME_STOPPED:
+        return "stopped";
+    case RZB_NEXT_RUNTIME_FAILED:
+        return "failed";
+    case RZB_NEXT_RUNTIME_STARTING:
+    default:
+        return "starting";
+    }
+}
+
+static const char *
+RzbNextRuntime_WorkflowReasonCode(const RzbNextRuntime_t *runtime)
+{
+    const char *workflowState = RzbNextRuntime_WorkflowState(runtime);
+
+    if (strcmp(workflowState, "running") == 0)
+        return NULL;
+    if (strcmp(workflowState, "paused_dependency") == 0)
+        return "component_runtime_paused_dependency";
+    if (strcmp(workflowState, "paused_registration") == 0)
+        return "component_runtime_paused_registration";
+    if (strcmp(workflowState, "draining") == 0)
+        return "component_runtime_draining";
+    if (strcmp(workflowState, "stopped") == 0)
+        return "component_runtime_stopped";
+    if (strcmp(workflowState, "failed") == 0)
+        return "component_runtime_failed";
+    return "component_runtime_starting";
+}
+
+static const char *
+RzbNextRuntime_ReadinessReasonCode(const RzbNextRuntime_t *runtime)
+{
+    if (runtime == NULL)
+        return "component_runtime_failed";
+    if (RzbNextRuntime_Health(runtime).readyz)
+        return NULL;
+    if (runtime->dependencyPaused &&
+        (runtime->state == RZB_NEXT_RUNTIME_READY ||
+         runtime->state == RZB_NEXT_RUNTIME_PAUSED)) {
+        return "dependency_unavailable";
+    }
+    return RzbNextRuntime_WorkflowReasonCode(runtime);
+}
+
+static void
+RzbNextRuntime_RecordStateMetrics(const RzbNextRuntime_t *runtime)
+{
+    struct RzbNextRuntimeHealth health;
+    const char *reasonCode;
+
+    if (runtime == NULL)
+        return;
+    health = RzbNextRuntime_Health(runtime);
+    reasonCode = RzbNextRuntime_ReadinessReasonCode(runtime);
+    Telemetry_RecordRuntimeWorkflowState(
+        RZB_NEXT_RUNTIME_WORKFLOW_NAME,
+        RzbNextRuntime_WorkflowState(runtime),
+        RzbNextRuntime_WorkflowReasonCode(runtime)
+    );
+    Telemetry_RecordRuntimeReadinessState(
+        health.readyz ? "ready" : "not_ready",
+        health.readyz ? "succeeded" : "failed",
+        reasonCode
+    );
+}
+
+static void
+RzbNextRuntime_RecordStartupDurationOnce(RzbNextRuntime_t *runtime,
+                                         const char *outcome,
+                                         const char *reasonCode)
+{
+    if (runtime == NULL || runtime->startupMetricRecorded)
+        return;
+    runtime->startupMetricRecorded = true;
+    Telemetry_RecordRuntimeStartupDuration(
+        Telemetry_GetMonotonicTimeSeconds() - runtime->startedAt,
+        outcome,
+        reasonCode
+    );
+}
+
 static char *
 RzbNextRuntime_RenderJson(json_object *object)
 {
@@ -350,6 +475,7 @@ RzbNextRuntime_Create(const char *nuggetUuid, const char *processUuid)
     runtime->nuggetUuid = RzbNextRuntime_Strdup(nuggetUuid);
     runtime->processUuid = RzbNextRuntime_Strdup(processUuid);
     runtime->runtimePolicy = RzbNextRuntime_Strdup("running");
+    runtime->startedAt = Telemetry_GetMonotonicTimeSeconds();
     runtime->state = RZB_NEXT_RUNTIME_STARTING;
     if (runtime->nuggetUuid == NULL || runtime->processUuid == NULL ||
         runtime->runtimePolicy == NULL) {
@@ -484,8 +610,10 @@ RzbNextRuntime_HealthReadyCheck(void *userData)
 void
 RzbNextRuntime_Initialize(RzbNextRuntime_t *runtime)
 {
-    if (runtime != NULL && runtime->state == RZB_NEXT_RUNTIME_STARTING)
+    if (runtime != NULL && runtime->state == RZB_NEXT_RUNTIME_STARTING) {
         runtime->state = RZB_NEXT_RUNTIME_WAITING_FOR_DISPATCHER;
+        RzbNextRuntime_RecordStateMetrics(runtime);
+    }
 }
 
 bool
@@ -497,6 +625,7 @@ RzbNextRuntime_ObserveDispatcherHello(RzbNextRuntime_t *runtime,
     if (runtime->state == RZB_NEXT_RUNTIME_STARTING ||
         runtime->state == RZB_NEXT_RUNTIME_WAITING_FOR_DISPATCHER) {
         runtime->state = RZB_NEXT_RUNTIME_REGISTERING;
+        RzbNextRuntime_RecordStateMetrics(runtime);
     }
     return true;
 }
@@ -514,6 +643,7 @@ RzbNextRuntime_BeginRegistration(RzbNextRuntime_t *runtime, const char *requestI
     RzbNextRuntime_Free(&runtime->inFlightRequestId);
     runtime->inFlightRequestId = copy;
     runtime->state = RZB_NEXT_RUNTIME_REGISTERING;
+    RzbNextRuntime_RecordStateMetrics(runtime);
     return true;
 }
 
@@ -567,6 +697,8 @@ RzbNextRuntime_RegistrationAccepted(RzbNextRuntime_t *runtime,
     runtime->state = strcmp(policy, "running") == 0
                      ? RZB_NEXT_RUNTIME_READY
                      : RZB_NEXT_RUNTIME_PAUSED;
+    RzbNextRuntime_RecordStartupDurationOnce(runtime, "succeeded", NULL);
+    RzbNextRuntime_RecordStateMetrics(runtime);
     appliedTransition.kind = RZB_NEXT_RUNTIME_TRANSITION_REGISTERED;
     appliedTransition.ready = runtime->state == RZB_NEXT_RUNTIME_READY;
     RzbNextRuntime_CopyFixed(appliedTransition.generation,
@@ -624,7 +756,9 @@ RzbNextRuntime_RegistrationRejected(RzbNextRuntime_t *runtime,
         RzbNextRuntime_Free(&runtime->acceptedRequestId);
         RzbNextRuntime_Free(&runtime->registrationGeneration);
         runtime->state = RZB_NEXT_RUNTIME_FAILED;
+        RzbNextRuntime_RecordStartupDurationOnce(runtime, "failed", reasonCode);
     }
+    RzbNextRuntime_RecordStateMetrics(runtime);
     if (transition != NULL) {
         transition->kind = RZB_NEXT_RUNTIME_TRANSITION_REJECTED;
         transition->retryable = retryable;
@@ -675,6 +809,7 @@ RzbNextRuntime_ApplyDirectedCommand(RzbNextRuntime_t *runtime,
         RzbNextRuntime_Free(&runtime->acceptedRequestId);
         RzbNextRuntime_Free(&runtime->registrationGeneration);
         runtime->state = RZB_NEXT_RUNTIME_REGISTERING;
+        RzbNextRuntime_RecordStateMetrics(runtime);
         if (result != NULL) {
             result->effect = hadAcceptedGeneration
                              ? RZB_NEXT_RUNTIME_DIRECTED_REREGISTER
@@ -710,6 +845,7 @@ RzbNextRuntime_ApplyDirectedCommand(RzbNextRuntime_t *runtime,
         RzbNextRuntime_Free(&runtime->acceptedRequestId);
         RzbNextRuntime_Free(&runtime->registrationGeneration);
         runtime->state = RZB_NEXT_RUNTIME_REGISTERING;
+        RzbNextRuntime_RecordStateMetrics(runtime);
         if (result != NULL)
             result->effect = RZB_NEXT_RUNTIME_DIRECTED_REREGISTER;
     } else if (strcmp(command, "cache_invalidate") == 0) {
@@ -860,6 +996,7 @@ RzbNextRuntime_PauseNewWork(RzbNextRuntime_t *runtime)
     RzbNextRuntime_Free(&runtime->runtimePolicy);
     runtime->runtimePolicy = RzbNextRuntime_Strdup("paused");
     runtime->state = RZB_NEXT_RUNTIME_PAUSED;
+    RzbNextRuntime_RecordStateMetrics(runtime);
 }
 
 bool
@@ -876,16 +1013,26 @@ RzbNextRuntime_ResumeWhenReady(RzbNextRuntime_t *runtime)
     if (runtime->runtimePolicy == NULL)
         return false;
     runtime->state = RZB_NEXT_RUNTIME_READY;
+    RzbNextRuntime_RecordStateMetrics(runtime);
     return true;
 }
 
 bool
 RzbNextRuntime_Drain(RzbNextRuntime_t *runtime)
 {
+    bool drained;
+
     if (runtime == NULL)
         return false;
     RzbNextRuntime_BeginDraining(runtime);
-    return runtime->inFlightWork == 0U;
+    drained = runtime->inFlightWork == 0U;
+    Telemetry_RecordRuntimeShutdownDrainDuration(
+        0.0,
+        RZB_NEXT_RUNTIME_SERVICE_NAME,
+        drained ? "succeeded" : "failed",
+        drained ? NULL : "drain_incomplete"
+    );
+    return drained;
 }
 
 bool
@@ -894,6 +1041,12 @@ RzbNextRuntime_DependencyUnavailable(RzbNextRuntime_t *runtime)
     if (runtime == NULL)
         return false;
     runtime->dependencyPaused = true;
+    Telemetry_RecordRuntimeDependencyState(
+        RZB_NEXT_RUNTIME_DEPENDENCY_NAME,
+        "unavailable",
+        "dependency_unavailable"
+    );
+    RzbNextRuntime_RecordStateMetrics(runtime);
     return true;
 }
 
@@ -903,28 +1056,41 @@ RzbNextRuntime_DependencyRecovered(RzbNextRuntime_t *runtime)
     if (runtime == NULL)
         return false;
     runtime->dependencyPaused = false;
+    Telemetry_RecordRuntimeDependencyState(
+        RZB_NEXT_RUNTIME_DEPENDENCY_NAME,
+        "available",
+        NULL
+    );
+    RzbNextRuntime_RecordStateMetrics(runtime);
     return true;
 }
 
 void
 RzbNextRuntime_BeginDraining(RzbNextRuntime_t *runtime)
 {
-    if (runtime != NULL)
+    if (runtime != NULL) {
         runtime->state = RZB_NEXT_RUNTIME_DRAINING;
+        RzbNextRuntime_RecordStateMetrics(runtime);
+    }
 }
 
 void
 RzbNextRuntime_MarkStopped(RzbNextRuntime_t *runtime)
 {
-    if (runtime != NULL)
+    if (runtime != NULL) {
         runtime->state = RZB_NEXT_RUNTIME_STOPPED;
+        RzbNextRuntime_RecordStateMetrics(runtime);
+    }
 }
 
 void
 RzbNextRuntime_MarkFailed(RzbNextRuntime_t *runtime)
 {
-    if (runtime != NULL)
+    if (runtime != NULL) {
         runtime->state = RZB_NEXT_RUNTIME_FAILED;
+        RzbNextRuntime_RecordStartupDurationOnce(runtime, "failed", "failed");
+        RzbNextRuntime_RecordStateMetrics(runtime);
+    }
 }
 
 void
