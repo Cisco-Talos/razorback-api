@@ -51,3 +51,4 @@ RUN cp /razorback/etc/razorback/magic.sample /razorback/etc/razorback/magic \
     && printf '/razorback/lib\n' > /etc/ld.so.conf.d/razorback.conf \
     && ldconfig
 WORKDIR /razorback
+USER razorback

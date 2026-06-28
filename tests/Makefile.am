@@ -52,7 +52,7 @@ smoke_operational_next_LDADD = @LIBS@
 
 PYTHON ?= python3
 RZB_SMOKE_OPERATION_REPORT ?= .smoke-operation.json
-SMOKE_COMPOSE ?= docker compose -f ../../docker/compose.yaml -f ../../docker/compose.smoke.yaml
+SMOKE_COMPOSE ?= docker compose --env-file ../../deployment/.env -f ../../deployment/compose/core/compose.yaml -f ../../deployment/compose/razorback/compose.yaml -f ../../deployment/compose/razorback/smoke.yaml
 SMOKE_OPERATION_REPORT_CONTAINER ?= /tmp/razorback-smoke-operation.json
 
 smoke-dispatcher-next: smoke_source_next smoke_inspector_next smoke_operational_next
