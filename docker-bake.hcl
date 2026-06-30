@@ -25,7 +25,7 @@ variable "BASE_IMAGE" {
 }
 
 variable "REPO" {
-    default = "harbor.vrt.sourcefire.com/pinkhat/"
+    default = "ghcr.io/cisco-talos/razorback/"
 }
 
 variable "VERSION" {
