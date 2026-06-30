@@ -19,4 +19,4 @@
 	url = ../razorback-common-m4.git
 [submodule "schemas/razorback"]
 	path = schemas/razorback
-	url = git@github.com:Cisco-Talos/razorback-schemas.git
+	url = ../razorback-schemas.git
