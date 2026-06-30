@@ -24,6 +24,7 @@
 
 #include <amqp.h>
 #include <amqp_framing.h>
+#include <amqp_ssl_socket.h>
 #include <amqp_tcp_socket.h>
 #include <curl/curl.h>
 #include <json-c/json.h>
@@ -1107,14 +1108,41 @@ RzbSmoke_BrokerConnect(const char *url, struct RzbSmokeBroker *broker)
     if (mutableUrl == NULL)
         return false;
     amqp_default_connection_info(&info);
-    if (amqp_parse_url(mutableUrl, &info) != AMQP_STATUS_OK || info.ssl) {
+    if (amqp_parse_url(mutableUrl, &info) != AMQP_STATUS_OK) {
         free(mutableUrl);
         return false;
     }
     broker->connection = amqp_new_connection();
-    socket = amqp_tcp_socket_new(broker->connection);
-    if (socket == NULL ||
-        amqp_socket_open(socket, info.host, info.port) != AMQP_STATUS_OK) {
+    socket = info.ssl ? amqp_ssl_socket_new(broker->connection)
+                      : amqp_tcp_socket_new(broker->connection);
+    if (socket == NULL) {
+        free(mutableUrl);
+        return false;
+    }
+    if (info.ssl) {
+        const char *caFile = getenv("RZB_RABBITMQ__TLS__CA_FILE");
+        const char *clientCert = getenv("RZB_RABBITMQ__TLS__CLIENT_CERT_FILE");
+        const char *clientKey = getenv("RZB_RABBITMQ__TLS__CLIENT_KEY_FILE");
+        bool verifyTls = strcmp(RzbSmoke_Env("RZB_RABBITMQ__TLS__VERIFY_TLS", "true"), "false") != 0;
+        amqp_ssl_socket_set_verify_peer(socket, verifyTls);
+        amqp_ssl_socket_set_verify_hostname(socket, verifyTls);
+        if (caFile != NULL && caFile[0] != '\0' &&
+            amqp_ssl_socket_set_cacert(socket, caFile) != AMQP_STATUS_OK) {
+            free(mutableUrl);
+            return false;
+        }
+        if ((clientCert != NULL && clientCert[0] != '\0') !=
+            (clientKey != NULL && clientKey[0] != '\0')) {
+            free(mutableUrl);
+            return false;
+        }
+        if (clientCert != NULL && clientCert[0] != '\0' &&
+            amqp_ssl_socket_set_key(socket, clientCert, clientKey) != AMQP_STATUS_OK) {
+            free(mutableUrl);
+            return false;
+        }
+    }
+    if (amqp_socket_open(socket, info.host, info.port) != AMQP_STATUS_OK) {
         free(mutableUrl);
         return false;
     }
