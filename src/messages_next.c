@@ -1831,9 +1831,8 @@ RzbNext_ValidateSearchExport(json_object *object)
     };
     static const char * const eventTypes[] = {
         "event.upserted", "block.seen", "block.updated",
-        "event.inspection_status_updated", "analysis_result.completed",
-        "analysis_result.error", "analysis_result.deferred", "alert.created",
-        "block.finalized", "audit.recorded"
+        "analysis_result.completed", "analysis_result.error",
+        "alert.created", "block.finalized", "audit.recorded"
     };
     static const char * const targetIndexes[] = {
         "razorback-blocks", "razorback-events",
