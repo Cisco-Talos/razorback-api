@@ -35,6 +35,9 @@ extern "C" {
 
 #define RZB_NEXT_SCHEMA_VERSION 1U
 
+#define RZB_NEXT_METADATA_DEFAULT_MAX_VALUE_BYTES (5U * 1024U * 1024U)
+#define RZB_NEXT_METADATA_MAX_VALUE_BYTES_ENV "RZB_METADATA__MAX_VALUE_BYTES"
+
 #define RZB_NEXT_SCHEMA_CLAIM_CHECK_REFERENCE "razorback.messages.claim_check_reference"
 #define RZB_NEXT_SCHEMA_CNC_REGISTRATION_REQUEST "razorback.cnc.registration_request"
 #define RZB_NEXT_SCHEMA_CNC_REGISTRATION_ACCEPTED "razorback.cnc.registration_accepted"
@@ -129,6 +132,7 @@ struct RzbNextDecodedRabbitMqMessage
 SO_PUBLIC extern const char * RzbNextTransport_ToString(
     enum RzbNextTransport transport
 );
+SO_PUBLIC extern size_t RzbNextMetadata_MaxValueBytes(void);
 SO_PUBLIC extern bool RzbNextMessage_IsKnownSchema(const char *schemaName);
 SO_PUBLIC extern bool RzbNextMessage_ValidateIdentity(const char *jsonMessage);
 SO_PUBLIC extern bool RzbNextMessage_Validate(const char *jsonMessage);

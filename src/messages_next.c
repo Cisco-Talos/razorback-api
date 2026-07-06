@@ -21,6 +21,7 @@
 #include <razorback/messages_next.h>
 
 #include <ctype.h>
+#include <errno.h>
 #include <json.h>
 #include <limits.h>
 #include <stdint.h>
@@ -76,6 +77,7 @@ static bool RzbNextDecoded_FromBytes(
     struct RzbNextDecodedRabbitMqMessage **decoded
 );
 static bool RzbNext_StringArrayContains(json_object *array, const char *needle);
+static bool RzbNext_MetadataValueWithinLimit(json_object *value);
 
 static char *
 RzbNext_Strdup(const char *value)
@@ -648,11 +650,88 @@ RzbNext_ValidateMetadataArray(json_object *array, size_t minimum, bool updates)
         if (!RzbNext_RequireString(record, "name", RzbNext_IsSafeKey) ||
             !RzbNext_RequireString(record, "type", RzbNext_IsSafeKey) ||
             !json_object_object_get_ex(record, "value", &value) ||
-            json_object_get_type(value) == json_type_null) {
+            json_object_get_type(value) == json_type_null ||
+            !RzbNext_MetadataValueWithinLimit(value)) {
             return false;
         }
     }
     return true;
+}
+
+static bool
+RzbNext_MetadataValueWithinLimit(json_object *value)
+{
+    const char *jsonText;
+
+    jsonText = json_object_to_json_string_ext(value, JSON_C_TO_STRING_PLAIN);
+    return jsonText != NULL &&
+           strlen(jsonText) <= RzbNextMetadata_MaxValueBytes();
+}
+
+static bool
+RzbNext_MetadataArrayHasOversizedValue(json_object *array)
+{
+    size_t count;
+    size_t index;
+
+    if (array == NULL || json_object_get_type(array) != json_type_array)
+        return false;
+    count = json_object_array_length(array);
+    for (index = 0; index < count; index++) {
+        json_object *record = json_object_array_get_idx(array, index);
+        json_object *value;
+
+        if (record == NULL ||
+            json_object_get_type(record) != json_type_object ||
+            !json_object_object_get_ex(record, "value", &value)) {
+            continue;
+        }
+        if (!RzbNext_MetadataValueWithinLimit(value))
+            return true;
+    }
+    return false;
+}
+
+static bool
+RzbNext_AlertsHaveOversizedMetadata(json_object *alerts)
+{
+    size_t count;
+    size_t index;
+
+    if (alerts == NULL || json_object_get_type(alerts) != json_type_array)
+        return false;
+    count = json_object_array_length(alerts);
+    for (index = 0; index < count; index++) {
+        json_object *alert = json_object_array_get_idx(alerts, index);
+        json_object *metadata;
+
+        if (alert == NULL || json_object_get_type(alert) != json_type_object)
+            continue;
+        if (json_object_object_get_ex(alert, "metadata", &metadata) &&
+            RzbNext_MetadataArrayHasOversizedValue(metadata)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool
+RzbNext_AnalysisResultHasOversizedMetadata(json_object *result)
+{
+    json_object *value;
+
+    if (result == NULL || json_object_get_type(result) != json_type_object)
+        return false;
+    if (json_object_object_get_ex(result, "block_metadata_updates", &value) &&
+        RzbNext_MetadataArrayHasOversizedValue(value)) {
+        return true;
+    }
+    if (json_object_object_get_ex(result, "metadata", &value) &&
+        RzbNext_MetadataArrayHasOversizedValue(value)) {
+        return true;
+    }
+    return json_object_object_get_ex(result, "alerts", &value) &&
+           RzbNext_AlertsHaveOversizedMetadata(value);
 }
 
 static bool
@@ -1533,6 +1612,43 @@ RzbNextAnalysisResult_Common(json_object *work, const char *inspectorUuid,
     return result;
 }
 
+static char *
+RzbNextAnalysisResult_MetadataLimitDetails(void)
+{
+    json_object *details;
+    char *jsonText;
+
+    details = json_object_new_object();
+    if (details == NULL)
+        return NULL;
+    json_object_object_add(details, "reason_code",
+                           json_object_new_string("metadata_value_too_large"));
+    json_object_object_add(
+        details, "max_value_bytes",
+        json_object_new_int64((int64_t)RzbNextMetadata_MaxValueBytes()));
+    jsonText = RzbNext_JsonToOwnedString(details);
+    json_object_put(details);
+    return jsonText;
+}
+
+static char *
+RzbNextAnalysisResult_BuildMetadataLimitError(const char *inspectionWorkJson,
+                                              const char *inspectorUuid,
+                                              const char *createdAt)
+{
+    char *detailsJson;
+    char *jsonText;
+
+    detailsJson = RzbNextAnalysisResult_MetadataLimitDetails();
+    jsonText = RzbNextAnalysisResult_BuildError(
+        inspectionWorkJson, inspectorUuid, "inspector_failed",
+        "metadata_value_too_large",
+        "inspector produced metadata that exceeds the per-item metadata value limit",
+        detailsJson, createdAt);
+    free(detailsJson);
+    return jsonText;
+}
+
 char *
 RzbNextAnalysisResult_BuildCompleted(const char *inspectionWorkJson,
                                      const char *inspectorUuid,
@@ -1545,6 +1661,7 @@ RzbNextAnalysisResult_BuildCompleted(const char *inspectionWorkJson,
     json_object *work;
     json_object *result;
     char *jsonText = NULL;
+    bool metadataTooLarge = false;
 
     work = RzbNextAnalysisResult_ParseInspectionWork(inspectionWorkJson);
     result = RzbNextAnalysisResult_Common(work, inspectorUuid, "completed",
@@ -1561,8 +1678,15 @@ RzbNextAnalysisResult_BuildCompleted(const char *inspectionWorkJson,
                                               tagMutationsJson,
                                               json_type_object) ||
         !RzbNextAnalysisResult_AddOptionalJson(result, "alerts", alertsJson,
-                                              json_type_array) ||
-        !RzbNext_ValidateAnalysisResult(result)) {
+                                              json_type_array)) {
+        goto cleanup;
+    }
+    metadataTooLarge = RzbNext_AnalysisResultHasOversizedMetadata(result);
+    if (!RzbNext_ValidateAnalysisResult(result)) {
+        if (metadataTooLarge) {
+            jsonText = RzbNextAnalysisResult_BuildMetadataLimitError(
+                inspectionWorkJson, inspectorUuid, createdAt);
+        }
         goto cleanup;
     }
     jsonText = RzbNext_JsonToOwnedString(result);
@@ -2071,6 +2195,26 @@ RzbNextTransport_ToString(enum RzbNextTransport transport)
     default:
         return "unknown";
     }
+}
+
+SO_PUBLIC size_t
+RzbNextMetadata_MaxValueBytes(void)
+{
+    const char *configured;
+    char *end = NULL;
+    unsigned long long parsed;
+
+    configured = getenv(RZB_NEXT_METADATA_MAX_VALUE_BYTES_ENV);
+    if (configured == NULL || *configured == '\0')
+        return RZB_NEXT_METADATA_DEFAULT_MAX_VALUE_BYTES;
+
+    errno = 0;
+    parsed = strtoull(configured, &end, 10);
+    if (errno != 0 || end == configured || *end != '\0' ||
+        parsed == 0 || parsed > SIZE_MAX) {
+        return RZB_NEXT_METADATA_DEFAULT_MAX_VALUE_BYTES;
+    }
+    return (size_t)parsed;
 }
 
 SO_PUBLIC bool

@@ -87,6 +87,32 @@ copy_json_string(json_object *object)
 }
 
 static char *
+copy_string(const char *value)
+{
+    char *copy;
+    size_t length;
+
+    if (value == NULL)
+        return NULL;
+    length = strlen(value) + 1;
+    copy = malloc(length);
+    ck_assert_ptr_ne(copy, NULL);
+    memcpy(copy, value, length);
+    return copy;
+}
+
+static void
+restore_env_value(const char *name, char *value)
+{
+    if (value == NULL) {
+        ck_assert_int_eq(unsetenv(name), 0);
+    } else {
+        ck_assert_int_eq(setenv(name, value, 1), 0);
+        free(value);
+    }
+}
+
+static char *
 mutate_fixture_version(const char *fixture)
 {
     json_object *object;
@@ -195,6 +221,68 @@ START_TEST(test_messages_next_accepts_known_schema_identities)
 
     ck_assert(RzbNextMessage_IsKnownSchema(RZB_NEXT_SCHEMA_ANALYSIS_RESULT));
     ck_assert(!RzbNextMessage_IsKnownSchema("razorback.messages.analysis_result"));
+}
+END_TEST
+
+START_TEST(test_metadata_value_limit_rejects_oversized_values)
+{
+    char *fixture;
+    char *savedLimit;
+
+    fixture = read_fixture("messages", "block_submission.valid.json");
+    savedLimit = copy_string(getenv(RZB_NEXT_METADATA_MAX_VALUE_BYTES_ENV));
+
+    ck_assert_uint_eq(RZB_NEXT_METADATA_DEFAULT_MAX_VALUE_BYTES,
+                      5U * 1024U * 1024U);
+    ck_assert_int_eq(setenv(RZB_NEXT_METADATA_MAX_VALUE_BYTES_ENV, "64", 1), 0);
+    ck_assert_uint_eq(RzbNextMetadata_MaxValueBytes(), 64U);
+    ck_assert_msg(RzbNextMessage_Validate(fixture),
+                  "fixture metadata should fit under expanded test limit");
+
+    ck_assert_int_eq(setenv(RZB_NEXT_METADATA_MAX_VALUE_BYTES_ENV, "5", 1), 0);
+    ck_assert_uint_eq(RzbNextMetadata_MaxValueBytes(), 5U);
+    ck_assert_msg(!RzbNextMessage_Validate(fixture),
+                  "fixture metadata should fail under tiny test limit");
+
+    restore_env_value(RZB_NEXT_METADATA_MAX_VALUE_BYTES_ENV, savedLimit);
+    free(fixture);
+}
+END_TEST
+
+START_TEST(test_analysis_result_completed_oversized_metadata_builds_error_result)
+{
+    char *work;
+    char *completed;
+    char *savedLimit;
+    json_object *completedObject;
+    json_object *errorObject;
+    const char *metadataJson =
+        "[{\"name\":\"large\",\"type\":\"string\",\"value\":\"abcdef\"}]";
+    const char *inspectorUuid = "22222222-2222-4222-8222-222222222222";
+    const char *createdAt = "2026-06-17T21:06:00.000Z";
+
+    work = read_fixture("messages", "inspection_work.valid.json");
+    savedLimit = copy_string(getenv(RZB_NEXT_METADATA_MAX_VALUE_BYTES_ENV));
+    ck_assert_int_eq(setenv(RZB_NEXT_METADATA_MAX_VALUE_BYTES_ENV, "5", 1), 0);
+
+    completed = RzbNextAnalysisResult_BuildCompleted(
+        work, inspectorUuid, createdAt, NULL, metadataJson, NULL, NULL);
+
+    ck_assert_ptr_ne(completed, NULL);
+    ck_assert(RzbNextMessage_Validate(completed));
+    completedObject = json_tokener_parse(completed);
+    ck_assert_ptr_ne(completedObject, NULL);
+    ck_assert_str_eq(json_string_field(completedObject, "result_status"),
+                     "error");
+    ck_assert(json_object_object_get_ex(completedObject, "error",
+                                        &errorObject));
+    ck_assert_str_eq(json_string_field(errorObject, "code"),
+                     "metadata_value_too_large");
+
+    json_object_put(completedObject);
+    RzbNext_FreeString(completed);
+    restore_env_value(RZB_NEXT_METADATA_MAX_VALUE_BYTES_ENV, savedLimit);
+    free(work);
 }
 END_TEST
 
@@ -725,6 +813,9 @@ messages_next_suite(void)
     suite = suite_create("messages_next");
     testcase = tcase_create("core");
     tcase_add_test(testcase, test_messages_next_accepts_known_schema_identities);
+    tcase_add_test(testcase, test_metadata_value_limit_rejects_oversized_values);
+    tcase_add_test(testcase,
+                   test_analysis_result_completed_oversized_metadata_builds_error_result);
     tcase_add_test(testcase,
                    test_messages_next_rejects_identity_mutations_for_all_fixtures);
     tcase_add_test(testcase, test_messages_next_rejects_unknown_or_bad_identity);
