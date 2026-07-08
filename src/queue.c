@@ -601,7 +601,11 @@ Queue_BeginReading (struct Queue *p_pQ)
 {
     amqp_bytes_t decQueuename;
     const char *exchange;
+    int durable;
+    int exclusive;
     int autoDelete;
+    amqp_table_entry_t quorumEntry;
+    amqp_table_t queueArgs;
 
     ASSERT (p_pQ != NULL);
     if (p_pQ == NULL) {
@@ -610,6 +614,8 @@ Queue_BeginReading (struct Queue *p_pQ)
     }
 
     exchange = p_pQ->bTopic ? "amq.topic" : "amq.direct";
+    durable = p_pQ->bTopic ? 0 : 1;
+    exclusive = p_pQ->bTopic ? 1 : 0;
     autoDelete = p_pQ->bTopic ? 1 : 0;
 
     if (p_pQ->bTopic) {
@@ -617,15 +623,25 @@ Queue_BeginReading (struct Queue *p_pQ)
     } else {
         decQueuename = amqp_cstring_bytes(p_pQ->sName);
     }
+
+    queueArgs = amqp_empty_table;
+    if (!p_pQ->bTopic) {
+        quorumEntry.key = amqp_cstring_bytes("x-queue-type");
+        quorumEntry.value.kind = AMQP_FIELD_KIND_UTF8;
+        quorumEntry.value.value.bytes = amqp_cstring_bytes("quorum");
+        queueArgs.num_entries = 1;
+        queueArgs.entries = &quorumEntry;
+    }
+
     amqp_queue_declare_ok_t *r = amqp_queue_declare(
         p_pQ->pReadSocket->pConn,
         AMQP_CHAN_ID,
         decQueuename,
         0,
-        1,
-        0,
+        durable,
+        exclusive,
         autoDelete,
-        amqp_empty_table
+        queueArgs
     );
     if (AMQP_error(amqp_get_rpc_reply(p_pQ->pReadSocket->pConn), __func__)) {
         rzb_log(LOG_ERR, LOG_C_QUEUE, "%s: Failed to declare queue", __func__);
