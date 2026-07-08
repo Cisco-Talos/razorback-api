@@ -15,23 +15,65 @@
 #  MA 02110-1301, USA.
 
 #noinst_PROGRAMS= configTest logTest daemonTest
-noinst_PROGRAMS= logTest daemonTest configTest
+noinst_PROGRAMS= logTest daemonTest configTest smoke_source_next smoke_inspector_next \
+	smoke_operational_next
 
 configTest_SOURCES = configTest.c
-configTest_LDADD = -L../src -lrazorback_api @LIBS@
+configTest_LDADD = -L../src -lrazorback_api @OPENTELEMETRY_CPP_LIBS@ @LIBS@
 
 logTest_SOURCES = logTest.c
-logTest_LDADD = -L../src -lrazorback_api @LIBS@
+logTest_LDADD = -L../src -lrazorback_api @OPENTELEMETRY_CPP_LIBS@ @LIBS@
 
 #mqTest_SOURCES = mqTest.c
 #mqTest_LDADD = -L../src -lrazorback_api 
 
 daemonTest_SOURCES = daemonTest.c
-daemonTest_LDADD = -L../src -lrazorback_api @LIBS@
+daemonTest_LDADD = -L../src -lrazorback_api @OPENTELEMETRY_CPP_LIBS@ @LIBS@
+
+SMOKE_NEXT_CPPFLAGS = $(AM_CPPFLAGS) \
+	-DRAZORBACK_SCHEMA_FIXTURE_ROOT=\"$(abs_top_srcdir)/schemas/razorback/fixtures\"
+
+smoke_source_next_SOURCES = smoke_source_next.c test_telemetry_stubs.c \
+	../src/runtime_next.c \
+	../src/messages_next.c ../src/message_body.c
+smoke_source_next_CPPFLAGS = $(SMOKE_NEXT_CPPFLAGS)
+smoke_source_next_LDADD = @LIBS@
+
+smoke_inspector_next_SOURCES = smoke_inspector_next.c test_telemetry_stubs.c \
+	../src/runtime_next.c \
+	../src/messages_next.c ../src/message_body.c
+smoke_inspector_next_CPPFLAGS = $(SMOKE_NEXT_CPPFLAGS)
+smoke_inspector_next_LDADD = @LIBS@
+
+smoke_operational_next_SOURCES = smoke_operational_next.c test_telemetry_stubs.c \
+	../src/runtime_next.c \
+	../src/messages_next.c ../src/message_body.c
+smoke_operational_next_CPPFLAGS = $(SMOKE_NEXT_CPPFLAGS)
+smoke_operational_next_LDADD = @LIBS@
+
+.PHONY: smoke-dispatcher-next
+
+PYTHON ?= python3
+RZB_SMOKE_OPERATION_REPORT ?= .smoke-operation.json
+SMOKE_COMPOSE ?= docker compose --env-file ../../deployment/.env -f ../../deployment/compose/core/compose.yaml -f ../../deployment/compose/razorback/compose.yaml -f ../../deployment/compose/razorback/smoke.yaml
+SMOKE_OPERATION_REPORT_CONTAINER ?= /tmp/razorback-smoke-operation.json
+
+smoke-dispatcher-next: smoke_source_next smoke_inspector_next smoke_operational_next
+	if test "$$RZB_SMOKE_LIVE" = "1"; then \
+		RZB_SMOKE_OPERATION_REPORT="$(RZB_SMOKE_OPERATION_REPORT)" ./smoke_operational_next || exit $$?; \
+		if test "$$RZB_SMOKE_ASSERT_KAFKA" != "0"; then \
+			$(SMOKE_COMPOSE) run --rm --no-deps --build --entrypoint python -v "$(abspath $(RZB_SMOKE_OPERATION_REPORT)):$(SMOKE_OPERATION_REPORT_CONTAINER):ro" smoke /smoke/search_export_probe.py --report "$(SMOKE_OPERATION_REPORT_CONTAINER)"; \
+		fi; \
+	else \
+		./smoke_source_next; \
+		./smoke_inspector_next; \
+	fi
 
 if HAVE_CHECK
 check_PROGRAMS = test_hash test_block_id test_list test_string_list \
-	test_uuids test_config_file test_timer test_health
+	test_uuids test_config_file test_timer test_health test_message_body \
+	test_messages_next test_config_next test_schema_conformance test_runtime_next \
+	test_fileserver
 TESTS = $(check_PROGRAMS)
 
 TESTS_DIR_CPPFLAGS = $(AM_CPPFLAGS) \
@@ -40,6 +82,11 @@ TESTS_DIR_CPPFLAGS = $(AM_CPPFLAGS) \
 test_hash_SOURCES = test_hash.c test_support.c ../src/hash.c
 test_hash_CFLAGS = $(CHECK_CFLAGS)
 test_hash_LDADD = $(CHECK_LIBS) @LIBS@
+
+test_fileserver_SOURCES = test_fileserver.c test_support.c ../src/hash.c \
+	../src/fileserver.c
+test_fileserver_CFLAGS = $(CHECK_CFLAGS)
+test_fileserver_LDADD = $(CHECK_LIBS) @LIBS@
 
 test_block_id_SOURCES = test_block_id.c test_support.c ../src/hash.c ../src/block_id.c
 test_block_id_CFLAGS = $(CHECK_CFLAGS)
@@ -70,6 +117,42 @@ test_health_SOURCES = test_health.c test_runtime_support.c \
 	../src/list.c ../src/lock.c ../src/thread.c ../src/socket.c ../src/health.c
 test_health_CFLAGS = $(CHECK_CFLAGS)
 test_health_LDADD = $(CHECK_LIBS) @LIBS@
+
+MESSAGE_BODY_TEST_CPPFLAGS = $(AM_CPPFLAGS) \
+	-DRAZORBACK_SCHEMA_FIXTURE_DIR=\"$(abs_top_srcdir)/schemas/razorback/fixtures/messages\"
+
+test_message_body_SOURCES = test_message_body.c ../src/message_body.c
+test_message_body_CFLAGS = $(CHECK_CFLAGS)
+test_message_body_CPPFLAGS = $(MESSAGE_BODY_TEST_CPPFLAGS)
+test_message_body_LDADD = $(CHECK_LIBS) @LIBS@
+
+test_config_next_SOURCES = test_config_next.c ../src/config_next.c
+test_config_next_CFLAGS = $(CHECK_CFLAGS)
+test_config_next_LDADD = $(CHECK_LIBS) @LIBS@
+
+SCHEMA_CONFORMANCE_TEST_CPPFLAGS = $(AM_CPPFLAGS) \
+	-DRAZORBACK_REPO_ROOT=\"$(abs_top_srcdir)\"
+
+test_schema_conformance_SOURCES = test_schema_conformance.c
+test_schema_conformance_CFLAGS = $(CHECK_CFLAGS)
+test_schema_conformance_CPPFLAGS = $(SCHEMA_CONFORMANCE_TEST_CPPFLAGS)
+test_schema_conformance_LDADD = $(CHECK_LIBS) @LIBS@
+
+MESSAGES_NEXT_TEST_CPPFLAGS = $(AM_CPPFLAGS) \
+	-DRAZORBACK_SCHEMA_FIXTURE_ROOT=\"$(abs_top_srcdir)/schemas/razorback/fixtures\"
+
+test_messages_next_SOURCES = test_messages_next.c ../src/messages_next.c \
+	../src/message_body.c
+test_messages_next_CFLAGS = $(CHECK_CFLAGS)
+test_messages_next_CPPFLAGS = $(MESSAGES_NEXT_TEST_CPPFLAGS)
+test_messages_next_LDADD = $(CHECK_LIBS) @LIBS@
+
+test_runtime_next_SOURCES = test_runtime_next.c test_telemetry_stubs.c \
+	../src/runtime_next.c \
+	../src/messages_next.c ../src/message_body.c
+test_runtime_next_CFLAGS = $(CHECK_CFLAGS)
+test_runtime_next_CPPFLAGS = $(MESSAGES_NEXT_TEST_CPPFLAGS)
+test_runtime_next_LDADD = $(CHECK_LIBS) @LIBS@
 
 if HAVE_JV
 check_PROGRAMS += test_json_buffer_primitives test_json_buffer_structs \

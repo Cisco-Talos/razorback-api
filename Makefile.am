@@ -20,3 +20,8 @@ EXTRA_DIST = LICENSE README.md SECURITY.md
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = razorback.pc
+
+.PHONY: smoke-dispatcher-next
+
+smoke-dispatcher-next:
+	$(MAKE) -C tests smoke-dispatcher-next

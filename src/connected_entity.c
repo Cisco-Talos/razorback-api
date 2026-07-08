@@ -31,7 +31,6 @@
 #include "connected_entity_private.h"
 #include "runtime_config.h"
 #include "telemetry.h"
-#include "transfer/core.h"
 #define SEARCH_KEY_NUGGET_ID    (1 << 0)
 #define SEARCH_KEY_APP_TYPE     (1 << 1)
 #define SEARCH_KEY_NUGGET_TYPE  (1 << 2)
@@ -181,7 +180,7 @@ ConnectedEntityList_GetEntity (struct Message *message)
             ret->dispatcher->flags = hello->flags;
             ret->dispatcher->port = hello->port;
             ret->dispatcher->protocol = hello->protocol;
-            ret->dispatcher->usable = Transport_IsSupported(hello->protocol);
+            ret->dispatcher->usable = true;
             if ((ret->dispatcher->addressList = List_Clone(hello->addressList)) == NULL) {
                 free(ret->dispatcher);
                 free(ret);

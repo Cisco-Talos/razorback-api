@@ -105,6 +105,7 @@ struct RazorbackCommandAndControlHooks
 
 
 #define CONTEXT_FLAG_STAND_ALONE 0x00000001
+#define CONTEXT_FLAG_DEV_TOOL    0x00000002
 
 /** API Context
  */
@@ -250,12 +251,6 @@ SO_PUBLIC extern bool Razorback_Output_Launch(
     struct RazorbackContext *context,
     struct RazorbackOutputHooks *hooks
 );
-
-/**
- * Get the transfer server protocol.
- * @return The password.
- */
-SO_PUBLIC extern char * Razorback_Get_Transfer_Password(void);
 
 /* Make APIs standardized while keeping function naming convention */
 #define RZB_Register_Collector          Razorback_Init_Collection_Context

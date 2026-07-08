@@ -24,6 +24,9 @@
 #include <razorback/log.h>
 #include <razorback/list.h>
 
+#ifdef BUILDING_SO
+#include "dev_mode.h"
+#endif
 #include "init.h"
 #include <string.h>
 
@@ -63,6 +66,16 @@ static List_t *sg_NtlvTypeList;
 static List_t *sg_NtlvNameList;
 static List_t *sg_NuggetList;
 static List_t *sg_NuggetTypeList;
+
+static bool
+UUID_IsDevModeEnabled(void)
+{
+#ifdef BUILDING_SO
+    return Razorback_DevMode_IsEnabled();
+#else
+    return false;
+#endif
+}
 
 SO_PUBLIC bool
 UUID_Add_List_Entry (List_t *list, uuid_t p_uuid,
@@ -141,6 +154,35 @@ UUID_getNodeByName (const char *p_sName, int p_iType)
     return (struct UUIDListNode *)List_Find(list, &key);
 }
 
+static struct UUIDListNode *
+UUID_getOrCreateDevNodeByName(const char *p_sName, int p_iType)
+{
+    struct UUIDListNode *node;
+    List_t *list;
+    uuid_t generated;
+
+    node = UUID_getNodeByName(p_sName, p_iType);
+    if (node != NULL)
+        return node;
+
+    if (!UUID_IsDevModeEnabled())
+        return NULL;
+
+    list = UUID_Get_List(p_iType);
+    if (list == NULL)
+        return NULL;
+
+    uuid_generate_random(generated);
+    if (!UUID_Add_List_Entry(list, generated, p_sName, NULL))
+        return NULL;
+
+    rzb_log(LOG_DEBUG, LOG_C_CORE,
+            "%s: Registered dev-mode UUID mapping for type %d name '%s'",
+            __func__, p_iType, p_sName);
+
+    return UUID_getNodeByName(p_sName, p_iType);
+}
+
 
 static struct UUIDListNode *
 UUID_getNodeByUUID (uuid_t p_uuid, int p_iType)
@@ -189,7 +231,7 @@ UUID_Get_UUID (const char *p_sName, int p_iType, uuid_t r_uuid)
 {
     struct UUIDListNode *l_pListNode;
 
-    if ((l_pListNode = UUID_getNodeByName (p_sName, p_iType)) == NULL)
+    if ((l_pListNode = UUID_getOrCreateDevNodeByName(p_sName, p_iType)) == NULL)
     {
         return false;
     }

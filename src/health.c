@@ -35,15 +35,22 @@
 #include <string.h>
 #include <errno.h>
 #include <stdatomic.h>
+#include <time.h>
+#include <unistd.h>
 
 #define HEALTH_DEFAULT_BIND_ADDRESS "127.0.0.1"
 #define HEALTH_CHECK_RELEASE_WAIT_MS 1U
 #define HEALTH_REQUEST_LINE_TIMEOUT_MS 250U
+#define HEALTH_ENVELOPE_BODY_SIZE 2048U
 #define HEALTH_HTTP_OK "HTTP/1.1 200 OK"
 #define HEALTH_HTTP_BAD_REQUEST "HTTP/1.1 400 Bad Request"
 #define HEALTH_HTTP_METHOD_NOT_ALLOWED "HTTP/1.1 405 Method Not Allowed"
 #define HEALTH_HTTP_NOT_FOUND "HTTP/1.1 404 Not Found"
 #define HEALTH_HTTP_UNHEALTHY "HTTP/1.1 503 Service Unavailable"
+
+#ifndef PACKAGE_VERSION
+#define PACKAGE_VERSION "0.0.0"
+#endif
 
 struct RazorbackHealthCheck
 {
@@ -141,6 +148,13 @@ static bool Health_SendProbeResponse(const struct Socket *socket,
                                      RazorbackHealthCheckKind_t kind);
 static bool Health_SendAggregateResponse(const struct Socket *socket,
                                          const struct RazorbackHealthHttpRequest *request);
+static bool Health_RenderEnvelope(char *body,
+                                  size_t bodySize,
+                                  bool live,
+                                  bool ready,
+                                  bool startup);
+static void Health_ObservedAt(char *buffer, size_t bufferSize);
+static void Health_InstanceId(char *buffer, size_t bufferSize);
 
 static int
 Health_Check_Cmp(void *a, void *b)
@@ -708,31 +722,12 @@ Health_SendProbeResponse(const struct Socket *socket,
                          RazorbackHealthCheckKind_t kind)
 {
     bool healthy = Health_EvaluateInternal(kind);
-
-    return Health_SendResponse(socket,
-                               healthy ? HEALTH_HTTP_OK : HEALTH_HTTP_UNHEALTHY,
-                               "text/plain; charset=utf-8",
-                               healthy ? "ok\n" : "unhealthy\n",
-                               !request->headOnly);
-}
-
-static bool
-Health_SendAggregateResponse(const struct Socket *socket,
-                             const struct RazorbackHealthHttpRequest *request)
-{
-    char body[128];
     bool live = Health_EvaluateInternal(RAZORBACK_HEALTH_LIVE);
     bool ready = Health_EvaluateInternal(RAZORBACK_HEALTH_READY);
     bool startup = Health_EvaluateInternal(RAZORBACK_HEALTH_STARTUP);
-    bool healthy = live && ready && startup;
-    int length;
+    char body[HEALTH_ENVELOPE_BODY_SIZE];
 
-    length = snprintf(body, sizeof(body),
-                      "{\"live\":%s,\"ready\":%s,\"startup\":%s}\n",
-                      live ? "true" : "false",
-                      ready ? "true" : "false",
-                      startup ? "true" : "false");
-    if (length < 0 || (size_t)length >= sizeof(body))
+    if (!Health_RenderEnvelope(body, sizeof(body), live, ready, startup))
         return false;
 
     return Health_SendResponse(socket,
@@ -740,6 +735,145 @@ Health_SendAggregateResponse(const struct Socket *socket,
                                "application/json",
                                body,
                                !request->headOnly);
+}
+
+static bool
+Health_SendAggregateResponse(const struct Socket *socket,
+                             const struct RazorbackHealthHttpRequest *request)
+{
+    char body[HEALTH_ENVELOPE_BODY_SIZE];
+    bool live = Health_EvaluateInternal(RAZORBACK_HEALTH_LIVE);
+    bool ready = Health_EvaluateInternal(RAZORBACK_HEALTH_READY);
+    bool startup = Health_EvaluateInternal(RAZORBACK_HEALTH_STARTUP);
+    bool healthy = live && ready && startup;
+
+    if (!Health_RenderEnvelope(body, sizeof(body), live, ready, startup))
+        return false;
+
+    return Health_SendResponse(socket,
+                               healthy ? HEALTH_HTTP_OK : HEALTH_HTTP_UNHEALTHY,
+                               "application/json",
+                               body,
+                               !request->headOnly);
+}
+
+static bool
+Health_RenderEnvelope(char *body,
+                      size_t bodySize,
+                      bool live,
+                      bool ready,
+                      bool startup)
+{
+    char observedAt[128];
+    char instanceId[128];
+    const bool aggregateHealthy = live && ready && startup;
+    const char *workflowState;
+    char reasonCodes[96];
+    char workflowReason[128];
+    int length;
+
+    ASSERT(body != NULL);
+    if (body == NULL || bodySize == 0U)
+        return false;
+
+    if (!live)
+        workflowState = "failed";
+    else if (!startup)
+        workflowState = "starting";
+    else if (!ready)
+        workflowState = "paused_registration";
+    else
+        workflowState = "running";
+
+    if (strcmp(workflowState, "running") == 0) {
+        snprintf(reasonCodes, sizeof(reasonCodes), "[]");
+        workflowReason[0] = '\0';
+    } else {
+        static const char *prefix = "c_sdk_process_";
+        char reason[64];
+
+        snprintf(reason, sizeof(reason), "%s%s", prefix, workflowState);
+        snprintf(reasonCodes, sizeof(reasonCodes), "[\"%s\"]", reason);
+        snprintf(workflowReason, sizeof(workflowReason),
+                 ",\"reason_code\":\"%s\"", reason);
+    }
+
+    Health_ObservedAt(observedAt, sizeof(observedAt));
+    Health_InstanceId(instanceId, sizeof(instanceId));
+
+    length = snprintf(
+        body,
+        bodySize,
+        "{\"service\":{\"name\":\"razorback-c-sdk-component\","
+        "\"version\":\"%s\",\"instance_id\":\"%s\"},"
+        "\"observed_at\":\"%s\","
+        "\"status\":\"%s\","
+        "\"reason_codes\":%s,"
+        "\"startup_complete\":%s,"
+        "\"startup_ready\":%s,"
+        "\"ready\":%s,"
+        "\"dependencies\":{},"
+        "\"workflows\":{\"c_sdk_process\":{\"state\":\"%s\","
+        "\"enabled\":true,\"dependencies\":[],\"observed_at\":\"%s\"%s}},"
+        "\"schema_functional_level\":{\"status\":\"unknown\"},"
+        "\"diagnostics\":{},"
+        "\"live\":%s,\"startup\":%s}\n",
+        PACKAGE_VERSION,
+        instanceId,
+        observedAt,
+        aggregateHealthy ? "ok" : "not_ready",
+        reasonCodes,
+        startup ? "true" : "false",
+        startup ? "true" : "false",
+        ready ? "true" : "false",
+        workflowState,
+        observedAt,
+        workflowReason,
+        live ? "true" : "false",
+        startup ? "true" : "false");
+
+    return length >= 0 && (size_t)length < bodySize;
+}
+
+static void
+Health_ObservedAt(char *buffer, size_t bufferSize)
+{
+    struct timespec now;
+    struct tm utc;
+
+    ASSERT(buffer != NULL);
+    if (buffer == NULL || bufferSize == 0U)
+        return;
+
+    if (clock_gettime(CLOCK_REALTIME, &now) != 0 ||
+        gmtime_r(&now.tv_sec, &utc) == NULL) {
+        snprintf(buffer, bufferSize, "1970-01-01T00:00:00.000Z");
+        return;
+    }
+
+    snprintf(buffer, bufferSize,
+             "%04d-%02d-%02dT%02d:%02d:%02d.%03ldZ",
+             utc.tm_year + 1900,
+             utc.tm_mon + 1,
+             utc.tm_mday,
+             utc.tm_hour,
+             utc.tm_min,
+             utc.tm_sec,
+             now.tv_nsec / 1000000L);
+}
+
+static void
+Health_InstanceId(char *buffer, size_t bufferSize)
+{
+    ASSERT(buffer != NULL);
+    if (buffer == NULL || bufferSize == 0U)
+        return;
+
+    if (gethostname(buffer, bufferSize) != 0) {
+        snprintf(buffer, bufferSize, "unknown");
+        return;
+    }
+    buffer[bufferSize - 1U] = '\0';
 }
 
 static bool

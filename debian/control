@@ -1,7 +1,7 @@
 Source: librazorback
 Priority: extra
 Maintainer: Tom Judge <tjudge@sourcefire.com>
-Build-Depends: debhelper (>= 7.0.50~), autotools-dev, uuid-dev, libmagic-dev, libssl-dev, libconfig8-dev, libpcre3-dev, libmysqlclient-dev, libcurl4-openssl-dev, cdbs
+Build-Depends: debhelper (>= 7.0.50~), autotools-dev, uuid-dev, libmagic-dev, libssl-dev, zlib1g-dev, libyaml-dev, libconfig8-dev, libpcre3-dev, libmysqlclient-dev, libcurl4-openssl-dev, cdbs
 Standards-Version: 3.9.1
 Section: libs
 Homepage: http://razorbacktm.sourceforge.net/

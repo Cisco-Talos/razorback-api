@@ -29,6 +29,13 @@
 extern "C" {
 #endif
 
+#define RAZORBACK_RUNTIME_DEPENDENCY_STATE_METRIC "razorback.runtime.dependency.state"
+#define RAZORBACK_RUNTIME_WORKFLOW_STATE_METRIC "razorback.runtime.workflow.state"
+#define RAZORBACK_RUNTIME_READINESS_STATE_METRIC "razorback.runtime.readiness.state"
+#define RAZORBACK_RUNTIME_STARTUP_DURATION_METRIC "razorback.runtime.startup.duration"
+#define RAZORBACK_RUNTIME_SHUTDOWN_DRAIN_DURATION_METRIC "razorback.runtime.shutdown.drain.duration"
+#define RAZORBACK_RUNTIME_TELEMETRY_FLUSH_OUTCOME_METRIC "razorback.runtime.telemetry.flush.outcome"
+
 typedef enum TelemetrySpanKind
 {
     TELEMETRY_SPAN_KIND_INTERNAL = 0,
@@ -420,6 +427,43 @@ SO_PUBLIC extern void Telemetry_ObservableObserveDouble(
     double value,
     const TelemetryMetricAttribute_t *attributes,
     size_t attributeCount
+);
+
+SO_PUBLIC extern void Telemetry_RecordRuntimeDependencyState(
+    const char *dependency,
+    const char *status,
+    const char *reasonCode
+);
+
+SO_PUBLIC extern void Telemetry_RecordRuntimeWorkflowState(
+    const char *workflow,
+    const char *state,
+    const char *reasonCode
+);
+
+SO_PUBLIC extern void Telemetry_RecordRuntimeReadinessState(
+    const char *state,
+    const char *outcome,
+    const char *reasonCode
+);
+
+SO_PUBLIC extern void Telemetry_RecordRuntimeStartupDuration(
+    double durationSeconds,
+    const char *outcome,
+    const char *reasonCode
+);
+
+SO_PUBLIC extern void Telemetry_RecordRuntimeShutdownDrainDuration(
+    double durationSeconds,
+    const char *service,
+    const char *outcome,
+    const char *reasonCode
+);
+
+SO_PUBLIC extern void Telemetry_RecordRuntimeTelemetryFlushOutcome(
+    const char *service,
+    const char *outcome,
+    const char *reasonCode
 );
 
 #ifdef __cplusplus

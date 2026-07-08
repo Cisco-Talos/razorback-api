@@ -16,32 +16,28 @@
  *  MA 02110-1301, USA.
  */
 
-#ifndef TRANSFER_CORE_H
-#define TRANSFER_CORE_H
+#ifndef RAZORBACK_NUGGET_TOOL_H
+#define RAZORBACK_NUGGET_TOOL_H
+
 #include <razorback/types.h>
-#include <razorback/connected_entity.h>
-#include <razorback/transfer.h>
 
-
-#ifdef __cplusplus
-extern "C" {
+#ifdef _MSC_VER
+#include <windows.h>
 #endif
 
-
-
-char * Transfer_generateFilename (struct Block *block);
-
-bool  Transport_IsSupported(uint8_t protocol);
-enum TransferStatus Transfer_Store(struct BlockPoolItem *item, struct ConnectedEntity *dispatcher);
-enum TransferStatus Transfer_Fetch(struct Block *block, struct ConnectedEntity *dispatcher);
-void Transfer_Free(struct Block *block, struct ConnectedEntity *dispatcher);
-
-
-// Init functions
-bool File_Init(void);
-bool SSH_Init(void);
-bool HTTP_Init(void);
-#ifdef __cplusplus
-}
+struct NuggetToolModule
+{
+    char *path;
+#ifdef _MSC_VER
+    HMODULE handle;
+#else
+    void *handle;
 #endif
+    bool (*initNug)(void);
+    void (*shutdownNug)(void);
+};
+
+bool NuggetTool_LoadModule(const char *path, struct NuggetToolModule *module);
+void NuggetTool_UnloadModule(struct NuggetToolModule *module);
+
 #endif

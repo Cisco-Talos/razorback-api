@@ -37,6 +37,9 @@ bool readApiConfig (void);
 // api.c
 void initApi (void);
 
+// thread.c
+bool Thread_Initialize(void);
+
 bool Crypto_Initialize(void);
 bool Socket_TLS_InitializeSharedState(void);
 
@@ -45,9 +48,6 @@ bool Magic_Init(void);
 
 //messages/core.c
 bool Message_Init(void);
-
-//transfer/core.c
-bool Transfer_Init(void);
 
 #ifdef __cplusplus
 }

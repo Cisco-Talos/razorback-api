@@ -123,6 +123,9 @@
     <ClCompile Include="src\submission.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="src\dev_mode.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="src\thread.c">
       <Filter>Source Files</Filter>
     </ClCompile>

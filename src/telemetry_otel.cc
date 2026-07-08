@@ -365,6 +365,12 @@ struct RazorbackStandardMetrics
   TelemetryMetric_t *blockPoolSize = nullptr;
   TelemetryMetric_t *dispatcherAvailable = nullptr;
   TelemetryMetric_t *dispatcherUsable = nullptr;
+  TelemetryMetric_t *runtimeDependencyState = nullptr;
+  TelemetryMetric_t *runtimeWorkflowState = nullptr;
+  TelemetryMetric_t *runtimeReadinessState = nullptr;
+  TelemetryMetric_t *runtimeStartupDuration = nullptr;
+  TelemetryMetric_t *runtimeShutdownDrainDuration = nullptr;
+  TelemetryMetric_t *runtimeTelemetryFlushOutcome = nullptr;
 };
 
 TelemetryState &
@@ -401,6 +407,15 @@ const char *
 MetricLabelOrNone(const char *value) noexcept
 {
   return (value != nullptr && value[0] != '\0') ? value : "none";
+}
+
+const char *
+MetricBoundedLabelOrNone(const char *value) noexcept
+{
+  if (value == nullptr || value[0] == '\0')
+    return "none";
+
+  return strlen(value) > 128 ? "other" : value;
 }
 
 static void
@@ -672,6 +687,12 @@ DestroyRazorbackStandardMetrics() noexcept
       &metrics.blockPoolSize,
       &metrics.dispatcherAvailable,
       &metrics.dispatcherUsable,
+      &metrics.runtimeDependencyState,
+      &metrics.runtimeWorkflowState,
+      &metrics.runtimeReadinessState,
+      &metrics.runtimeStartupDuration,
+      &metrics.runtimeShutdownDrainDuration,
+      &metrics.runtimeTelemetryFlushOutcome,
   };
 
   for (auto *metric_ptr : all_metrics)
@@ -726,7 +747,7 @@ InitializeRazorbackStandardMetrics() noexcept
       "");
   metrics.inspectionErrors = Telemetry_CreateUInt64Counter(
       "rzb.inspection.errors.total",
-      "Inspection errors grouped by phase.",
+      "Inspection errors grouped by stage.",
       "");
   metrics.shutdownRequeuedInspections = Telemetry_CreateUInt64Counter(
       "rzb.shutdown.requeued.inspections.total",
@@ -796,6 +817,30 @@ InitializeRazorbackStandardMetrics() noexcept
       "",
       ObserveDispatcherUsable,
       nullptr);
+  metrics.runtimeDependencyState = Telemetry_CreateUInt64Counter(
+      RAZORBACK_RUNTIME_DEPENDENCY_STATE_METRIC,
+      "Phase 14 runtime dependency state transitions.",
+      "");
+  metrics.runtimeWorkflowState = Telemetry_CreateUInt64Counter(
+      RAZORBACK_RUNTIME_WORKFLOW_STATE_METRIC,
+      "Phase 14 runtime workflow state transitions.",
+      "");
+  metrics.runtimeReadinessState = Telemetry_CreateUInt64Counter(
+      RAZORBACK_RUNTIME_READINESS_STATE_METRIC,
+      "Phase 14 runtime readiness transitions.",
+      "");
+  metrics.runtimeStartupDuration = Telemetry_CreateDoubleHistogram(
+      RAZORBACK_RUNTIME_STARTUP_DURATION_METRIC,
+      "Phase 14 runtime startup duration.",
+      "ms");
+  metrics.runtimeShutdownDrainDuration = Telemetry_CreateDoubleHistogram(
+      RAZORBACK_RUNTIME_SHUTDOWN_DRAIN_DURATION_METRIC,
+      "Phase 14 runtime shutdown drain duration.",
+      "ms");
+  metrics.runtimeTelemetryFlushOutcome = Telemetry_CreateUInt64Counter(
+      RAZORBACK_RUNTIME_TELEMETRY_FLUSH_OUTCOME_METRIC,
+      "Phase 14 runtime telemetry flush outcomes.",
+      "");
 }
 
 bool
@@ -1516,6 +1561,8 @@ Telemetry_Shutdown(void)
   if (!state.initialized)
     return;
 
+  Telemetry_RecordRuntimeTelemetryFlushOutcome(GetServiceName(), "attempted", nullptr);
+
   DestroyRazorbackStandardMetrics();
 
   if (state.sdk_provider)
@@ -1565,9 +1612,118 @@ Telemetry_GetMonotonicTimeSeconds(void)
 }
 
 extern "C" void
+Telemetry_RecordRuntimeDependencyState(const char *dependency,
+                                       const char *status,
+                                       const char *reasonCode)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[3] = {
+      {"dependency", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(dependency), 0, 0.0, false},
+      {"status", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(status), 0, 0.0, false},
+      {"reason_code", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(reasonCode), 0, 0.0, false},
+  };
+
+  Telemetry_CounterAddUInt64(metrics.runtimeDependencyState, 1, attributes, 3);
+}
+
+extern "C" void
+Telemetry_RecordRuntimeWorkflowState(const char *workflow,
+                                     const char *state,
+                                     const char *reasonCode)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[3] = {
+      {"workflow", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(workflow), 0, 0.0, false},
+      {"state", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(state), 0, 0.0, false},
+      {"reason_code", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(reasonCode), 0, 0.0, false},
+  };
+
+  Telemetry_CounterAddUInt64(metrics.runtimeWorkflowState, 1, attributes, 3);
+}
+
+extern "C" void
+Telemetry_RecordRuntimeReadinessState(const char *state,
+                                      const char *outcome,
+                                      const char *reasonCode)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[3] = {
+      {"state", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(state), 0, 0.0, false},
+      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(outcome), 0, 0.0, false},
+      {"reason_code", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(reasonCode), 0, 0.0, false},
+  };
+
+  Telemetry_CounterAddUInt64(metrics.runtimeReadinessState, 1, attributes, 3);
+}
+
+extern "C" void
+Telemetry_RecordRuntimeStartupDuration(double durationSeconds,
+                                       const char *outcome,
+                                       const char *reasonCode)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[2] = {
+      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(outcome), 0, 0.0, false},
+      {"reason_code", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(reasonCode), 0, 0.0, false},
+  };
+
+  Telemetry_HistogramRecordDouble(metrics.runtimeStartupDuration,
+                                  durationSeconds * 1000.0, attributes, 2);
+}
+
+extern "C" void
+Telemetry_RecordRuntimeShutdownDrainDuration(double durationSeconds,
+                                             const char *service,
+                                             const char *outcome,
+                                             const char *reasonCode)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[3] = {
+      {"service", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(service), 0, 0.0, false},
+      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(outcome), 0, 0.0, false},
+      {"reason_code", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(reasonCode), 0, 0.0, false},
+  };
+
+  Telemetry_HistogramRecordDouble(metrics.runtimeShutdownDrainDuration,
+                                  durationSeconds * 1000.0, attributes, 3);
+}
+
+extern "C" void
+Telemetry_RecordRuntimeTelemetryFlushOutcome(const char *service,
+                                             const char *outcome,
+                                             const char *reasonCode)
+{
+  RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
+  TelemetryMetricAttribute_t attributes[3] = {
+      {"service", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(service), 0, 0.0, false},
+      {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(outcome), 0, 0.0, false},
+      {"reason_code", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+       MetricBoundedLabelOrNone(reasonCode), 0, 0.0, false},
+  };
+
+  Telemetry_CounterAddUInt64(metrics.runtimeTelemetryFlushOutcome, 1, attributes, 3);
+}
+
+extern "C" void
 Telemetry_RecordDispatcherWait(double durationSeconds,
                                const char *outcome,
-                               const char *phase,
+                               const char *stage,
                                const struct RazorbackContext *context)
 {
   RazorbackStandardMetrics &metrics = GetRazorbackStandardMetrics();
@@ -1577,8 +1733,8 @@ Telemetry_RecordDispatcherWait(double durationSeconds,
 
   attributes[attributeCount++] = {"outcome", TELEMETRY_METRIC_ATTRIBUTE_STRING,
                                   MetricLabelOrUnknown(outcome), 0, 0.0, false};
-  attributes[attributeCount++] = {"phase", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-                                  MetricLabelOrUnknown(phase), 0, 0.0, false};
+  attributes[attributeCount++] = {"stage", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(stage), 0, 0.0, false};
   attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,
                                                  nullptr, &nuggetTypeName);
 
@@ -1753,7 +1909,7 @@ Telemetry_RecordInspectionResult(const char *reason,
 }
 
 extern "C" void
-Telemetry_RecordInspectionError(const char *phase,
+Telemetry_RecordInspectionError(const char *stage,
                                 const char *errorClass,
                                 const struct RazorbackContext *context)
 {
@@ -1762,8 +1918,8 @@ Telemetry_RecordInspectionError(const char *phase,
   char *nuggetTypeName = nullptr;
   size_t attributeCount = 0;
 
-  attributes[attributeCount++] = {"phase", TELEMETRY_METRIC_ATTRIBUTE_STRING,
-                                  MetricLabelOrUnknown(phase), 0, 0.0, false};
+  attributes[attributeCount++] = {"stage", TELEMETRY_METRIC_ATTRIBUTE_STRING,
+                                  MetricLabelOrUnknown(stage), 0, 0.0, false};
   attributes[attributeCount++] = {"error_class", TELEMETRY_METRIC_ATTRIBUTE_STRING,
                                   MetricLabelOrUnknown(errorClass), 0, 0.0, false};
   attributeCount = AppendContextMetricAttributes(attributes, attributeCount, context, false,

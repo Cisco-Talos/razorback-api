@@ -29,6 +29,8 @@ compile
 depcomp
 missing
 src/dispatcher
+src/rzb-dev
+src/rzb-worker
 aclocal.m4
 libtool
 ltmain.sh
@@ -47,6 +49,17 @@ tests/test_string_list
 tests/test_uuids
 tests/test_config_file
 tests/test_timer
+tests/test_config_next
+tests/test_health
+tests/test_message_body
+tests/test_messages_next
+tests/test_runtime_next
+tests/test_schema_conformance
+tests/test_fileserver
+tests/smoke_inspector_next
+tests/smoke_operational_next
+tests/smoke_source_next
+tests/.smoke-operation.json
 tests/test_json_buffer_primitives
 tests/test_json_buffer_structs
 tests/test_json_buffer_invalid
@@ -55,4 +68,6 @@ tests/*.log
 tests/*.trs
 test-driver
 razorback.pc
+pacp
+txt
 /\.idea

@@ -5,8 +5,6 @@ Global: {
     HelloTime=2;
     DeadTime=10;
     MessageFormat="json";
-    TransferPassword="razorback";
-    TransferMode="traditional";
 };
 
 Locality: {

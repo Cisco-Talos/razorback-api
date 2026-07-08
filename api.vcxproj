@@ -222,6 +222,7 @@
     <ClCompile Include="src\connected_entity.c" />
     <ClCompile Include="src\crypto.c" />
     <ClCompile Include="src\daemon.c" />
+    <ClCompile Include="src\dev_mode.c" />
     <ClCompile Include="src\event.c" />
     <ClCompile Include="src\fantasia.c" />
     <ClCompile Include="src\hash.c" />

@@ -30,7 +30,6 @@
 #include <razorback/messages.h>
 #include <razorback/ntlv.h>
 #include <razorback/string_list.h>
-#include <razorback/transfer.h>
 #include <razorback/uuids.h>
 
 #include "init.h"
@@ -238,7 +237,7 @@ init_dispatcher_context(struct RazorbackContext *context)
                             context->uuidNuggetType));
     context->locality = 4U;
     context->dispatcher.priority = 5U;
-    context->dispatcher.protocol = TRANSFER_MODE_HTTPS;
+    context->dispatcher.protocol = 3U;
     context->dispatcher.port = 8443U;
     context->dispatcher.flags = 0x12U;
     context->dispatcher.addressList = create_address_list();

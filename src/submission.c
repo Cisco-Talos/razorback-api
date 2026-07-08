@@ -25,16 +25,16 @@
 #include <razorback/api.h>
 #include <razorback/block.h>
 #include <razorback/block_id.h>
+#include <razorback/fileserver.h>
 #include <razorback/queue.h>
 #include <razorback/block_id.h>
 #include <razorback/thread_pool.h>
 #include <razorback/response_queue.h>
 
 #include "block_pool_private.h"
+#include "dev_mode.h"
 #include "submission_private.h"
 #include "local_cache.h"
-#include "connected_entity_private.h"
-#include "transfer/core.h"
 #include "runtime_config.h"
 #include "telemetry.h"
 #include <string.h>
@@ -78,6 +78,10 @@ static int Submission_CacheLookupTiming_Cmp(void *a, void *b);
 static void Submission_CacheLookupTiming_Destroy(void *item);
 static void Submission_ClearCacheLookupTiming(struct BlockPoolItem *item);
 static void Submission_RecordCacheLookupStart(struct BlockPoolItem *item);
+static int Submission_Submit_DevMode(struct BlockPoolItem *p_pItem,
+                                     int p_iFlags,
+                                     uint32_t *p_pSf_Flags,
+                                     uint32_t *p_pEnt_Flags);
 static void Submission_RecordCacheLookupWait(struct BlockPoolItem *item, const char *result);
 static const char *Submission_Reason_Label(uint32_t reason);
 static void Submission_DestroySharedResources(void);
@@ -373,7 +377,13 @@ Submission_Shutdown(struct RazorbackContext *p_pContext)
     double drainDeadline;
     size_t cleanedCount;
 
-    if (p_pContext == NULL || p_pContext->submission.responseThreadPool == NULL)
+    if (p_pContext == NULL)
+        return;
+
+    if ((p_pContext->iFlags & CONTEXT_FLAG_DEV_TOOL) == CONTEXT_FLAG_DEV_TOOL)
+        return;
+
+    if (p_pContext->submission.responseThreadPool == NULL)
         return;
 
     drainDeadline = Telemetry_GetMonotonicTimeSeconds() +
@@ -403,6 +413,9 @@ Submission_Init(struct RazorbackContext *p_pContext)
 {
     if (p_pContext == NULL)
         return false;
+
+    if ((p_pContext->iFlags & CONTEXT_FLAG_DEV_TOOL) == CONTEXT_FLAG_DEV_TOOL)
+        return true;
 
     if (p_pContext->submission.responseThreadPool != NULL)
         return true;
@@ -471,6 +484,59 @@ Submission_GetContextSubmitQueueDepth(const struct RazorbackContext *p_pContext)
     return depth.count;
 }
 
+static int
+Submission_Submit_DevMode(struct BlockPoolItem *p_pItem,
+                          int p_iFlags,
+                          uint32_t *p_pSf_Flags,
+                          uint32_t *p_pEnt_Flags)
+{
+    int ret = RZB_SUBMISSION_OK;
+
+    if (p_pSf_Flags != NULL)
+        *p_pSf_Flags = 0;
+    if (p_pEnt_Flags != NULL)
+        *p_pEnt_Flags = 0;
+
+    if ((p_pItem->pEvent->pBlock->pParentId != NULL) &&
+        BlockId_IsEqual(p_pItem->pEvent->pBlock->pId,
+                        p_pItem->pEvent->pBlock->pParentId)) {
+        rzb_log(LOG_ERR, LOG_C_CORE,
+                "%s: Block submission listing its self as parent dropped.",
+                __func__);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_ERROR);
+        ret = RZB_SUBMISSION_ERROR;
+    } else if (p_pSf_Flags == NULL || p_pEnt_Flags == NULL) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: NULL pointer arguments to function", __func__);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_ERROR);
+        ret = RZB_SUBMISSION_ERROR;
+    } else if (uuid_is_null(p_pItem->pEvent->pBlock->pId->uuidDataType) == 1) {
+        rzb_log(LOG_INFO, LOG_C_CORE, "%s: Submission with null data type dropped.",
+                __func__);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_NO_TYPE);
+        ret = RZB_SUBMISSION_NO_TYPE;
+    } else {
+        BlockPool_SetFlags(p_pItem, p_iFlags);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_FINALIZED);
+    }
+
+    if (!Razorback_DevMode_CaptureSubmission(p_pItem->context, p_pItem)) {
+        rzb_log(LOG_ERR, LOG_C_CORE, "%s: Failed to capture local dev submission",
+                __func__);
+        BlockPool_SetStatus(p_pItem, BLOCK_POOL_STATUS_ERROR);
+        ret = RZB_SUBMISSION_ERROR;
+        if (p_pItem->submittedCallback != NULL)
+            p_pItem->submittedCallback(p_pItem);
+        BlockPool_Item_Unlock(p_pItem);
+        BlockPool_DestroyItem(p_pItem);
+        return ret;
+    }
+
+    if (p_pItem->submittedCallback != NULL)
+        p_pItem->submittedCallback(p_pItem);
+    BlockPool_Item_Unlock(p_pItem);
+    return ret;
+}
+
 SO_PUBLIC int
 Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_Flags, uint32_t *p_pEnt_Flags)
 {
@@ -479,6 +545,9 @@ Submission_Submit(struct BlockPoolItem *p_pItem, int p_iFlags, uint32_t *p_pSf_F
     uint32_t entflags = 0;
     BlockPool_Item_Lock(p_pItem);
     Telemetry_UpdateContext(&p_pItem->telemetryContext);
+
+    if ((p_pItem->context->iFlags & CONTEXT_FLAG_DEV_TOOL) == CONTEXT_FLAG_DEV_TOOL)
+        return Submission_Submit_DevMode(p_pItem, p_iFlags, p_pSf_Flags, p_pEnt_Flags);
 
     if ( (p_pItem->pEvent->pBlock->pParentId != NULL ) &&
             BlockId_IsEqual(p_pItem->pEvent->pBlock->pId, p_pItem->pEvent->pBlock->pParentId) )
@@ -835,9 +904,8 @@ Submission_SubmitThread(Thread_t *p_pThread)
     struct Message *message;
     struct RazorbackContext *itemContext = NULL;
     uint8_t storedLocality = 0;
-    struct ConnectedEntity *dispatcher = NULL;
-    enum TransferStatus transfered = TRANSFER_FAIL_LOCAL;
-    int transferTries = 0;
+    RzbNextFileserverClient_t *fileserver = NULL;
+    enum RzbNextFileserverStatus storeStatus = RZB_NEXT_FILESERVER_LOCAL_ERROR;
     uint32_t reason = 0;
     struct BlockPoolItem *item = NULL;
     struct Queue *queue = NULL;
@@ -859,9 +927,9 @@ Submission_SubmitThread(Thread_t *p_pThread)
 
     while (true)
     {
-        transfered = TRANSFER_FAIL_LOCAL;
-        transferTries = 0;
         item = List_Pop_Ex(submitQueue, SUBMISSION_QUEUE_POP_TIMEOUT_MS);
+        storeStatus = RZB_NEXT_FILESERVER_LOCAL_ERROR;
+        fileserver = NULL;
         if (item == NULL)
         {
             if (Thread_IsStopped(p_pThread) &&
@@ -906,33 +974,17 @@ Submission_SubmitThread(Thread_t *p_pThread)
         }
         else
         {
-            while (transferTries < 20)
+            fileserver = RzbNextFileserverClient_Create(NULL, 0, 0);
+            if (fileserver != NULL)
+                storeStatus = RzbNextFileserver_StoreBlockPoolItem(fileserver, item);
+            RzbNextFileserverClient_Destroy(fileserver);
+            fileserver = NULL;
+            if (storeStatus != RZB_NEXT_FILESERVER_OK)
             {
-                dispatcher = ConnectedEntityList_GetDispatcher();
-                rzb_log(LOG_ERR,LOG_C_CORE, "%s: %z", __func__, dispatcher);
-                if (dispatcher == NULL)
-                {
-                    rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to find usable dispatcher", __func__);
-                    transfered = TRANSFER_FAIL_LOCAL;
-                    itemError = "failed to find usable dispatcher";
-                    transferTries++;
-                    break;
-                }
-                transfered = Transfer_Store(item, dispatcher);
-                if (transfered == TRANSFER_FAIL_DISPATCHER)
-                {
-                    rzb_log(LOG_ERR,LOG_C_CORE, "%s: Marking dispatcher unusable", __func__);
-                    ConnectedEntityList_MarkDispatcherUnusable(dispatcher->uuidNuggetId);
-                }
-                if (transfered == TRANSFER_OK)
-                    break;
-                else
-                    transferTries++;
-            }
-            if (transfered != TRANSFER_OK)
-            {
-                rzb_log(LOG_ERR,LOG_C_CORE, "%s: Failed to transfer block giving up", __func__);
-                itemError = "failed to transfer block";
+                rzb_log(LOG_ERR, LOG_C_CORE,
+                        "%s: Failed to store block in fileserver, status=%d",
+                        __func__, storeStatus);
+                itemError = "failed to store block in fileserver";
                 reasonLabel = Submission_Reason_Label(SUBMISSION_REASON_REQUESTED);
                 submitOutcome = "store_failed";
                 BlockPool_SetStatus(item, BLOCK_POOL_STATUS_ERROR);
@@ -949,11 +1001,9 @@ Submission_SubmitThread(Thread_t *p_pThread)
                 BlockPool_DestroyItem(item);
                 continue;
             }
-            storedLocality = dispatcher->locality;
+            storedLocality = itemContext != NULL ? itemContext->locality : 0;
             reason = SUBMISSION_REASON_REQUESTED;
             reasonLabel = Submission_Reason_Label(reason);
-            rzb_log(LOG_ERR,LOG_C_CORE, "%s: %z", __func__, dispatcher);
-            ConnectedEntity_Destroy(dispatcher);
         }
 
         if ((message = MessageBlockSubmission_Initialize( item->pEvent, reason, storedLocality)) == NULL)

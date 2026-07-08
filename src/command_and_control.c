@@ -96,12 +96,14 @@ static struct RazorbackCommandAndControlHooks sg_DefaultHooks = {
 
 void
 CommandAndControl_Pause(void) {
-    Mutex_Lock(processLock);
+    if (processLock != NULL)
+        Mutex_Lock(processLock);
 }
 
 void
 CommandAndControl_Unpause(void) {
-    Mutex_Unlock(processLock);
+    if (processLock != NULL)
+        Mutex_Unlock(processLock);
 }
 
 bool
@@ -116,6 +118,17 @@ CommandAndControl_Start (struct RazorbackContext *p_pContext) {
 
     if (p_pContext->pCommandHooks == NULL)
         p_pContext->pCommandHooks = &sg_DefaultHooks;
+
+    if ((p_pContext->iFlags & CONTEXT_FLAG_DEV_TOOL) == CONTEXT_FLAG_DEV_TOOL) {
+        p_pContext->regOk = true;
+        Semaphore_Post(p_pContext->regSem);
+        return true;
+    }
+
+    rzb_log(LOG_ERR, LOG_C_CNC,
+            "%s: Legacy dispatcher C&C runtime was removed for dispatcher-next; "
+            "use RzbNextRuntime instead", __func__);
+    return false;
 
     if ((p_pContext->iFlags & CONTEXT_FLAG_STAND_ALONE) ==
         CONTEXT_FLAG_STAND_ALONE) {
@@ -169,6 +182,11 @@ CommandAndControl_Start (struct RazorbackContext *p_pContext) {
 
 void
 CommandAndControl_Shutdown(void) {
+   rzb_log(LOG_DEBUG, LOG_C_CNC,
+           "%s: Legacy dispatcher C&C runtime is disabled for dispatcher-next",
+           __func__);
+   return;
+
    // Shut down state tracking timer.
    ConnectedEntityList_Stop();
 
@@ -483,6 +501,11 @@ CommandAndControl_SendBye (struct RazorbackContext *context) {
         return false;
     }
 
+    rzb_log(LOG_ERR, LOG_C_CNC,
+            "%s: Legacy dispatcher C&C runtime was removed for dispatcher-next; "
+            "use RzbNextRuntime shutdown instead", __func__);
+    return false;
+
     if ((bye = MessageBye_Initialize(
             context->uuidNuggetId)) == NULL) {
         rzb_log(LOG_ERR, LOG_C_CNC, "%s: Failed to create bye message", __func__);
@@ -500,7 +523,7 @@ CommandAndControl_SendBye (struct RazorbackContext *context) {
 
 static bool
 CommandAndControl_Register (struct RazorbackContext *p_pContext,
-                            const char *phase) {
+                            const char *stage) {
     struct Message *regReq;
     struct ConnectedEntity *dispatcher = NULL;
     double waitStartedAt;
@@ -521,7 +544,7 @@ CommandAndControl_Register (struct RazorbackContext *p_pContext,
     }
     Telemetry_RecordDispatcherWait(Telemetry_GetMonotonicTimeSeconds() - waitStartedAt,
                                    "available",
-                                   phase,
+                                   stage,
                                    p_pContext);
 
     if ((regReq = MessageRegistrationRequest_Initialize(

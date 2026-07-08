@@ -53,6 +53,23 @@ m4_include([common_m4/platform_flags.m4])
 # Pull in the dependancies on on the API (use the nugget way).
 m4_include([common_m4/api_deps.m4])
 
+AC_CHECK_LIB([z], [compress2], [], [ZLIB="no"])
+AS_IF([test "x$ZLIB" = "xno"],
+          [AC_MSG_ERROR("zlib library not found")]
+     )
+AC_CHECK_HEADERS([zlib.h], [], [ZLIB_HEADER="no"])
+AS_IF([test "x$ZLIB_HEADER" = "xno"],
+          [AC_MSG_ERROR("zlib header file not found")]
+     )
+AC_CHECK_LIB([yaml], [yaml_parser_initialize], [], [YAML="no"])
+AS_IF([test "x$YAML" = "xno"],
+          [AC_MSG_ERROR("libyaml library not found")]
+     )
+AC_CHECK_HEADERS([yaml.h], [], [YAML_HEADER="no"])
+AS_IF([test "x$YAML_HEADER" = "xno"],
+          [AC_MSG_ERROR("libyaml header file not found")]
+     )
+
 # Pull in the standard header and function checks.
 m4_include([common_m4/standard_headers_functions.m4])
 
